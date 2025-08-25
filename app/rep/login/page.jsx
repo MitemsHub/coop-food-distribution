@@ -1,10 +1,14 @@
 'use client'
 import { useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 
 export default function RepLoginPage() {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const { login } = useAuth()
+  const router = useRouter()
 
   const submit = async () => {
     setLoading(true); setMsg('')
@@ -16,7 +20,16 @@ export default function RepLoginPage() {
       })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
-      window.location.href = '/rep/pending'
+      
+      // Set user as authenticated rep
+      login({
+        type: 'rep',
+        id: code.trim().toUpperCase(),
+        authenticated: true,
+        branchCode: code.trim().toUpperCase()
+      })
+      
+      router.push('/rep/pending')
     } catch (e) {
       setMsg(e.message)
     } finally {

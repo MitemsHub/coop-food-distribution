@@ -4,8 +4,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
+import ProtectedRoute from '../components/ProtectedRoute'
 
-export default function ShopPage() {
+function ShopPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -233,142 +234,286 @@ export default function ShopPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Shop — Coop Food Distribution</h1>
-      <div className="mb-2">
-      <a href="/" className="text-sm text-blue-600 hover:underline">← Back to Home</a>
-      </div>
-      {/* Member Lookup */}
-      <div className="flex gap-2 items-end mb-4">
-        <div>
-          <label className="block text-sm mb-1">Member ID</label>
-          <input
-            value={memberId}
-            onChange={e => setMemberId(e.target.value)}
-            className="border rounded px-3 py-2 w-56"
-            placeholder="e.g. A12345"
-          />
-        </div>
-        <button onClick={lookupMember} className="bg-blue-600 text-white px-4 py-2 rounded">
-          Lookup
-        </button>
+    <ProtectedRoute allowedRoles={['member']}>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="p-6 max-w-7xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                  Coop Food Distribution
+                </h1>
+                <p className="text-gray-600">Member Shopping Portal</p>
+              </div>
+              <a href="/" className="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-all duration-200">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Home
+              </a>
+            </div>
+            {/* Member Lookup */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Member Lookup
+              </h2>
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex-1 min-w-64">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Member ID</label>
+                  <input
+                    value={memberId}
+                    onChange={e => setMemberId(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                    placeholder="e.g. A12345"
+                  />
+                </div>
+                <button 
+                  onClick={lookupMember} 
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Lookup
+                </button>
+              </div>
 
-        {member && (
-          <div className="ml-4 text-sm">
-            <div><span className="font-medium">Name:</span> {member.full_name}</div>
-            <div><span className="font-medium">Savings (core):</span> ₦{Number(member.savings || 0).toLocaleString()}</div>
-            <div><span className="font-medium">Loans (core):</span> ₦{Number(member.loans || 0).toLocaleString()}</div>
-            <div><span className="font-medium">Loan exposure (orders):</span> ₦{Number(eligibility.loanExposure || 0).toLocaleString()}</div>
-            <div><span className="font-medium">Outstanding (core + exposure):</span> ₦{Number(eligibility.outstandingLoansTotal || 0).toLocaleString()}</div>
-            <div><span className="font-medium">Global Limit:</span> ₦{Number(member.global_limit || 0).toLocaleString()}</div>
-          </div>
-        )}
-      </div>
+              {member && (
+                <div className="mt-6 bg-white rounded-lg p-6 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Member Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-sm text-gray-600 mb-1">Full Name</div>
+                      <div className="font-semibold text-gray-900">{member.full_name}</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="text-sm text-green-600 mb-1">Savings (Core)</div>
+                      <div className="font-semibold text-green-700">₦{Number(member.savings || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="text-sm text-blue-600 mb-1">Loans (Core)</div>
+                      <div className="font-semibold text-blue-700">₦{Number(member.loans || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-sm text-orange-600 mb-1">Loan Exposure (Orders)</div>
+                      <div className="font-semibold text-orange-700">₦{Number(eligibility.loanExposure || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4">
+                      <div className="text-sm text-red-600 mb-1">Outstanding Total</div>
+                      <div className="font-semibold text-red-700">₦{Number(eligibility.outstandingLoansTotal || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="text-sm text-purple-600 mb-1">Global Limit</div>
+                      <div className="font-semibold text-purple-700">₦{Number(member.global_limit || 0).toLocaleString()}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-      {/* Branches & Department */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-sm mb-1">Member Branch</label>
-          <input value={memberBranchCode || ''} readOnly className="border rounded px-3 py-2 w-full bg-gray-100" />
-        </div>
-        <div>
-          <label className="block text-sm mb-1">Delivery Location</label>
-          <select
-            value={deliveryBranchCode}
-            onChange={e => setDeliveryBranchCode(e.target.value)}
-            className="border rounded px-3 py-2 w-full"
-          >
-            <option value="">Select delivery branch</option>
-            {branches.map(b => (
-              <option key={b.code} value={b.code}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-sm mb-1">Department</label>
-          <select
-            value={departmentName}
-            onChange={e => setDepartmentName(e.target.value)}
-            className="border rounded px-3 py-2 w-full"
-          >
-            <option value="">Select department</option>
-            {departments.map(d => (
-              <option key={d.name} value={d.name}>{d.name}</option>
-            ))}
-          </select>
+            {/* Branches & Department */}
+            <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 mb-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Branch & Department Selection
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Member Branch</label>
+                  <input 
+                    value={memberBranchCode || ''} 
+                    readOnly 
+                    className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 bg-gray-50 text-gray-600" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Location</label>
+                  <select
+                    value={deliveryBranchCode}
+                    onChange={e => setDeliveryBranchCode(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200"
+                  >
+                    <option value="">Select delivery branch</option>
+                    {branches.map(b => (
+                      <option key={b.code} value={b.code}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <select
+                    value={departmentName}
+                    onChange={e => setDepartmentName(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200"
+                  >
+                    <option value="">Select department</option>
+                    {departments.map(d => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                       <div className="text-sm text-green-600 mb-1">Savings Limit</div>
+                       <div className="text-lg font-semibold text-green-700">₦{savingsEligible.toLocaleString()}</div>
+                     </div>
+                     <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                       <div className="text-sm text-blue-600 mb-1">Loan Limit</div>
+                       <div className="text-lg font-semibold text-blue-700">₦{loanEligible.toLocaleString()}</div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
 
-          <div className="text-xs text-gray-600 mt-2">
-            Savings limit: ₦{savingsEligible.toLocaleString()} | Loan limit: ₦{loanEligible.toLocaleString()}
-          </div>
-        </div>
-      </div>
+             {/* Payment Method */}
+             <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 mb-6">
+               <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                 <svg className="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                 </svg>
+                 Payment Method
+               </h2>
+               <div className="max-w-md">
+                 <select
+                   value={paymentOption}
+                   onChange={e => setPaymentOption(e.target.value)}
+                   className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200"
+                 >
+                   <option value="Savings" disabled={savingsEligible <= 0}>Savings {savingsEligible <= 0 ? '(Insufficient Balance)' : ''}</option>
+                   <option value="Loan">Loan</option>
+                   <option value="Cash">Cash</option>
+                 </select>
+               </div>
+             </div>
 
-      {/* Payment Method */}
-      <div className="mb-4">
-        <label className="block text-sm mb-1">Payment Method</label>
-        <select
-          value={paymentOption}
-          onChange={e => setPaymentOption(e.target.value)}
-          className="border rounded px-3 py-2 w-full md:w-64"
-        >
-          <option value="Savings" disabled={savingsEligible <= 0}>Savings</option>
-          <option value="Loan">Loan</option>
-          <option value="Cash">Cash</option>
-        </select>
-      </div>
-
-      {/* Items */}
-      <div>
-        <h2 className="text-lg font-medium mb-2">Items — {deliveryBranchCode || 'Select delivery branch'}</h2>
-        {items.length === 0 && <p className="text-sm text-gray-600">No items configured for this branch.</p>}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map(it => (
-            <div key={it.sku} className="border rounded-xl p-4 bg-white shadow-sm hover:shadow-md transition">
-              <div className="font-semibold">{it.name}</div>
-              <div className="text-sm text-gray-600">{it.unit} • {it.category}</div>
-              <div className="mt-1 text-gray-900">Price: ₦{it.price.toLocaleString()}</div>
-              <div className="text-xs text-gray-500">Stock: {it.initial_stock}</div>
-              <div className="flex items-center gap-2 mt-2">
-                <button className="px-2 py-1 border rounded" onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) - 1)}>-</button>
-                <input
-                  type="number"
-                  min={0}
-                  value={qty[it.sku] || 0}
-                  onChange={e => setQtySafe(it.sku, e.target.value)}
-                  className="border rounded px-2 py-1 w-16 text-center"
-                />
-                <button className="px-2 py-1 border rounded" onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) + 1)}>+</button>
+            {/* Items */}
+            <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 mb-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Available Items — {deliveryBranchCode || 'Select delivery branch'}
+              </h2>
+              {items.length === 0 && (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <p className="text-gray-500">No items configured for this branch.</p>
+                </div>
+              )}
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {items.map(it => (
+                  <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
+                    <div className="mb-4">
+                      <div className="font-bold text-lg text-gray-900 mb-1">{it.name}</div>
+                      <div className="text-sm text-gray-500 mb-2">{it.unit} • {it.category}</div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xl font-bold text-orange-600">₦{it.price.toLocaleString()}</div>
+                        <div className={`text-xs px-2 py-1 rounded-full ${
+                          it.initial_stock > 10 ? 'bg-green-100 text-green-700' : 
+                          it.initial_stock > 0 ? 'bg-yellow-100 text-yellow-700' : 
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          Stock: {it.initial_stock}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center gap-3">
+                      <button 
+                        className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition-colors duration-200 flex items-center justify-center" 
+                        onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) - 1)}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        value={qty[it.sku] || 0}
+                        onChange={e => setQtySafe(it.sku, e.target.value)}
+                        className="w-20 h-10 border-2 border-gray-200 rounded-lg text-center font-semibold focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200"
+                      />
+                      <button 
+                        className="w-10 h-10 rounded-full bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold transition-colors duration-200 flex items-center justify-center" 
+                        onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) + 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Cart */}
-      <div className="mt-6 sticky bottom-2 p-4 border rounded-xl bg-gray-50 shadow-sm">
-        <div className="flex flex-wrap gap-6 items-end">
-          <div>
-            <div className="text-sm text-gray-600">Items in cart</div>
-            <div className="text-xl font-semibold">{cartLines.length}</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-600">Cart total</div>
-            <div className="text-xl font-semibold">₦{cartTotal.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-600">Limit ({paymentOption})</div>
-            <div className={`text-xl font-semibold ${overLimit ? 'text-red-600' : ''}`}>
-              {paymentOption === 'Cash' ? 'No limit' : `₦${currentLimit.toLocaleString()}`}
-            </div>
-          </div>
-          <button
-            disabled={!canSubmit}
-            onClick={submitOrder}
-            className={`ml-auto px-5 py-2 rounded ${canSubmit ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'}`}
-          >
-            {submitting ? 'Submitting…' : 'Submit Order (Pending)'}
-          </button>
-        </div>
+             {/* Cart */}
+             <div className="sticky bottom-4 bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-6 backdrop-blur-sm">
+               <div className="flex items-center justify-between mb-4">
+                 <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                   <svg className="w-6 h-6 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                   </svg>
+                   Shopping Cart
+                 </h3>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                 <div className="bg-blue-50 rounded-lg p-4 text-center">
+                   <div className="text-sm text-blue-600 mb-1">Items in Cart</div>
+                   <div className="text-2xl font-bold text-blue-700">{cartLines.length}</div>
+                 </div>
+                 <div className="bg-green-50 rounded-lg p-4 text-center">
+                   <div className="text-sm text-green-600 mb-1">Cart Total</div>
+                   <div className="text-2xl font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
+                 </div>
+                 <div className={`rounded-lg p-4 text-center ${
+                   overLimit ? 'bg-red-50' : 'bg-purple-50'
+                 }`}>
+                   <div className={`text-sm mb-1 ${
+                     overLimit ? 'text-red-600' : 'text-purple-600'
+                   }`}>Limit ({paymentOption})</div>
+                   <div className={`text-2xl font-bold ${
+                     overLimit ? 'text-red-700' : 'text-purple-700'
+                   }`}>
+                     {paymentOption === 'Cash' ? 'No limit' : `₦${currentLimit.toLocaleString()}`}
+                   </div>
+                 </div>
+                 <div className="flex items-center justify-center">
+                   <button
+                     disabled={!canSubmit}
+                     onClick={submitOrder}
+                     className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-200 ${
+                       canSubmit 
+                         ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105' 
+                         : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                     }`}
+                   >
+                     {submitting ? (
+                       <div className="flex items-center justify-center">
+                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                         </svg>
+                         Submitting...
+                       </div>
+                     ) : (
+                       <div className="flex items-center justify-center">
+                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                         </svg>
+                         Submit Order
+                       </div>
+                     )}
+                   </button>
+                 </div>
+               </div>
         {overLimit && (
           <div className="text-red-600 text-sm mt-2">
             Total exceeds {paymentOption} limit. Reduce quantities or switch payment method.
@@ -380,6 +525,11 @@ export default function ShopPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
+}
+
+export default function ShopPage() {
+  return <ShopPageContent />
 }

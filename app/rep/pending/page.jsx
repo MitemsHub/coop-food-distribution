@@ -2,14 +2,25 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '../../contexts/AuthContext'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function RepPendingPage() {
+function RepPendingPageContent() {
   const [orders, setOrders] = useState([])
   const [dept, setDept] = useState('') // '' = All
   const [departments, setDepartments] = useState([])
   const [msg, setMsg] = useState(null)
   const [nextCursor, setNextCursor] = useState(null)
   const [loading, setLoading] = useState(false)
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  const changeBranch = () => {
+    if (confirm('Are you sure you want to change your branch? You will be logged out and redirected to the login page.')) {
+      logout()
+    }
+  }
 
   useEffect(() => {
     // Load department list once
@@ -78,9 +89,67 @@ export default function RepPendingPage() {
     a.href = url; a.download = 'rep_pending.csv'; a.click(); URL.revokeObjectURL(url)
   }
 
+  const exportPDF = async () => {
+    if (!orders.length) return alert('No rows to export')
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF()
+    let y = 12
+    doc.setFontSize(14); doc.text('Pending Orders Manifest', 10, y); y += 6
+    doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 10, y); y += 6
+    if (dept) { doc.text(`Department: ${dept}`, 10, y); y += 6 }
+    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty']
+    doc.text(header.join(' | '), 10, y); y += 4
+    doc.line(10, y, 200, y); y += 4
+    orders.forEach(o => {
+      (o.order_lines || []).forEach(l => {
+        const line = [
+          String(o.order_id),
+          String(o.member_name_snapshot || ''),
+          String(o.departments?.name || ''),
+          String(o.payment_option || ''),
+          String(l.items?.sku || ''),
+          String(l.items?.name || ''),
+          String(l.qty || 0),
+        ].join(' | ')
+        doc.text(line, 10, y)
+        y += 5
+        if (y > 280) { doc.addPage(); y = 12 }
+      })
+    })
+    doc.save('rep_pending_manifest.pdf')
+  }
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Rep — Pending Orders</h1>
+    <ProtectedRoute allowedRoles={['rep']}>
+      <div className="p-6 max-w-6xl mx-auto">
+
+        
+        <h1 className="text-2xl font-semibold mb-4">Rep — Pending Orders</h1>
+        
+        {/* Branch Code Display */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <div>
+                <div className="text-sm text-blue-600 font-medium">Current Branch</div>
+                <div className="text-lg font-bold text-blue-800">{user?.branchCode || 'Unknown'}</div>
+              </div>
+            </div>
+            <button 
+              onClick={changeBranch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Change Branch
+            </button>
+          </div>
+        </div>
 
       <div className="flex flex-wrap gap-2 items-end mb-4">
         <select className="border rounded px-3 py-2" value={dept} onChange={e=>setDept(e.target.value)}>
@@ -88,6 +157,7 @@ export default function RepPendingPage() {
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={exportCSV}>Export CSV</button>
+        <button className="px-3 py-2 bg-emerald-600 text-white rounded" onClick={exportPDF}>Export PDF</button>
         <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 
@@ -144,6 +214,11 @@ export default function RepPendingPage() {
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   )
+}
+
+export default function RepPendingPage() {
+  return <RepPendingPageContent />
 }

@@ -1,7 +1,7 @@
 // app/api/admin/pin/session/route.js
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { verify } from '@/lib/signing'
+import { sign, verify } from '@/lib/signing'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

@@ -2,11 +2,15 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 
 export default function AdminPinPage() {
   const [pin, setPin] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const { login } = useAuth()
+  const router = useRouter()
 
   const submit = async () => {
     setLoading(true); setMsg('')
@@ -18,8 +22,15 @@ export default function AdminPinPage() {
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Invalid passcode')
-      // default landing for admin:
-      window.location.href = '/admin/pending'
+      
+      // Set user as authenticated admin
+      login({
+        type: 'admin',
+        id: 'admin',
+        authenticated: true
+      })
+      
+      router.push('/admin/pending')
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -30,7 +41,7 @@ export default function AdminPinPage() {
   return (
     <div className="p-6 max-w-md mx-auto">
       <h1 className="text-2xl font-semibold mb-2">Admin Passcode</h1>
-      <p className="text-sm text-gray-600 mb-4">Enter passcode to continue. (Default: Coop@2025)</p>
+      <p className="text-sm text-gray-600 mb-4">Enter admin passcode to continue.</p>
       <input
         className="border rounded px-3 py-2 w-full mb-2"
         placeholder="Enter passcode"

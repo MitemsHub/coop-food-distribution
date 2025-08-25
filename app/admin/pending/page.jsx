@@ -1,8 +1,9 @@
 // app/admin/pending/page.jsx
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function PendingAdminPage() {
+function PendingAdminPageContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
   const [payment, setPayment] = useState('')
@@ -179,7 +180,8 @@ export default function PendingAdminPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <ProtectedRoute allowedRoles={['admin']}>
+      <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-semibold mb-4">Admin — Pending Orders</h1>
 
       <div className="flex flex-wrap gap-2 items-end mb-4">
@@ -295,6 +297,11 @@ export default function PendingAdminPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   )
+}
+
+export default function PendingAdminPage() {
+  return <PendingAdminPageContent />
 }

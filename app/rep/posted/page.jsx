@@ -2,6 +2,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function RepPostedPage() {
   const [orders, setOrders] = useState([])
@@ -10,6 +12,14 @@ export default function RepPostedPage() {
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [nextCursor, setNextCursor] = useState(null)
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  const changeBranch = () => {
+    if (confirm('Are you sure you want to change your branch? You will be logged out and redirected to the login page.')) {
+      logout()
+    }
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -106,6 +116,31 @@ export default function RepPostedPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-semibold mb-4">Rep — Posted Orders</h1>
+      
+      {/* Branch Code Display */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <div>
+              <div className="text-sm text-blue-600 font-medium">Current Branch</div>
+              <div className="text-lg font-bold text-blue-800">{user?.branchCode || 'Unknown'}</div>
+            </div>
+          </div>
+          <button 
+            onClick={changeBranch}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            Change Branch
+          </button>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2 items-end mb-4">
         <select className="border rounded px-3 py-2" value={dept} onChange={e=>setDept(e.target.value)}>

@@ -4,16 +4,20 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Navbar() {
   const pathname = usePathname()
   const [lowCount, setLowCount] = useState(0)
+  const { user, userType, logout } = useAuth()
 
   // Simple active style helper
   const isActive = (href) => pathname === href || pathname.startsWith(href + '/')
 
-  // Low-stock poll (every 90s)
+  // Low-stock poll (every 90s) - only for admin
   useEffect(() => {
+    if (userType !== 'admin') return
+    
     let t
     const load = async () => {
       try {
@@ -25,84 +29,223 @@ export default function Navbar() {
     }
     load()
     return () => t && clearTimeout(t)
-  }, [])
+  }, [userType])
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
-        <Link href="/shop" className="font-semibold tracking-tight">CBN Coop</Link>
-        <span className="text-gray-400">•</span>
-        <span className="text-sm text-gray-500">Food Distribution</span>
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center gap-4">
+        {/* Logo */}
+        <Link href="/" className="flex items-center space-x-2 group">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-green-500 rounded-lg flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+            </svg>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-lg bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200">CBN Coop</span>
+            <span className="text-xs text-gray-500 -mt-1">Food Distribution</span>
+          </div>
+        </Link>
 
-        <nav className="ml-auto flex items-center gap-1">
-          <Link
-            href="/shop"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/shop') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Shop
-          </Link>
+        <nav className="ml-auto flex items-center gap-2">
+          {/* Member Navigation */}
+          {userType === 'member' && (
+            <>
+              <Link
+                href={`/shop?mid=${user?.id}`}
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/shop') 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                </svg>
+                Shop
+              </Link>
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </>
+          )}
 
-          <Link
-            href="/admin/pending"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/pending') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Pending
-          </Link>
+          {/* Rep Navigation */}
+          {userType === 'rep' && (
+            <>
+              <Link
+                href="/rep/pending"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/rep/pending') 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Pending
+              </Link>
+              <Link
+                href="/rep/posted"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/rep/posted') 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Posted
+              </Link>
+              <Link
+                href="/rep/delivered"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/rep/delivered') 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Delivered
+              </Link>
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </>
+          )}
 
-          <Link
-            href="/admin/posted"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/posted') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Posted
-          </Link>
+          {/* Admin Navigation */}
+          {userType === 'admin' && (
+            <>
+              <Link
+                href="/admin/pending"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/pending') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Pending
+              </Link>
+              <Link
+                href="/admin/posted"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/posted') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Posted
+              </Link>
+              <Link
+                href="/admin/delivered"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/delivered') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Delivered
+              </Link>
+              <Link
+                href="/admin/import"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/import') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Import
+              </Link>
+              <Link
+                href="/admin/inventory"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/inventory') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Inventory
+                {lowCount > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs bg-red-500 text-white rounded-full animate-pulse">
+                    {lowCount}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/admin/reports"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/reports') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Reports
+              </Link>
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </>
+          )}
 
-          <Link
-            href="/admin/delivered"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/delivered') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Delivered
-          </Link>
-
-          <Link
-            href="/admin/import"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/import') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Import
-          </Link>
-
-          {/* Inventory with low-stock badge */}
-          <Link
-            href="/admin/inventory"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/inventory') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Inventory
-            {lowCount > 0 && (
-              <span className="ml-1 inline-block min-w-[1.25rem] text-center text-xs bg-red-600 text-white rounded-full px-1">
-                {lowCount}
-              </span>
-            )}
-          </Link>
-
-          <Link
-            href="/admin/reports"
-            className={`px-3 py-2 rounded-md text-sm font-medium transition ${
-              isActive('/admin/reports') ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-            }`}
-          >
-            Reports
-          </Link>
+          {/* No user logged in - show login options */}
+          {!userType && (
+            <>
+              <Link
+                href="/"
+                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  pathname === '/' 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Home
+              </Link>
+            </>
+          )}
         </nav>
       </div>
     </header>
