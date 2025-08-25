@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-export default function Verify() {
+function VerifyContent() {
   const [msg, setMsg] = useState('Verifying…')
   const search = useSearchParams()
   const router = useRouter()
@@ -25,4 +25,12 @@ export default function Verify() {
     })()
   }, [search, router])
   return <div className="p-6">{msg}</div>
+}
+
+export default function Verify() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <VerifyContent />
+    </Suspense>
+  )
 }

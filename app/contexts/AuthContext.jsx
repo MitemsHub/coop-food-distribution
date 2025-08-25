@@ -1,11 +1,11 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
 const AuthContext = createContext()
 
-export function AuthProvider({ children }) {
+function AuthProviderContent({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const searchParams = useSearchParams()
@@ -28,7 +28,14 @@ export function AuthProvider({ children }) {
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser))
+        const userData = JSON.parse(storedUser)
+        // Clear admin/rep authentication when on home page
+        if (window.location.pathname === '/' && (userData.type === 'admin' || userData.type === 'rep')) {
+          localStorage.removeItem('user')
+          setUser(null)
+        } else {
+          setUser(userData)
+        }
       } catch (e) {
         localStorage.removeItem('user')
       }
@@ -65,6 +72,14 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ user, userType, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
+  )
+}
+
+export function AuthProvider({ children }) {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AuthProviderContent>{children}</AuthProviderContent>
+    </Suspense>
   )
 }
 

@@ -1,7 +1,7 @@
 // app/shop/page.jsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -531,5 +531,9 @@ function ShopPageContent() {
 }
 
 export default function ShopPage() {
-  return <ShopPageContent />
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ShopPageContent />
+    </Suspense>
+  )
 }

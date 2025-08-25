@@ -1,10 +1,10 @@
 // app/shop/success/[id]/page.jsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 
-export default function Success() {
+function SuccessContent() {
   const params = useParams()
   const searchParams = useSearchParams()
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id
@@ -218,5 +218,13 @@ export default function Success() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function Success() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <SuccessContent />
+    </Suspense>
   )
 }
