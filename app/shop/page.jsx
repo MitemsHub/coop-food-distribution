@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '../../lib/supabaseClient'
+import { supabase } from '@/lib/supabaseClient'
 import ProtectedRoute from '../components/ProtectedRoute'
 
 function ShopPageContent() {
