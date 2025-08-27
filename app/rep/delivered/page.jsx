@@ -4,8 +4,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../contexts/AuthContext'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function RepDeliveredPage() {
+function RepDeliveredPageContent() {
   const [orders, setOrders] = useState([])
   const [departments, setDepartments] = useState([])
   const [dept, setDept] = useState('') // '' = All
@@ -186,5 +187,13 @@ export default function RepDeliveredPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function RepDeliveredPage() {
+  return (
+    <ProtectedRoute allowedRoles={['rep']}>
+      <RepDeliveredPageContent />
+    </ProtectedRoute>
   )
 }

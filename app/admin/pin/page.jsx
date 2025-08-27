@@ -18,7 +18,8 @@ export default function AdminPinPage() {
       const res = await fetch('/api/admin/pin/session', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ passcode: pin })
+        body: JSON.stringify({ passcode: pin }),
+        credentials: 'include' // Important: include cookies in request
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Invalid passcode')
@@ -30,7 +31,8 @@ export default function AdminPinPage() {
         authenticated: true
       })
       
-      router.push('/admin/pending')
+      // Force a page reload to ensure middleware recognizes the cookie
+      window.location.href = '/admin/pending'
     } catch (e) {
       setMsg(e.message)
     } finally {

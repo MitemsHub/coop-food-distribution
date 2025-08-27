@@ -2,28 +2,41 @@
 'use client'
 
 import { useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function ImportPage() {
+function ImportPageContent() {
   const [membersFile, setMembersFile] = useState(null)
   const [pricesFile, setPricesFile] = useState(null)
   const [log, setLog] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [pricesLoading, setPricesLoading] = useState(false)
 
   const upload = async (which) => {
+    const setLoadingState = which === 'members' ? setMembersLoading : setPricesLoading
     try {
-      setLoading(true); setLog('')
+      setLoadingState(true)
+      setLog('')
       const fd = new FormData()
       const file = which === 'members' ? membersFile : pricesFile
-      if (!file) return setLog('Please choose a file first.')
+      if (!file) {
+        setLog('Please choose a file first.')
+        return
+      }
       fd.append('file', file)
-      const res = await fetch(`/api/admin/import/${which}`, { method: 'POST', body: fd })
+      const res = await fetch(`/api/admin/import/${which}`, { 
+        method: 'POST', 
+        body: fd 
+      })
       const json = await res.json()
-      if (!res.ok || !json.ok) throw new Error(json.error || 'Upload failed')
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || `Upload failed with status ${res.status}`)
+      }
       setLog(JSON.stringify(json, null, 2))
     } catch (e) {
       setLog(`Error: ${e.message}`)
+      console.error('Upload error:', e)
     } finally {
-      setLoading(false)
+      setLoadingState(false)
     }
   }
 
@@ -74,8 +87,8 @@ export default function ImportPage() {
         </p>
         <div className="flex items-center gap-2 mb-2">
           <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setMembersFile(e.target.files?.[0] || null)} />
-          <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => upload('members')} disabled={loading}>
-            {loading ? 'Uploading…' : 'Upload Members'}
+          <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => upload('members')} disabled={membersLoading || pricesLoading}>
+            {membersLoading ? 'Uploading…' : 'Upload Members'}
           </button>
           <button className="px-3 py-2 border rounded" onClick={downloadMembersTemplate}>Download Template</button>
         </div>
@@ -88,8 +101,8 @@ export default function ImportPage() {
         </p>
         <div className="flex items-center gap-2 mb-2">
           <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setPricesFile(e.target.files?.[0] || null)} />
-          <button className="px-3 py-2 bg-emerald-600 text-white rounded" onClick={() => upload('prices')} disabled={loading}>
-            {loading ? 'Uploading…' : 'Upload Items/Prices/Stock'}
+          <button className="px-3 py-2 bg-emerald-600 text-white rounded" onClick={() => upload('prices')} disabled={membersLoading || pricesLoading}>
+            {pricesLoading ? 'Uploading…' : 'Upload Items/Prices/Stock'}
           </button>
           <button className="px-3 py-2 border rounded" onClick={downloadPricesTemplate}>Download Template</button>
         </div>
@@ -99,5 +112,13 @@ export default function ImportPage() {
         {log || 'Logs will appear here.'}
       </div>
     </div>
+  )
+}
+
+export default function ImportPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <ImportPageContent />
+    </ProtectedRoute>
   )
 }

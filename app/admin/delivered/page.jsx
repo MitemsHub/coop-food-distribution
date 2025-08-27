@@ -2,8 +2,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function DeliveredPage() {
+function DeliveredPageContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
   const [branch, setBranch] = useState('')      // DELIVERY branch code (e.g. DUTSE)
@@ -120,5 +121,13 @@ export default function DeliveredPage() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function DeliveredPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <DeliveredPageContent />
+    </ProtectedRoute>
   )
 }

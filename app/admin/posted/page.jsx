@@ -2,8 +2,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function PostedAdminPage() {
+function PostedAdminPageContent() {
   const [orders, setOrders] = useState([])
   const [msg, setMsg] = useState(null)
   const [term, setTerm] = useState('')
@@ -181,5 +182,13 @@ export default function PostedAdminPage() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function PostedAdminPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <PostedAdminPageContent />
+    </ProtectedRoute>
   )
 }

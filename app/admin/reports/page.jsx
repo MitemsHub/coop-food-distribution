@@ -2,8 +2,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function ReportsPage() {
+function ReportsPageContent() {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -212,5 +213,13 @@ function Table({ rows, cols }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+export default function ReportsPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <ReportsPageContent />
+    </ProtectedRoute>
   )
 }

@@ -15,7 +15,13 @@ export async function POST(req) {
     }
     const token = sign({ role:'admin' }, 60 * 60 * 8) // 8h
     const res = NextResponse.json({ ok:true })
-    res.cookies.set('admin_token', token, { httpOnly:true, sameSite:'lax', path:'/', maxAge:60*60*8 })
+    res.cookies.set('admin_token', token, { 
+      httpOnly: true, 
+      sameSite: 'lax', 
+      path: '/', 
+      maxAge: 60*60*8,
+      secure: false // Allow HTTP for localhost development
+    })
     return res
   } catch (e) {
     return NextResponse.json({ ok:false, error:e.message }, { status:500 })

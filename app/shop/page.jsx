@@ -82,31 +82,57 @@ function ShopPageContent() {
           .single()
         if (brErr || !br) { setItems([]); return }
 
+        // Get active cycle
+        const { data: activeCycle, error: cycleError } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('is_active', true)
+          .single()
+        
+        console.log('Active cycle query result:', { activeCycle, cycleError })
+        
+        if (!activeCycle) {
+          console.error('No active cycle found')
+          setItems([])
+          return
+        }
+
+        // Get items with prices and stock
         const { data: rows, error } = await supabase
-          .from('v_branch_item_prices_active') // cycle-scoped view
+          .from('branch_item_prices')
           .select(`
             price,
             initial_stock,
-            items:item_id(name, sku, unit, category)
+            items:item_id(
+              item_id,
+              name, 
+              sku, 
+              unit, 
+              category
+            )
           `)
           .eq('branch_id', br.id)
           .order('name', { foreignTable: 'items' })
-
+        
+        console.log('Branch items query result:', { rows, error, branchId: br.id })
+        
         if (error) {
           console.error('items load error:', error.message)
           setItems([])
           return
         }
-
-        const mapped = (rows || []).map(r => ({
-          sku: r.items.sku,
-          name: r.items.name,
-          unit: r.items.unit,
-          category: r.items.category,
-          price: Number(r.price),
-          initial_stock: Number(r.initial_stock),
+        
+        // Use initial_stock from branch_item_prices directly
+        const itemsWithStock = (rows || []).map(row => ({
+          sku: row.items.sku,
+          name: row.items.name,
+          unit: row.items.unit,
+          category: row.items.category,
+          price: Number(row.price),
+          initial_stock: Math.max(0, row.initial_stock || 0),
         }))
-        setItems(mapped)
+
+        setItems(itemsWithStock)
         setQty({})
       } catch (e) {
         console.error('items fetch failed:', e)
@@ -454,32 +480,32 @@ function ShopPageContent() {
             </div>
 
              {/* Cart */}
-             <div className="sticky bottom-4 bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-6 backdrop-blur-sm">
-               <div className="flex items-center justify-between mb-4">
-                 <h3 className="text-xl font-bold text-gray-800 flex items-center">
-                   <svg className="w-6 h-6 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+             <div className="sticky bottom-4 bg-white rounded-xl shadow-lg border border-gray-200 p-4 backdrop-blur-sm">
+               <div className="flex items-center justify-between mb-3">
+                 <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                   <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
                    </svg>
                    Shopping Cart
                  </h3>
                </div>
                
-               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                 <div className="bg-blue-50 rounded-lg p-4 text-center">
-                   <div className="text-sm text-blue-600 mb-1">Items in Cart</div>
-                   <div className="text-2xl font-bold text-blue-700">{cartLines.length}</div>
+               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                 <div className="bg-blue-50 rounded-lg p-3 text-center">
+                   <div className="text-xs text-blue-600 mb-1">Items in Cart</div>
+                   <div className="text-lg font-bold text-blue-700">{cartLines.length}</div>
                  </div>
-                 <div className="bg-green-50 rounded-lg p-4 text-center">
-                   <div className="text-sm text-green-600 mb-1">Cart Total</div>
-                   <div className="text-2xl font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
+                 <div className="bg-green-50 rounded-lg p-3 text-center">
+                   <div className="text-xs text-green-600 mb-1">Cart Total</div>
+                   <div className="text-lg font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
                  </div>
-                 <div className={`rounded-lg p-4 text-center ${
+                 <div className={`rounded-lg p-3 text-center ${
                    overLimit ? 'bg-red-50' : 'bg-purple-50'
                  }`}>
-                   <div className={`text-sm mb-1 ${
+                   <div className={`text-xs mb-1 ${
                      overLimit ? 'text-red-600' : 'text-purple-600'
                    }`}>Limit ({paymentOption})</div>
-                   <div className={`text-2xl font-bold ${
+                   <div className={`text-lg font-bold ${
                      overLimit ? 'text-red-700' : 'text-purple-700'
                    }`}>
                      {paymentOption === 'Cash' ? 'No limit' : `₦${currentLimit.toLocaleString()}`}
@@ -489,9 +515,9 @@ function ShopPageContent() {
                    <button
                      disabled={!canSubmit}
                      onClick={submitOrder}
-                     className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-200 ${
+                     className={`w-full py-3 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${
                        canSubmit 
-                         ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105' 
+                         ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-md hover:shadow-lg transform hover:scale-105' 
                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                      }`}
                    >

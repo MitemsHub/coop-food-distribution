@@ -2,8 +2,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
-export default function InventoryPage() {
+function InventoryPageContent() {
   const [rows, setRows] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -160,5 +161,13 @@ export default function InventoryPage() {
         Rows highlighted in red are low stock (≤ 20 remaining after Posted). Adjust as needed.
       </div>
     </div>
+  )
+}
+
+export default function InventoryPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <InventoryPageContent />
+    </ProtectedRoute>
   )
 }

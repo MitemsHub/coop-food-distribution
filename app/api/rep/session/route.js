@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { sign } from '@/lib/signing'
+import { sign } from '@/lib/signingEdge'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,7 @@ export async function POST(req) {
     const { data: br, error } = await admin.from('branches').select('id, code, name').eq('code', code).single()
     if (error || !br) return NextResponse.json({ ok:false, error:'Invalid passcode' }, { status:401 })
 
-    const token = sign({ role: 'rep', branch_id: br.id, branch_code: br.code }, 60 * 60 * 8) // 8h
+    const token = await sign({ role: 'rep', branch_id: br.id, branch_code: br.code }, 60 * 60 * 8) // 8h
     const res = NextResponse.json({ ok:true, branch: br })
     res.cookies.set('rep_token', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60*60*8 })
     return res
