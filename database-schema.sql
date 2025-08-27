@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS branch_item_prices (
     branch_id INTEGER REFERENCES branches(id),
     item_id INTEGER REFERENCES items(item_id),
     price DECIMAL(10,2) NOT NULL,
+    initial_stock INTEGER DEFAULT 0,
     effective_date DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

@@ -10,17 +10,25 @@ function DataManagementPageContent() {
   const [confirmClearAll, setConfirmClearAll] = useState('')
   const [confirmClearDelivered, setConfirmClearDelivered] = useState('')
   const [confirmResetInventory, setConfirmResetInventory] = useState('')
+  const [processingAction, setProcessingAction] = useState(null)
   const router = useRouter()
 
   const clearAllOrders = async (e) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Prevent simultaneous operations
+    if (loading || processingAction) {
+      return
+    }
+    
     if (confirmClearAll !== 'CLEAR ALL DATA') {
       setMessage('Please type "CLEAR ALL DATA" to confirm')
       return
     }
 
     setLoading(true)
+    setProcessingAction('clearAll')
     setMessage('Clearing all orders...')
 
     try {
@@ -42,17 +50,25 @@ function DataManagementPageContent() {
     }
 
     setLoading(false)
+    setProcessingAction(null)
   }
 
   const clearDeliveredOrders = async (e) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Prevent simultaneous operations
+    if (loading || processingAction) {
+      return
+    }
+    
     if (confirmClearDelivered !== 'CLEAR DELIVERED') {
       setMessage('Please type "CLEAR DELIVERED" to confirm')
       return
     }
 
     setLoading(true)
+    setProcessingAction('clearDelivered')
     setMessage('Clearing delivered orders...')
 
     try {
@@ -74,17 +90,25 @@ function DataManagementPageContent() {
     }
 
     setLoading(false)
+    setProcessingAction(null)
   }
 
   const resetInventory = async (e) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Prevent simultaneous operations
+    if (loading || processingAction) {
+      return
+    }
+    
     if (confirmResetInventory !== 'RESET INVENTORY') {
       setMessage('Please type "RESET INVENTORY" to confirm')
       return
     }
 
     setLoading(true)
+    setProcessingAction('resetInventory')
     setMessage('Resetting inventory quantities...')
 
     try {
@@ -106,12 +130,20 @@ function DataManagementPageContent() {
     }
 
     setLoading(false)
+    setProcessingAction(null)
   }
 
   const exportBackup = async (e) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Prevent simultaneous operations
+    if (loading || processingAction) {
+      return
+    }
+    
     setLoading(true)
+    setProcessingAction('exportBackup')
     setMessage('Creating backup...')
 
     try {
@@ -135,6 +167,7 @@ function DataManagementPageContent() {
     }
 
     setLoading(false)
+    setProcessingAction(null)
   }
 
   return (
@@ -169,10 +202,10 @@ function DataManagementPageContent() {
           <button
               type="button"
               onClick={exportBackup}
-              disabled={loading}
+              disabled={processingAction !== null}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
-            {loading ? 'Exporting...' : 'Export Backup'}
+            {processingAction === 'exportBackup' ? 'Exporting...' : 'Export Backup'}
           </button>
         </div>
 
@@ -193,10 +226,10 @@ function DataManagementPageContent() {
             <button
               type="button"
               onClick={clearDeliveredOrders}
-              disabled={loading || confirmClearDelivered !== 'CLEAR DELIVERED'}
+              disabled={processingAction !== null || confirmClearDelivered !== 'CLEAR DELIVERED'}
               className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
             >
-              {loading ? 'Clearing...' : 'Clear Delivered Orders'}
+              {processingAction === 'clearDelivered' ? 'Clearing...' : 'Clear Delivered Orders'}
             </button>
           </div>
         </div>
@@ -218,10 +251,10 @@ function DataManagementPageContent() {
             <button
               type="button"
               onClick={resetInventory}
-              disabled={loading || confirmResetInventory !== 'RESET INVENTORY'}
+              disabled={processingAction !== null || confirmResetInventory !== 'RESET INVENTORY'}
               className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
             >
-              {loading ? 'Resetting...' : 'Reset Inventory'}
+              {processingAction === 'resetInventory' ? 'Resetting...' : 'Reset Inventory'}
             </button>
           </div>
         </div>
@@ -244,10 +277,10 @@ function DataManagementPageContent() {
             <button
               type="button"
               onClick={clearAllOrders}
-              disabled={loading || confirmClearAll !== 'CLEAR ALL DATA'}
+              disabled={processingAction !== null || confirmClearAll !== 'CLEAR ALL DATA'}
               className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
             >
-              {loading ? 'Clearing...' : 'Clear All Orders'}
+              {processingAction === 'clearAll' ? 'Clearing...' : 'Clear All Orders'}
             </button>
           </div>
         </div>
