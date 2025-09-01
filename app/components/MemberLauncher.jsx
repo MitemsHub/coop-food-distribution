@@ -10,7 +10,7 @@ export default function MemberLauncher() {
   
   const submit = (e) => {
     e.preventDefault()
-    const mid = new FormData(e.currentTarget).get('mid')?.toString().trim()
+    const mid = new FormData(e.currentTarget).get('mid')?.toString().trim().toUpperCase()
     if (!mid) return
     
     // Set user as authenticated member

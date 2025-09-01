@@ -51,12 +51,18 @@ function ShopPageContent() {
   useEffect(() => {
     const mid = searchParams?.get('mid')
     if (mid) {
-      setMemberId(mid)
-      // let the state set then lookup
-      setTimeout(() => { lookupMember() }, 0)
+      const upperMid = mid.toUpperCase()
+      setMemberId(upperMid)
+    }
+  }, [searchParams])
+
+  // Auto-lookup when memberId is set from URL
+  useEffect(() => {
+    if (memberId && searchParams?.get('mid')) {
+      lookupMember()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [memberId])
 
   // Load branches/departments
   useEffect(() => {
@@ -146,6 +152,7 @@ function ShopPageContent() {
     setMessage(null)
     if (!memberId) return
 
+    const normalizedMemberId = memberId.trim().toUpperCase()
     const { data, error } = await supabase
       .from('members')
       .select(`
@@ -158,7 +165,7 @@ function ShopPageContent() {
         branches:branch_id(code, name),
         departments:department_id(name)
       `)
-      .eq('member_id', memberId.trim())
+      .eq('member_id', normalizedMemberId)
       .single()
 
     if (error || !data) {
@@ -182,7 +189,7 @@ function ShopPageContent() {
     if (data?.departments?.name) setDepartmentName(data.departments.name)
 
     try {
-      const res = await fetch(`/api/members/eligibility?id=${encodeURIComponent(memberId.trim())}`)
+      const res = await fetch(`/api/members/eligibility?id=${encodeURIComponent(normalizedMemberId)}`)
       const json = await safeJson(res, '/api/members/eligibility')
       if (json.ok) setEligibility(json.eligibility)
     } catch (e) {
@@ -290,8 +297,9 @@ function ShopPageContent() {
                 <div className="flex-1 min-w-64">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Member ID</label>
                   <input
+                    type="text"
                     value={memberId}
-                    onChange={e => setMemberId(e.target.value)}
+                    onChange={e => setMemberId(e.target.value.toUpperCase())}
                     className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
                     placeholder="e.g. A12345"
                   />
