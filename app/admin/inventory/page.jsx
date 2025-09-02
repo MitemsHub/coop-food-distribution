@@ -71,7 +71,10 @@ function InventoryPageContent() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin — Inventory</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Admin — Inventory</h1>
+
+      </div>
 
       <div className="mb-4 p-3 border rounded">
         <div className="text-sm font-medium mb-2">Post Adjustment</div>

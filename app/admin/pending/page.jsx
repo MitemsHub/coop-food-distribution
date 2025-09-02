@@ -182,7 +182,10 @@ function PendingAdminPageContent() {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin — Pending Orders</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Admin — Pending Orders</h1>
+
+      </div>
 
       <div className="flex flex-wrap gap-2 items-end mb-4">
         <input className="border rounded px-3 py-2" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />

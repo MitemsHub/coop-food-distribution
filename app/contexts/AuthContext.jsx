@@ -61,8 +61,8 @@ function AuthProviderContent({ children }) {
     } else if (currentUserType === 'admin') {
       router.push('/admin/pin')
     } else {
-      // For members or any other user type, redirect to main login
-      router.push('/auth/login')
+      // For members or any other user type, redirect to landing page
+      router.push('/')
     }
   }
 

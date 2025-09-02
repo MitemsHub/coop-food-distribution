@@ -106,7 +106,12 @@ function PostedAdminPageContent() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin — Posted Orders</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Admin — Posted Orders</h1>
+        <div className="flex gap-2">
+          <a href="/admin/pending" className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">Pending</a>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2 items-end mb-4">
         <input className="border rounded px-3 py-2" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />

@@ -12,9 +12,9 @@ const admin = createClient(supabaseUrl, serviceKey)
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url)
-    const memberId = (searchParams.get('id') || '').trim()
+    const memberId = (searchParams.get('member_id') || searchParams.get('id') || '').trim()
     if (!memberId) {
-      return NextResponse.json({ ok: false, error: 'id required' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: 'member_id or id required' }, { status: 400 })
     }
 
     // 1) Member snapshot (core balances)

@@ -78,7 +78,9 @@ function ReportsPageContent() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Admin — Reports</h1>
-        <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={loadSummary}>Refresh</button>
+        <div className="flex gap-2">
+          <button className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700" onClick={loadSummary}>Refresh</button>
+        </div>
       </div>
 
       {/* Totals */}
