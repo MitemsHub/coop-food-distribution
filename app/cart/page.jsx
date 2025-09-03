@@ -329,22 +329,22 @@ function CartPageContent() {
     <ProtectedRoute allowedRoles={['member', 'rep', 'admin']}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         {/* Header */}
-        {/* Header - Three Column Grid */}
         <div className="max-w-6xl mx-auto mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Shopping Cart Info */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h1 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2">
-                {isAdmin ? 'Admin - Member Cart' : 'Shopping Cart'}
-              </h1>
-              <p className="text-gray-600 text-sm">
-                {isAdmin ? 'Managing cart for member' : 'Review and edit your items before checkout'}
-              </p>
-              <div className="mt-4">
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+              <div className="mb-4 md:mb-0">
+                <h1 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2">
+                  {isAdmin ? 'Admin - Member Cart' : 'Shopping Cart'}
+                </h1>
+                <p className="text-gray-600 text-sm">
+                  {isAdmin ? 'Managing cart for member' : 'Review and edit your items before checkout'}
+                </p>
+              </div>
+              <div className="flex-shrink-0">
                 {isAdmin ? (
                   <button
                     onClick={() => router.push('/admin/cart')}
-                    className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center justify-center text-sm"
+                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center text-sm"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -354,7 +354,7 @@ function CartPageContent() {
                 ) : (
                   <button
                     onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
-                    className="w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center justify-center text-sm"
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center text-sm"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -364,33 +364,71 @@ function CartPageContent() {
                 )}
               </div>
             </div>
-
-
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">Quick Actions</h3>
-              <div className="space-y-3">
-                {isAdmin && (
-                  <button
-                    onClick={() => router.push(`/shop?member_id=${memberId}&admin=true`)}
-                    className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center text-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M8 11v6h8v-6H8z" />
-                    </svg>
-                    Shop for Member
-                  </button>
-                )}
-                <div className="text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>Cart Items:</span>
-                    <span className="font-semibold">{cartItems.length}</span>
+            
+            {/* Delivery Details & Payment Method - Moved up */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-100">
+              {/* Delivery Details */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Delivery Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
+                    <select
+                      value={deliveryBranch}
+                      onChange={(e) => setDeliveryBranch(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option key="select-branch" value="">Select branch</option>
+                      {branches.map((branch, index) => (
+                        <option key={`branch-${branch.branch_id || index}`} value={branch.code}>
+                          {branch.name} ({branch.code})
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Total Value:</span>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                    <select
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option key="select-department" value="">Select department</option>
+                      {departments.map((dept, index) => (
+                        <option key={`dept-${dept || index}`} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Method</h3>
+                <select
+                  value={paymentOption}
+                  onChange={(e) => setPaymentOption(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option key="payment-savings" value="Savings" disabled={savingsEligible <= 0}>
+                    Savings {savingsEligible <= 0 ? '(Insufficient Balance)' : ''}
+                  </option>
+                  <option key="payment-loan" value="Loan">Loan</option>
+                  <option key="payment-cash" value="Cash">Cash</option>
+                </select>
+                
+                {/* Quick Summary */}
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Items:</span>
+                    <span className="font-medium">{cartItems.length}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Total:</span>
                     <span className="font-semibold">₦{cartTotal.toLocaleString()}</span>
                   </div>
+
                 </div>
               </div>
             </div>
@@ -506,59 +544,6 @@ function CartPageContent() {
 
           {/* Order Summary & Checkout */}
           <div className="space-y-6">
-            {/* Delivery & Department */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Delivery Details</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
-                  <select
-                    value={deliveryBranch}
-                    onChange={(e) => setDeliveryBranch(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                  >
-                    <option key="select-branch" value="">Select branch</option>
-                    {branches.map(branch => (
-                      <option key={branch.branch_id} value={branch.code}>
-                        {branch.name} ({branch.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                  >
-                    <option key="select-department" value="">Select department</option>
-                    {departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Method</h3>
-              <select
-                value={paymentOption}
-                onChange={(e) => setPaymentOption(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option key="savings" value="Savings" disabled={savingsEligible <= 0}>
-                  Savings {savingsEligible <= 0 ? '(Insufficient Balance)' : ''}
-                </option>
-                <option key="loan" value="Loan">Loan</option>
-                <option key="cash" value="Cash">Cash</option>
-              </select>
-            </div>
-
             {/* Order Summary */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Order Summary</h3>
@@ -572,12 +557,7 @@ function CartPageContent() {
                   <span>Total:</span>
                   <span className="font-semibold">₦{cartTotal.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Limit ({paymentOption}):</span>
-                  <span className={overLimit ? 'text-red-600' : 'text-green-600'}>
-                    {paymentOption === 'Cash' ? 'No limit' : `₦${currentLimit.toLocaleString()}`}
-                  </span>
-                </div>
+
               </div>
               
               {overLimit && (
