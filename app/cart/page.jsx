@@ -365,42 +365,7 @@ function CartPageContent() {
               </div>
             </div>
 
-            {/* Member Info */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">Member Details</h3>
-              {member ? (
-                <div className="space-y-2">
-                  <div>
-                    <h4 className="font-semibold text-blue-800">{member.full_name || 'Unknown Member'}</h4>
-                    <p className="text-blue-600 text-sm">Member ID: {memberId}</p>
-                    {member.branches?.name && (
-                      <p className="text-gray-600 text-sm">Branch: {member.branches.name}</p>
-                    )}
-                    {member.departments?.name && (
-                      <p className="text-gray-600 text-sm">Department: {member.departments.name}</p>
-                    )}
-                  </div>
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="text-sm text-blue-600">Savings: ₦{savingsEligible.toLocaleString()}</div>
-                    <div className="text-sm text-blue-600">Loan Limit: ₦{loanEligible.toLocaleString()}</div>
-                    {member.category && (
-                      <div className="text-sm text-gray-600">Category: {member.category}</div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div>
-                    <h4 className="font-semibold text-gray-500">Loading member information...</h4>
-                    <p className="text-blue-600 text-sm">Member ID: {memberId}</p>
-                  </div>
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="text-sm text-gray-500">Savings: Loading...</div>
-                    <div className="text-sm text-gray-500">Loan Limit: Loading...</div>
-                  </div>
-                </div>
-              )}
-            </div>
+
 
             {/* Quick Actions */}
             <div className="bg-white rounded-xl shadow-lg p-6">
