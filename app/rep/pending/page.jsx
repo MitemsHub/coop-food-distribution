@@ -69,14 +69,15 @@ function RepPendingPageContent() {
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
       setOrders(orders.filter(o => o.order_id !== id))
+      setMsg({ type:'success', text:`Order ${id} posted successfully` })
     } catch (e) {
-      alert(e.message)
+      setMsg({ type:'error', text:e.message })
     }
   }
 
   const editOne = async (id) => {
     // Navigate to edit page or open edit modal
-    window.location.href = `/rep/orders/edit/${id}`
+    router.push(`/rep/orders/edit/${id}`)
   }
 
   const cancelOne = async (id) => {
@@ -91,7 +92,7 @@ function RepPendingPageContent() {
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
       setOrders(orders.filter(o => o.order_id !== id))
-      setMsg({ type:'success', text:'Order cancelled successfully' })
+      setMsg({ type:'success', text:`Order ${id} cancelled successfully` })
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -101,14 +102,14 @@ function RepPendingPageContent() {
     if (!confirm(`Delete order ${id}? This action cannot be undone.`)) return
     try {
       const res = await fetch('/api/rep/orders/delete', {
-        method:'DELETE',
+        method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ orderId:id })
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
       setOrders(orders.filter(o => o.order_id !== id))
-      setMsg({ type:'success', text:'Order deleted successfully' })
+      setMsg({ type:'success', text:`Order ${id} deleted successfully` })
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '../../../../../lib/supabaseServer'
 import { validateSession } from '../../../../../lib/validation'
 
-export async function DELETE(request) {
+export async function POST(request) {
   try {
     const { orderId } = await request.json()
     
@@ -24,9 +24,9 @@ export async function DELETE(request) {
     // Check if order exists and belongs to the rep's branch
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('order_id, status, branch_id')
+      .select('order_id, status, delivery_branch_id')
       .eq('order_id', orderId)
-      .eq('branch_id', branch_id)
+      .eq('delivery_branch_id', branch_id)
       .single()
 
     if (orderError || !order) {

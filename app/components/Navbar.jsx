@@ -8,11 +8,23 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function Navbar() {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
   const [lowCount, setLowCount] = useState(0)
-  const { user, userType, logout } = useAuth()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  // Simple active style helper
-  const isActive = (href) => pathname === href || pathname.startsWith(href + '/')
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const userType = user?.type
+
+  const isActive = (path) => {
+    if (path === '/') return pathname === '/'
+    return pathname.startsWith(path)
+  }
+
+  const closeMobileMenu = () => setMobileMenuOpen(false)
 
   // Low-stock poll (every 90s) - only for admin
   useEffect(() => {
@@ -42,12 +54,13 @@ export default function Navbar() {
             </svg>
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-lg bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200">CBN Coop</span>
-            <span className="text-xs text-gray-500 -mt-1">Food Distribution</span>
+            <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">CBN Coop</span>
+            <span className="text-xs sm:text-sm text-gray-500 -mt-1">Food Distribution</span>
           </div>
         </Link>
 
-        <nav className="ml-auto flex items-center gap-2">
+        {/* Desktop Navigation */}
+        <nav className="ml-auto hidden lg:flex items-center gap-2">
           {/* Member Navigation */}
           {userType === 'member' && (
             <>
@@ -243,24 +256,228 @@ export default function Navbar() {
 
           {/* No user logged in - show login options */}
           {!userType && (
-            <>
+            <Link
+              href="/"
+              className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                pathname === '/' 
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                  : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              Home
+            </Link>
+          )}
+        </nav>
+
+        {/* Mobile Hamburger Menu Button */}
+        {mounted && (
+          <div className="lg:hidden ml-auto">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              aria-expanded="false"
+            >
+              <span className="sr-only">Open main menu</span>
+              {!mobileMenuOpen ? (
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              ) : (
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Navigation Menu */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden">
+          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200 shadow-lg">
+            {/* Member Mobile Navigation */}
+            {userType === 'member' && (
+              <>
+                <Link
+                  href={`/shop?mid=${user?.id}`}
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/shop') 
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
+                      : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                  }`}
+                >
+                  Shop
+                </Link>
+                <button
+                  onClick={() => { logout(); closeMobileMenu(); }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+
+            {/* Rep Mobile Navigation */}
+            {userType === 'rep' && (
+              <>
+                <Link
+                  href="/rep/pending"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/rep/pending') 
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                      : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                  }`}
+                >
+                  Pending
+                </Link>
+                <Link
+                  href="/rep/posted"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/rep/posted') 
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                      : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                  }`}
+                >
+                  Posted
+                </Link>
+                <Link
+                  href="/rep/delivered"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/rep/delivered') 
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                      : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
+                  }`}
+                >
+                  Delivered
+                </Link>
+                <button
+                  onClick={() => { logout(); closeMobileMenu(); }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+
+            {/* Admin Mobile Navigation */}
+            {userType === 'admin' && (
+              <>
+                <Link
+                  href="/admin/pending"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/pending') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Pending
+                </Link>
+                <Link
+                  href="/admin/posted"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/posted') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Posted
+                </Link>
+                <Link
+                  href="/admin/delivered"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/delivered') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Delivered
+                </Link>
+                <Link
+                  href="/admin/import"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/import') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Import
+                </Link>
+                <Link
+                  href="/admin/inventory"
+                  onClick={closeMobileMenu}
+                  className={`flex items-center px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/inventory') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Inventory
+                  {lowCount > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs bg-red-500 text-white rounded-full animate-pulse">
+                      {lowCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  href="/admin/reports"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/reports') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Reports
+                </Link>
+                <Link
+                  href="/admin/data-management"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/data-management') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Data Management
+                </Link>
+                <button
+                  onClick={() => { logout(); closeMobileMenu(); }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+
+            {/* No user logged in - mobile */}
+            {!userType && (
               <Link
                 href="/"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                onClick={closeMobileMenu}
+                className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
                   pathname === '/' 
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
                     : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
                 }`}
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
                 Home
               </Link>
-            </>
-          )}
-        </nav>
-      </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   )
 }

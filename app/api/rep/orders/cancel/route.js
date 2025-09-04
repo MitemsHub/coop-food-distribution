@@ -24,9 +24,9 @@ export async function POST(request) {
     // Check if order exists and belongs to the rep's branch
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('order_id, status, branch_id')
+      .select('order_id, status, delivery_branch_id')
       .eq('order_id', orderId)
-      .eq('branch_id', branch_id)
+      .eq('delivery_branch_id', branch_id)
       .single()
 
     if (orderError || !order) {

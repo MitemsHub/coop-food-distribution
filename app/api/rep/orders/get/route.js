@@ -1,7 +1,15 @@
 // app/api/rep/orders/get/route.js
 import { NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '../../../../../lib/supabaseServer'
-import { validateSession } from '../../../../../lib/validation'
+import { createClient } from '@supabase/supabase-js'
+import { verify } from '@/lib/signing'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+const admin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
 
 export async function GET(request) {
   try {
@@ -13,22 +21,32 @@ export async function GET(request) {
     }
 
     // Validate session and get user info
-    const sessionResult = await validateSession(request, 'rep')
-    if (!sessionResult.valid) {
+    const token = request.cookies.get('rep_token')?.value
+    const claim = token && verify(token)
+    if (!claim || claim.role !== 'rep') {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { branch_id } = sessionResult.claims
-
-    const supabase = await createSupabaseServerClient()
+    const { branch_id } = claim
 
     // Get order with order lines and related data
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await admin
       .from('orders')
       .select(`
-        *,
+        order_id,
+        member_id,
+        member_name_snapshot,
+        branch_id,
+        status,
+        total_amount,
+        created_at,
+        posted_at,
         order_lines (
-          *,
+          id,
+          item_id,
+          qty,
+          unit_price,
+          amount,
           items (
             item_id,
             sku,
@@ -37,21 +55,18 @@ export async function GET(request) {
             category
           )
         ),
-        branches (
-          name
-        ),
-        departments (
-          name
-        ),
-        delivery_options (
+        delivery_branch:delivery_branch_id(
+          id,
+          code,
           name
         )
       `)
       .eq('order_id', orderId)
-      .eq('branch_id', branch_id)
+      .eq('delivery_branch_id', branch_id)
       .single()
 
     if (orderError || !order) {
+      console.log('Order lookup failed:', { orderId, branch_id, orderError: orderError?.message, order })
       return NextResponse.json({ ok: false, error: 'Order not found or access denied' }, { status: 404 })
     }
 
