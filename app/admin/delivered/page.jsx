@@ -58,39 +58,52 @@ function DeliveredPageContent() {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
-      <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-4 text-center md:text-left break-words">Admin — Delivered Orders</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Delivered Orders</h1>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
-        <input className="border rounded px-3 py-2 text-sm w-full" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />
-        <select className="border rounded px-3 py-2 text-sm w-full" value={payment} onChange={e=>setPayment(e.target.value)}>
+        <div className="flex gap-2">
+          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />
+          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={fetchOrders}>Search</button>
+        </div>
+        <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={e=>setPayment(e.target.value)}>
           <option value="">All payments</option>
           <option value="Savings">Savings</option>
           <option value="Loan">Loan</option>
           <option value="Cash">Cash</option>
         </select>
-        <input className="border rounded px-3 py-2 text-sm w-full" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} />
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          <div className="flex items-center gap-2 w-full">
+        <div className="flex gap-2">
+          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} />
+          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={fetchOrders}>Filter</button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
             <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">From</label>
-            <input type="date" className="border rounded px-2 py-1 text-sm flex-1" value={from} onChange={e=>setFrom(e.target.value)} />
+            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={from} onChange={e=>setFrom(e.target.value)} />
           </div>
-          <div className="flex items-center gap-2 w-full">
+          <div className="flex items-center gap-2">
             <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">To</label>
-            <input type="date" className="border rounded px-2 py-1 text-sm flex-1" value={to} onChange={e=>setTo(e.target.value)} />
+            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={to} onChange={e=>setTo(e.target.value)} />
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded text-sm whitespace-nowrap" onClick={fetchOrders}>Refresh</button>
-          <button className="px-3 py-2 sm:px-4 bg-gray-700 text-white rounded text-sm whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
-        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>
+          Refresh
+        </button>
+        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>
+          Export CSV
+        </button>
       </div>
 
       <div className="divide-y border rounded">
         {orders.length === 0 && <div className="p-4 text-gray-600">No Delivered orders.</div>}
         {orders.map(o => (
-          <div key={o.order_id} className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-3">
-              <div className="font-medium text-sm sm:text-base">#{o.order_id}</div>
+          <div key={o.order_id} className="p-2 sm:p-3 md:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 sm:gap-2 md:gap-3 mb-2 sm:mb-3">
+              <div className="font-medium text-xs sm:text-sm md:text-base">#{o.order_id}</div>
               <div className="text-xs sm:text-sm text-gray-600">{new Date(o.posted_at || o.created_at).toLocaleString()}</div>
               <div className="text-xs sm:text-sm break-words">{o.member_id} — {o.member_name_snapshot}</div>
               <div className="text-xs sm:text-sm">Member: {o.member_branch?.name || '-'}</div>
@@ -101,24 +114,24 @@ function DeliveredPageContent() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm border mt-2 min-w-[500px]">
+              <table className="w-full text-xs border mt-2">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left p-1 sm:p-2 border">SKU</th>
-                    <th className="text-left p-1 sm:p-2 border">Item</th>
-                    <th className="text-right p-1 sm:p-2 border">Qty</th>
-                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
-                    <th className="text-right p-1 sm:p-2 border">Amount</th>
+                    <th className="text-left p-1 sm:p-2 border text-xs">SKU</th>
+                    <th className="text-left p-1 sm:p-2 border text-xs">Item</th>
+                    <th className="text-right p-1 sm:p-2 border text-xs">Qty</th>
+                    <th className="text-right p-1 sm:p-2 border text-xs">Unit Price</th>
+                    <th className="text-right p-1 sm:p-2 border text-xs">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(o.order_lines || []).map(l => (
                     <tr key={l.id}>
-                      <td className="p-1 sm:p-2 border">{l.items?.sku}</td>
-                      <td className="p-1 sm:p-2 border">{l.items?.name}</td>
-                      <td className="p-1 sm:p-2 border text-right">{l.qty}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.unit_price).toLocaleString()}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.amount).toLocaleString()}</td>
+                      <td className="p-1 sm:p-2 border text-xs">{l.items?.sku}</td>
+                      <td className="p-1 sm:p-2 border text-xs">{l.items?.name}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">{l.qty}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.unit_price).toLocaleString()}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.amount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
