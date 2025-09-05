@@ -228,41 +228,47 @@ function RepPendingPageContent() {
       <div className="p-3 sm:p-6 max-w-6xl mx-auto">
 
         
-        <h1 className="text-xl sm:text-2xl font-semibold mb-4">Rep — Pending Orders</h1>
+        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-4">Rep — Pending Orders</h1>
         
         {/* Branch Code Display */}
         <div className="mb-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
             <div className="flex items-center">
-              <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <div>
-                <div className="text-sm text-blue-600 font-medium">Current Branch</div>
-                <div className="text-lg font-bold text-blue-800">{user?.branchCode || 'Unknown'}</div>
+                <div className="text-xs sm:text-sm text-blue-600 font-medium">Current Branch</div>
+                <div className="text-sm sm:text-lg font-bold text-blue-800">{user?.branchCode || 'Unknown'}</div>
               </div>
             </div>
-            <button 
-              onClick={changeBranch}
-              className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-sm sm:text-base whitespace-nowrap"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              Change Branch
-            </button>
+            <div className="flex justify-start sm:justify-end">
+              <button 
+                onClick={changeBranch}
+                className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-xs sm:text-sm whitespace-nowrap"
+              >
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Change Branch
+              </button>
+            </div>
           </div>
         </div>
 
-      <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-stretch sm:items-end mb-4">
-        <select className="border rounded px-3 py-2 text-sm sm:text-base w-full sm:w-auto" value={dept} onChange={e=>setDept(e.target.value)}>
-          <option value="">All departments</option>
-          {departments.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <button className="px-3 py-2 bg-gray-700 text-white rounded text-sm sm:text-base whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
-        <button className="px-3 py-2 bg-emerald-600 text-white rounded text-sm sm:text-base whitespace-nowrap" onClick={exportPDF}>Export PDF</button>
-        <button className="px-3 py-2 bg-blue-600 text-white rounded text-sm sm:text-base whitespace-nowrap" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
+      <div className="mb-4">
+        <div className="mb-3">
+          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
+            <option value="">All departments</option>
+            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
+          <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportPDF}>Export PDF</button>
+          <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
+        </div>
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='error'?'text-red-700':'text-green-700'}`}>{msg.text}</div>}
@@ -272,20 +278,20 @@ function RepPendingPageContent() {
         {orders.map(o => (
           <div key={o.order_id} className="p-3 sm:p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3">
-              <div className="font-medium text-sm sm:text-base">#{o.order_id}</div>
-              <div className="text-sm sm:text-base">{new Date(o.created_at).toLocaleString()}</div>
-              <div className="text-sm sm:text-base">{o.member_id} — {o.member_name_snapshot}</div>
-              <div className="text-sm sm:text-base">Member: {o.member_branch?.name || '-'}</div>
-              <div className="text-sm sm:text-base">Delivery: {o.delivery?.name || '-'}</div>
-              <div className="text-sm sm:text-base">{o.departments?.name || '-'}</div>
-              <div className="text-sm sm:text-base">Payment: <b>{o.payment_option}</b></div>
-              <div className="text-sm sm:text-base font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+              <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
+              <div className="text-xs sm:text-sm">{new Date(o.created_at).toLocaleString()}</div>
+              <div className="text-xs sm:text-sm">{o.member_id} — {o.member_name_snapshot}</div>
+              <div className="text-xs sm:text-sm">Member: {o.member_branch?.name || '-'}</div>
+              <div className="text-xs sm:text-sm">Delivery: {o.delivery?.name || '-'}</div>
+              <div className="text-xs sm:text-sm">{o.departments?.name || '-'}</div>
+              <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
+              <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button className="px-3 py-1 border rounded text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button>
-              <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm whitespace-nowrap" onClick={() => cancelOne(o.order_id)}>Cancel</button>
-              <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button>
-              <button className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm whitespace-nowrap" onClick={() => postOne(o.order_id)}>Post</button>
+            <div className="grid grid-cols-4 gap-2">
+              <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button>
+              <button className="px-2 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => cancelOne(o.order_id)}>Cancel</button>
+              <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button>
+              <button className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => postOne(o.order_id)}>Post</button>
             </div>
 
             <div className="overflow-x-auto mt-2">
