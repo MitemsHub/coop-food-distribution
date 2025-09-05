@@ -75,16 +75,16 @@ function ReportsPageContent() {
   const { totals, byBranch, byBranchDept, byCategory, inventory } = data
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Admin — Reports</h1>
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-0">Admin — Reports</h1>
         <div className="flex gap-2">
-          <button className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700" onClick={loadSummary}>Refresh</button>
+          <button className="px-3 py-2 bg-gray-600 text-white text-sm sm:text-base rounded hover:bg-gray-700" onClick={loadSummary}>Refresh</button>
         </div>
       </div>
 
       {/* Totals */}
-      <section className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
+      <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <Card title="Total (Posted)" value={totals?.totalPosted ?? 0} />
         <Card title="Pending" value={totals?.totalPending ?? 0} />
         <Card title="Delivered" value={totals?.totalDelivered ?? 0} />
@@ -93,11 +93,11 @@ function ReportsPageContent() {
       </section>
 
       {/* Branch Pack */}
-      <section className="mb-6">
-        <h2 className="text-xl font-medium mb-2">Branch Pack (Excel)</h2>
-        <div className="flex flex-wrap items-center gap-2">
+      <section className="mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-medium mb-2">Branch Pack (Excel)</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-3">
           <select
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm sm:text-base w-full sm:w-auto"
             value={branchCode}
             onChange={e => setBranchCode(e.target.value)}
           >
@@ -109,13 +109,17 @@ function ReportsPageContent() {
             ))}
           </select>
 
-          <label className="text-sm text-gray-600">From</label>
-          <input type="date" className="border rounded px-2 py-1" value={from} onChange={e => setFrom(e.target.value)} />
-          <label className="text-sm text-gray-600">To</label>
-          <input type="date" className="border rounded px-2 py-1" value={to} onChange={e => setTo(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">From</label>
+            <input type="date" className="border rounded px-2 py-1 text-sm sm:text-base flex-1" value={from} onChange={e => setFrom(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">To</label>
+            <input type="date" className="border rounded px-2 py-1 text-sm sm:text-base flex-1" value={to} onChange={e => setTo(e.target.value)} />
+          </div>
 
           <button
-            className="px-3 py-2 bg-emerald-600 text-white rounded"
+            className="px-3 py-2 bg-emerald-600 text-white text-sm sm:text-base rounded w-full sm:w-auto"
             onClick={async () => {
               const qs = new URLSearchParams()
               if (branchCode) qs.set('branch', branchCode)
@@ -175,19 +179,19 @@ function ReportsPageContent() {
 /* Helpers */
 function Card({ title, value }) {
   return (
-    <div className="border rounded p-3 bg-white shadow-sm">
-      <div className="text-xs text-gray-500">{title}</div>
-      <div className="text-xl font-semibold">{Number(value).toLocaleString()}</div>
+    <div className="border rounded p-2 sm:p-3 bg-white shadow-sm">
+      <div className="text-xs text-gray-500 truncate">{title}</div>
+      <div className="text-lg sm:text-xl font-semibold">{Number(value).toLocaleString()}</div>
     </div>
   )
 }
 
 function Section({ title, onExport, children }) {
   return (
-    <section className="mb-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-medium">{title}</h2>
-        <button className="px-3 py-1 bg-gray-700 text-white rounded" onClick={onExport}>Export CSV</button>
+    <section className="mb-4 sm:mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+        <h2 className="text-lg sm:text-xl font-medium">{title}</h2>
+        <button className="px-3 py-1 bg-gray-700 text-white text-sm sm:text-base rounded w-full sm:w-auto" onClick={onExport}>Export CSV</button>
       </div>
       <div className="mt-2">{children}</div>
     </section>
@@ -195,26 +199,28 @@ function Section({ title, onExport, children }) {
 }
 
 function Table({ rows, cols }) {
-  if (!rows?.length) return <div className="p-3 text-gray-600">No data</div>
+  if (!rows?.length) return <div className="p-3 text-gray-600 text-sm">No data</div>
   return (
-    <table className="w-full text-sm border">
-      <thead className="bg-gray-50">
-        <tr>
-          {cols.map(([key, label]) => (
-            <th key={key} className="p-2 border text-left">{label}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i}>
-            {cols.map(([key]) => (
-              <td key={key} className="p-2 border">{String(r[key] ?? '')}</td>
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs sm:text-sm border min-w-full">
+        <thead className="bg-gray-50">
+          <tr>
+            {cols.map(([key, label]) => (
+              <th key={key} className="p-1 sm:p-2 border text-left text-xs sm:text-sm font-medium">{label}</th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+             <tr key={i} className="hover:bg-gray-50">
+               {cols.map(([key]) => (
+                 <td key={key} className="p-1 sm:p-2 border text-xs sm:text-sm">{String(r[key] ?? '')}</td>
+               ))}
+             </tr>
+           ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

@@ -77,38 +77,72 @@ function ImportPageContent() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin — Import Data</h1>
+    <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Import Data</h1>
+      </div>
 
-      <div className="mb-6 border rounded p-4">
-        <h2 className="text-lg font-medium mb-2">Members.xlsx</h2>
-        <p className="text-sm text-gray-600 mb-3">
+      <div className="mb-4 sm:mb-6 border rounded-lg p-3 sm:p-4">
+        <h2 className="text-sm sm:text-base md:text-lg font-medium mb-2 sm:mb-3">Members.xlsx</h2>
+        <p className="text-xs sm:text-sm text-gray-600 mb-3">
           Expected columns: member_id, full_name, branch_code, department_name, category, grade, savings, loans, global_limit, phone, email
         </p>
-        <div className="flex items-center gap-2 mb-2">
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setMembersFile(e.target.files?.[0] || null)} />
-          <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => upload('members')} disabled={membersLoading || pricesLoading}>
-            {membersLoading ? 'Uploading…' : 'Upload Members'}
-          </button>
-          <button className="px-3 py-2 border rounded" onClick={downloadMembersTemplate}>Download Template</button>
+        <div className="space-y-2 sm:space-y-3">
+          <input 
+            type="file" 
+            accept=".xlsx,.xls,.csv" 
+            onChange={e => setMembersFile(e.target.files?.[0] || null)} 
+            className="w-full text-xs sm:text-sm p-2 border rounded"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button 
+              className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors" 
+              onClick={() => upload('members')} 
+              disabled={membersLoading || pricesLoading}
+            >
+              {membersLoading ? 'Uploading…' : 'Upload Members'}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded text-xs sm:text-sm font-medium hover:bg-gray-50 transition-colors" 
+              onClick={downloadMembersTemplate}
+            >
+              Download Template
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mb-6 border rounded p-4">
-        <h2 className="text-lg font-medium mb-2">Items_Prices_Stock.xlsx</h2>
-        <p className="text-sm text-gray-600 mb-3">
+      <div className="mb-4 sm:mb-6 border rounded-lg p-3 sm:p-4">
+        <h2 className="text-sm sm:text-base md:text-lg font-medium mb-2 sm:mb-3">Items_Prices_Stock.xlsx</h2>
+        <p className="text-xs sm:text-sm text-gray-600 mb-3">
           Expected columns: sku, item_name, unit, category, branch_code, price, initial_stock
         </p>
-        <div className="flex items-center gap-2 mb-2">
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setPricesFile(e.target.files?.[0] || null)} />
-          <button className="px-3 py-2 bg-emerald-600 text-white rounded" onClick={() => upload('prices')} disabled={membersLoading || pricesLoading}>
-            {pricesLoading ? 'Uploading…' : 'Upload Items/Prices/Stock'}
-          </button>
-          <button className="px-3 py-2 border rounded" onClick={downloadPricesTemplate}>Download Template</button>
+        <div className="space-y-2 sm:space-y-3">
+          <input 
+            type="file" 
+            accept=".xlsx,.xls,.csv" 
+            onChange={e => setPricesFile(e.target.files?.[0] || null)} 
+            className="w-full text-xs sm:text-sm p-2 border rounded"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button 
+              className="px-3 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm font-medium hover:bg-emerald-700 transition-colors" 
+              onClick={() => upload('prices')} 
+              disabled={membersLoading || pricesLoading}
+            >
+              {pricesLoading ? 'Uploading…' : 'Upload Items/Prices/Stock'}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded text-xs sm:text-sm font-medium hover:bg-gray-50 transition-colors" 
+              onClick={downloadPricesTemplate}
+            >
+              Download Template
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="border rounded p-3 whitespace-pre-wrap bg-gray-50 text-sm">
+      <div className="border rounded-lg p-3 sm:p-4 whitespace-pre-wrap bg-gray-50 text-xs sm:text-sm overflow-x-auto">
         {log || 'Logs will appear here.'}
       </div>
     </div>
