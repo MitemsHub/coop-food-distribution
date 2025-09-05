@@ -50,8 +50,25 @@ function PendingAdminPageContent() {
       return next
     })
   }
-  const selectAll = () => setSelected(new Set(orders.map(o => o.order_id)))
-  const clearSelected = () => setSelected(new Set())
+  const selectAll = () => {
+    if (selected.size === orders.length) {
+      // If all are selected, deselect all
+      setSelected(new Set())
+    } else {
+      // Otherwise, select all
+      setSelected(new Set(orders.map(o => o.order_id)))
+    }
+  }
+
+  const handleSearch = () => {
+    fetchOrders()
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
 
   // Actions with prompts
   const doPost = async (order_id) => {
@@ -66,7 +83,7 @@ function PendingAdminPageContent() {
       const json = await safeJson(res, '/api/admin/orders/post')
       if (!json.ok) throw new Error(json.error || 'Post failed')
       setMsg({ type:'success', text:`Order ${order_id} posted` })
-      fetchOrders(); clearSelected()
+      fetchOrders(); setSelected(new Set())
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -99,7 +116,7 @@ function PendingAdminPageContent() {
       }
 
       setMsg({ type:'success', text:`Posted ${json.posted?.length || 0} order(s)` })
-      fetchOrders(); clearSelected()
+      fetchOrders(); setSelected(new Set())
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -117,7 +134,7 @@ function PendingAdminPageContent() {
       const json = await safeJson(res, '/api/admin/orders/cancel')
       if (!json.ok) throw new Error(json.error || 'Cancel failed')
       setMsg({ type:'success', text:`Order ${order_id} cancelled` })
-      fetchOrders(); clearSelected()
+      fetchOrders(); setSelected(new Set())
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -134,7 +151,7 @@ function PendingAdminPageContent() {
       const json = await safeJson(res, '/api/admin/orders/delete')
       if (!json.ok) throw new Error(json.error || 'Delete failed')
       setMsg({ type:'success', text:`Order ${order_id} deleted` })
-      fetchOrders(); clearSelected()
+      fetchOrders(); setSelected(new Set())
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -183,26 +200,31 @@ function PendingAdminPageContent() {
     <ProtectedRoute allowedRoles={['admin']}>
       <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-center sm:text-left break-words">Admin — Pending Orders</h1>
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Pending Orders</h1>
 
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-end mb-4">
-        <input className="border rounded px-3 py-2 text-sm w-full sm:w-auto" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />
-        <select className="border rounded px-3 py-2 text-sm w-full sm:w-auto" value={payment} onChange={e=>setPayment(e.target.value)}>
+      <div className="flex flex-col gap-3 mb-4">
+        <div className="flex gap-2">
+          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} onKeyPress={handleKeyPress} />
+          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={handleSearch}>Search</button>
+        </div>
+        <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={e=>setPayment(e.target.value)}>
           <option value="">All payments</option>
           <option value="Savings">Savings</option>
           <option value="Loan">Loan</option>
           <option value="Cash">Cash</option>
         </select>
-        <input className="border rounded px-3 py-2 text-sm w-full sm:w-auto" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} />
-        <button className="px-4 py-2 bg-blue-600 text-white rounded text-sm w-full sm:w-auto" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <div className="flex gap-2">
+          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} onKeyPress={handleKeyPress} />
+          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={handleSearch}>Filter</button>
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 mb-3">
-        <button className="px-3 py-2 border rounded text-sm" onClick={selectAll}>Select All</button>
-        <button className="px-3 py-2 border rounded text-sm" onClick={clearSelected}>Clear</button>
-        <button className="px-3 py-2 bg-green-600 text-white rounded disabled:opacity-50 text-sm" disabled={selected.size===0} onClick={postSelected}>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>{selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}</button>
+        <button className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50 text-xs sm:text-sm hover:bg-green-700 transition-colors shadow-sm" disabled={selected.size===0} onClick={postSelected}>
           Post Selected ({selected.size})
         </button>
       </div>
@@ -228,10 +250,10 @@ function PendingAdminPageContent() {
                 <div><span className="font-medium">Total:</span> ₦{Number(o.total_amount || 0).toLocaleString()}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => startEdit(o)}>Edit</button>
-                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => doCancel(o.order_id)}>Cancel</button>
-                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded text-xs sm:text-sm" onClick={() => doPost(o.order_id)}>Post</button>
-                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => doDelete(o.order_id)}>Delete</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700" onClick={() => startEdit(o)}>Edit</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-yellow-600 text-white rounded text-xs sm:text-sm hover:bg-yellow-700" onClick={() => doCancel(o.order_id)}>Cancel</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded text-xs sm:text-sm hover:bg-green-700" onClick={() => doPost(o.order_id)}>Post</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-red-600 text-white rounded text-xs sm:text-sm hover:bg-red-700" onClick={() => doDelete(o.order_id)}>Delete</button>
               </div>
             </div>
 
