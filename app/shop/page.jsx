@@ -141,7 +141,8 @@ function ShopPageContent() {
               name, 
               sku, 
               unit, 
-              category
+              category,
+              image_url
             )
           `)
           .eq('branch_id', br.id)
@@ -163,6 +164,7 @@ function ShopPageContent() {
           category: row.items.category,
           price: Number(row.price),
           initial_stock: Math.max(0, row.initial_stock || 0),
+          image_url: row.items.image_url,
         }))
 
         setItems(itemsWithStock)
@@ -554,7 +556,18 @@ function ShopPageContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
                 {items.map(it => (
                   <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-xl md:rounded-2xl p-3 md:p-6 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
+                    {/* Item Image */}
                     <div className="mb-3 md:mb-4">
+                      <div className="w-full h-32 md:h-40 bg-gray-100 rounded-lg overflow-hidden mb-3 flex items-center justify-center">
+                        <img
+                          src={it.image_url ? `${it.image_url}?t=${Date.now()}` : '/images/items/placeholder.svg'}
+                          alt={it.name}
+                          className="max-w-full max-h-full object-contain"
+                          onError={(e) => {
+                            e.target.src = '/images/items/placeholder.svg'
+                          }}
+                        />
+                      </div>
                       <div className="font-bold text-sm md:text-lg text-gray-900 mb-1 leading-tight break-words">{it.name}</div>
                       <div className="text-xs md:text-sm text-gray-500 mb-2 break-words">{it.unit} • {it.category}</div>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">

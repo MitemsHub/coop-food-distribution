@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS items (
     unit VARCHAR(50),
     category VARCHAR(100),
     qty_on_hand INTEGER DEFAULT 0,
+    image_url VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -144,3 +145,4 @@ CREATE INDEX IF NOT EXISTS idx_order_lines_item_id ON order_lines(item_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_item_id ON inventory_movements(item_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_branch_id ON inventory_movements(branch_id);
 CREATE INDEX IF NOT EXISTS idx_branch_item_prices_branch_item ON branch_item_prices(branch_id, item_id);
+CREATE INDEX IF NOT EXISTS idx_items_image_url ON items(image_url) WHERE image_url IS NOT NULL;

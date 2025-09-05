@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import ItemManagement from '../../components/ItemManagement'
+import DatabaseMigration from '../../components/DatabaseMigration'
 
 function DataManagementPageContent() {
   const [loading, setLoading] = useState(false)
@@ -172,11 +174,11 @@ function DataManagementPageContent() {
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-0">Admin — Data Management</h1>
+      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+        <h1 className="text-lg sm:text-2xl font-semibold col-span-1">Admin — Data Management</h1>
         <button
           onClick={() => router.back()}
-          className="px-4 py-2 text-gray-600 hover:text-gray-800"
+          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg border border-gray-300 transition-colors duration-200 justify-self-end col-span-1 text-sm sm:text-base"
         >
           ← Back
         </button>
@@ -193,6 +195,18 @@ function DataManagementPageContent() {
       )}
 
       <div className="grid gap-4 sm:gap-6">
+        {/* Database Migration */}
+        <DatabaseMigration />
+
+        {/* Item Image Management */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6">
+          <h2 className="text-base sm:text-lg font-medium text-green-900 mb-2 sm:mb-3">🖼️ Item Image Management</h2>
+          <p className="text-sm sm:text-base text-green-700 mb-3 sm:mb-4">
+            Upload and manage images for inventory items to improve the shopping experience.
+          </p>
+          <ItemManagement />
+        </div>
+
         {/* Backup Data */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6">
           <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>

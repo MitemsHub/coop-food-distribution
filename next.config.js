@@ -9,8 +9,9 @@ const nextConfig = {
   // Optimize images
   images: {
     domains: [],
-    dangerouslyAllowSVG: false,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;"
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    unoptimized: true
   },
   
   // Security headers
@@ -99,10 +100,12 @@ const nextConfig = {
     return config
   },
   
+  // External packages for server components
+  serverExternalPackages: ['@supabase/supabase-js'],
+  
   // Experimental features for better security
   experimental: {
-    // Enable server components for better security
-    serverComponentsExternalPackages: ['@supabase/supabase-js'],
+    // Other experimental features can go here
   },
   
   // Redirects for security
