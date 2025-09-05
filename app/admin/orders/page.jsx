@@ -109,15 +109,15 @@ function AdminOrdersPageContent() {
 
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold mb-2">Admin — All Member Orders</h1>
-            <p className="text-gray-600">View and manage all member orders across the system</p>
+      <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+          <div className="text-center md:text-left">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-2 break-words">Admin — All Member Orders</h1>
+            <p className="text-sm sm:text-base text-gray-600">View and manage all member orders across the system</p>
           </div>
-          <div className="flex gap-2">
-            <a href="/admin/pending" className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">Pending</a>
-            <a href="/admin/posted" className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Posted</a>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <a href="/admin/pending" className="px-3 py-2 sm:px-4 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-center text-sm sm:text-base whitespace-nowrap">Pending</a>
+            <a href="/admin/posted" className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded hover:bg-green-700 text-center text-sm sm:text-base whitespace-nowrap">Posted</a>
           </div>
         </div>
 
@@ -131,18 +131,18 @@ function AdminOrdersPageContent() {
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Filters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6 mb-6">
+          <h2 className="text-base sm:text-lg font-semibold mb-4">Filters</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Member</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Member</label>
               <select
                 value={selectedMember}
                 onChange={(e) => {
                   setSelectedMember(e.target.value)
                   setTimeout(handleFilterChange, 100)
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               >
                 <option value="">All Members</option>
                 {members.map(member => (
@@ -154,7 +154,7 @@ function AdminOrdersPageContent() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
                 value={statusFilter}
                 onChange={(e) => {

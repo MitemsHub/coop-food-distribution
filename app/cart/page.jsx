@@ -330,53 +330,53 @@ function CartPageContent() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         {/* Header */}
         <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-              <div className="mb-4 md:mb-0">
-                <h1 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2">
-                  {isAdmin ? 'Admin - Member Cart' : 'Shopping Cart'}
-                </h1>
-                <p className="text-gray-600 text-sm">
-                  {isAdmin ? 'Managing cart for member' : 'Review and edit your items before checkout'}
-                </p>
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
+              <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-center md:justify-between mb-4 sm:mb-6">
+                <div className="text-center md:text-left">
+                  <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 mb-2 break-words">
+                    {isAdmin ? 'Admin - Member Cart' : 'Shopping Cart'}
+                  </h1>
+                  <p className="text-gray-600 text-xs sm:text-sm">
+                    {isAdmin ? 'Managing cart for member' : 'Review and edit your items before checkout'}
+                  </p>
+                </div>
+                <div className="flex-shrink-0 w-full md:w-auto">
+                  {isAdmin ? (
+                    <button
+                      onClick={() => router.push('/admin/cart')}
+                      className="w-full md:w-auto px-3 py-2 sm:px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                      Back to Admin
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                      className="w-full md:w-auto px-2 py-1.5 sm:px-3 sm:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                      Back to Shop
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex-shrink-0">
-                {isAdmin ? (
-                  <button
-                    onClick={() => router.push('/admin/cart')}
-                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center text-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    Back to Admin
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center text-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    Back to Shop
-                  </button>
-                )}
-              </div>
-            </div>
             
             {/* Delivery Details & Payment Method - Moved up */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pt-4 sm:pt-6 border-t border-gray-100">
               {/* Delivery Details */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Delivery Details</h3>
-                <div className="space-y-4">
+                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-4">Delivery Details</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
+                    <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
                     <select
                       value={deliveryBranch}
                       onChange={(e) => setDeliveryBranch(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option key="select-branch" value="">Select branch</option>
                       {branches.map((branch, index) => (
@@ -388,11 +388,11 @@ function CartPageContent() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                    <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Department</label>
                     <select
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option key="select-department" value="">Select department</option>
                       {departments.map((dept, index) => (
@@ -405,11 +405,11 @@ function CartPageContent() {
 
               {/* Payment Method */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Method</h3>
+                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-4">Payment Method</h3>
                 <select
                   value={paymentOption}
                   onChange={(e) => setPaymentOption(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option key="payment-savings" value="Savings" disabled={savingsEligible <= 0}>
                     Savings {savingsEligible <= 0 ? '(Insufficient Balance)' : ''}
@@ -438,12 +438,12 @@ function CartPageContent() {
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Cart Items */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">Cart Items</h2>
+                <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">Cart Items</h2>
                 <button
                   onClick={addNewItem}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm md:text-sm"
                 >
                   Add Item
                 </button>
@@ -463,16 +463,16 @@ function CartPageContent() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {cartItems.map((item, index) => (
-                    <div key={item.sku} className="border rounded-lg p-4 bg-gray-50 hover:bg-white transition-colors">
-                      <div className="space-y-4">
+                    <div key={item.sku} className="border rounded-lg p-3 sm:p-4 bg-gray-50 hover:bg-white transition-colors">
+                      <div className="space-y-3 sm:space-y-4">
                         {/* Item Selection */}
                         <div>
                           <select
                             value={item.sku}
                             onChange={(e) => updateItemSku(item.sku, e.target.value)}
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           >
                             {items.map(availableItem => (
                               <option key={availableItem.sku} value={availableItem.sku}>
@@ -480,23 +480,23 @@ function CartPageContent() {
                               </option>
                             ))}
                           </select>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs sm:text-xs md:text-xs text-gray-500 mt-1">
                             {item.unit} • {item.category}
                           </div>
                         </div>
                         
                         {/* Price */}
-                        <div className="text-center bg-blue-50 rounded-lg p-2">
-                          <div className="text-lg font-bold text-blue-800">₦{item.price.toLocaleString()}</div>
-                          <div className="text-xs text-blue-600">per {item.unit}</div>
+                        <div className="text-center bg-blue-50 rounded-lg p-2 sm:p-3">
+                          <div className="text-sm sm:text-base md:text-lg font-bold text-blue-800">₦{item.price.toLocaleString()}</div>
+                          <div className="text-xs sm:text-xs md:text-xs text-blue-600">per {item.unit}</div>
                         </div>
                         
-                        {/* Quantity Controls - Professional Design */}
+                        {/* Quantity Controls - Mobile Optimized */}
                         <div className="flex items-center justify-center">
                           <div className="flex items-center bg-white border-2 border-gray-200 rounded-lg overflow-hidden">
                             <button
                               onClick={() => updateQuantity(item.sku, item.qty - 1)}
-                              className="px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-700 hover:text-red-600 font-semibold transition-colors border-r border-gray-200 min-w-[40px]"
+                              className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 hover:bg-red-50 text-gray-700 hover:text-red-600 font-semibold transition-colors border-r border-gray-200 min-w-[36px] sm:min-w-[40px] text-xs sm:text-sm md:text-sm"
                             >
                               −
                             </button>
@@ -505,11 +505,11 @@ function CartPageContent() {
                               min={0}
                               value={item.qty}
                               onChange={(e) => updateQuantity(item.sku, e.target.value)}
-                              className="w-16 py-2 text-center font-bold text-gray-800 border-0 focus:ring-0 focus:outline-none"
+                              className="w-12 sm:w-16 py-2 sm:py-3 text-center font-bold text-gray-800 border-0 focus:ring-0 focus:outline-none text-xs sm:text-sm md:text-sm"
                             />
                             <button
                               onClick={() => updateQuantity(item.sku, item.qty + 1)}
-                              className="px-4 py-2 bg-gray-50 hover:bg-green-50 text-gray-700 hover:text-green-600 font-semibold transition-colors border-l border-gray-200 min-w-[40px]"
+                              className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 hover:bg-green-50 text-gray-700 hover:text-green-600 font-semibold transition-colors border-l border-gray-200 min-w-[36px] sm:min-w-[40px] text-xs sm:text-sm md:text-sm"
                             >
                               +
                             </button>
@@ -517,17 +517,17 @@ function CartPageContent() {
                         </div>
                         
                         {/* Total Price */}
-                        <div className="text-center bg-green-50 rounded-lg p-2">
-                          <div className="text-lg font-bold text-green-800">
+                        <div className="text-center bg-green-50 rounded-lg p-2 sm:p-3">
+                          <div className="text-sm sm:text-base md:text-lg font-bold text-green-800">
                             ₦{(item.price * item.qty).toLocaleString()}
                           </div>
-                          <div className="text-xs text-green-600">Total</div>
+                          <div className="text-xs sm:text-xs md:text-xs text-green-600">Total</div>
                         </div>
                         
                         {/* Remove Button */}
                         <button
                           onClick={() => removeItem(item.sku)}
-                          className="w-full px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium transition-colors flex items-center justify-center"
+                          className="w-full px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs sm:text-sm md:text-sm font-medium transition-colors flex items-center justify-center"
                         >
                           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -546,18 +546,21 @@ function CartPageContent() {
           <div className="space-y-6">
             {/* Order Summary */}
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Order Summary</h3>
+              <h3 className="text-sm sm:text-base md:text-base font-semibold text-gray-800 mb-4">Order Summary</h3>
               
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Items:</span>
-                  <span>{cartItems.length}</span>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-4">
+                <div className="text-center bg-blue-50 rounded-lg p-2 sm:p-3">
+                  <div className="text-xs sm:text-sm md:text-sm font-bold text-blue-800">{cartItems.length}</div>
+                  <div className="text-xs text-blue-600">Items in Cart</div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Total:</span>
-                  <span className="font-semibold">₦{cartTotal.toLocaleString()}</span>
+                <div className="text-center bg-green-50 rounded-lg p-2 sm:p-3">
+                  <div className="text-xs sm:text-sm md:text-sm font-bold text-green-800">₦{cartTotal.toLocaleString()}</div>
+                  <div className="text-xs text-green-600">Cart Total</div>
                 </div>
-
+                <div className="text-center bg-purple-50 rounded-lg p-2 sm:p-3">
+                  <div className="text-xs sm:text-sm md:text-sm font-bold text-purple-800">₦{currentLimit === Number.POSITIVE_INFINITY ? '∞' : currentLimit.toLocaleString()}</div>
+                  <div className="text-xs text-purple-600">Limit ({paymentOption})</div>
+                </div>
               </div>
               
               {overLimit && (
@@ -579,7 +582,7 @@ function CartPageContent() {
               <button
                 onClick={submitOrder}
                 disabled={!canSubmit || submitting}
-                className={`w-full mt-6 py-3 px-4 rounded-lg font-semibold transition-all duration-200 ${
+                className={`w-full mt-6 py-3 px-4 rounded-lg font-semibold transition-all duration-200 text-sm sm:text-base ${
                   canSubmit && !submitting
                     ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-md hover:shadow-lg'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'

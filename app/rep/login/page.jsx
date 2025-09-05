@@ -38,21 +38,21 @@ export default function RepLoginPage() {
   }
 
   return (
-    <div className="p-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">Branch Rep Portal</h1>
-      <p className="text-sm text-gray-600 mb-4">
+    <div className="p-4 sm:p-6 max-w-md mx-auto">
+      <h1 className="text-xl sm:text-2xl font-semibold mb-2">Branch Rep Portal</h1>
+      <p className="text-xs sm:text-sm text-gray-600 mb-4">
         Enter your passcode (Delivery Branch Code, e.g., DUTSE).
       </p>
       <input
-        className="border rounded px-3 py-2 w-full mb-2"
+        className="border rounded px-3 py-2 w-full mb-3 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         value={code}
         onChange={e=>setCode(e.target.value)}
         placeholder="Passcode (e.g. DUTSE)"
       />
-      <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={submit} disabled={loading || !code.trim()}>
+      <button className="px-4 py-2 bg-blue-600 text-white rounded w-full sm:w-auto hover:bg-blue-700 transition-colors duration-200 text-sm sm:text-base font-medium" onClick={submit} disabled={loading || !code.trim()}>
         {loading ? 'Checking…' : 'Continue'}
       </button>
-      {msg && <div className="mt-3 text-sm text-red-700">{msg}</div>}
+      {msg && <div className="mt-3 text-xs sm:text-sm text-red-700">{msg}</div>}
     </div>
   )
 }

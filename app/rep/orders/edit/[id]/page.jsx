@@ -132,12 +132,12 @@ function RepEditOrderPageContent() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Edit Order #{order.order_id}</h1>
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6">
+        <h1 className="text-xl sm:text-2xl font-semibold">Edit Order #{order.order_id}</h1>
         <button 
           onClick={() => router.push('/rep/pending')}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm sm:text-base whitespace-nowrap"
         >
           Back to Pending
         </button>
@@ -150,39 +150,39 @@ function RepEditOrderPageContent() {
       )}
 
       {/* Order Details Card */}
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="bg-white rounded-xl shadow-lg p-3 sm:p-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Member</label>
-            <div className="p-3 bg-gray-50 rounded-lg font-medium">{order.member_name_snapshot}</div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Member</label>
+            <div className="p-2 sm:p-3 bg-gray-50 rounded-lg font-medium text-sm sm:text-base">{order.member_name_snapshot}</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Option</label>
-            <div className="p-3 bg-gray-50 rounded-lg">{order.payment_option}</div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Payment Option</label>
+            <div className="p-2 sm:p-3 bg-gray-50 rounded-lg text-sm sm:text-base">{order.payment_option}</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Order Status</label>
-            <div className="p-3 bg-blue-50 text-blue-800 rounded-lg font-medium">{order.status || 'Pending'}</div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Order Status</label>
+            <div className="p-2 sm:p-3 bg-blue-50 text-blue-800 rounded-lg font-medium text-sm sm:text-base">{order.status || 'Pending'}</div>
           </div>
         </div>
       </div>
 
       {/* Order Items Table */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="p-6 border-b bg-gray-50">
-          <h3 className="text-lg font-semibold text-gray-900">Order Items</h3>
-          <p className="text-sm text-gray-600 mt-1">Manage items in this order</p>
+        <div className="p-3 sm:p-6 border-b bg-gray-50">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Order Items</h3>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">Manage items in this order</p>
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-xs sm:text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="text-left p-4 font-medium text-gray-700">Item</th>
-                <th className="text-center p-4 font-medium text-gray-700">Quantity</th>
-                <th className="text-right p-4 font-medium text-gray-700">Unit Price</th>
-                <th className="text-right p-4 font-medium text-gray-700">Amount</th>
-                <th className="text-center p-4 font-medium text-gray-700">Action</th>
+                <th className="text-left p-2 sm:p-4 font-medium text-gray-700">Item</th>
+                <th className="text-center p-2 sm:p-4 font-medium text-gray-700">Quantity</th>
+                <th className="text-right p-2 sm:p-4 font-medium text-gray-700">Unit Price</th>
+                <th className="text-right p-2 sm:p-4 font-medium text-gray-700">Amount</th>
+                <th className="text-center p-2 sm:p-4 font-medium text-gray-700">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -192,7 +192,7 @@ function RepEditOrderPageContent() {
                 const uniqueKey = line.id ? `line-${line.id}` : `new-${index}-${line.item_id || 'empty'}`
                 return (
                   <tr key={uniqueKey} className="hover:bg-gray-50">
-                    <td className="p-4">
+                    <td className="p-2 sm:p-4">
                       <select
                         value={line.item_id || ''}
                         onChange={(e) => {
@@ -202,7 +202,7 @@ function RepEditOrderPageContent() {
                             updateOrderLine(index, 'unit_price', item.price)
                           }
                         }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="">Select item...</option>
                         {items.map(item => (
@@ -218,35 +218,35 @@ function RepEditOrderPageContent() {
                       )}
                     </td>
                     
-                    <td className="p-4 text-center">
+                    <td className="p-2 sm:p-4 text-center">
                       <input
                         type="number"
                         value={line.qty || ''}
                         onChange={(e) => updateOrderLine(index, 'qty', Number(e.target.value))}
-                        className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-16 sm:w-20 border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-2 text-center text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="1"
                       />
                     </td>
                     
-                    <td className="p-4 text-right">
+                    <td className="p-2 sm:p-4 text-right">
                       <input
                         type="number"
                         value={line.unit_price || ''}
                         onChange={(e) => updateOrderLine(index, 'unit_price', Number(e.target.value))}
-                        className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-20 sm:w-28 border border-gray-300 rounded-lg px-2 sm:px-3 py-1 sm:py-2 text-right text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
                         step="0.01"
                       />
                     </td>
                     
-                    <td className="p-4 text-right font-semibold text-gray-900">
+                    <td className="p-2 sm:p-4 text-right font-semibold text-gray-900 text-xs sm:text-sm">
                       ₦{Number(line.amount || 0).toLocaleString()}
                     </td>
                     
-                    <td className="p-4 text-center">
+                    <td className="p-2 sm:p-4 text-center">
                       <button
                         onClick={() => removeOrderLine(index)}
-                        className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 text-sm font-medium"
+                        className="px-2 sm:px-3 py-1 sm:py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 text-xs sm:text-sm font-medium whitespace-nowrap"
                       >
                         Remove
                       </button>
@@ -260,21 +260,21 @@ function RepEditOrderPageContent() {
 
         
         {/* Add Item and Total Section */}
-        <div className="p-6 border-t bg-gray-50">
-          <div className="flex justify-between items-center">
+        <div className="p-3 sm:p-6 border-t bg-gray-50">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
             <button
               onClick={addOrderLine}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium flex items-center gap-2"
+              className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium flex items-center gap-2 text-sm sm:text-base"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
               Add Item
             </button>
             
-            <div className="text-right">
-              <div className="text-sm text-gray-600">Order Total</div>
-              <div className="text-2xl font-bold text-gray-900">
+            <div className="text-center sm:text-right">
+              <div className="text-xs sm:text-sm text-gray-600">Order Total</div>
+              <div className="text-xl sm:text-2xl font-bold text-gray-900">
                 ₦{orderLines.reduce((sum, line) => sum + (line.amount || 0), 0).toLocaleString()}
               </div>
             </div>
@@ -283,21 +283,21 @@ function RepEditOrderPageContent() {
       </div>
 
       {/* Action Buttons */}
-      <div className="mt-6 flex gap-4 justify-end">
+      <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-end">
         <button
           onClick={() => router.push('/rep/pending')}
-          className="px-8 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 font-medium"
+          className="px-6 sm:px-8 py-2 sm:py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 font-medium text-sm sm:text-base"
         >
           Cancel
         </button>
         <button
           onClick={saveOrder}
           disabled={saving || orderLines.length === 0}
-          className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium flex items-center gap-2"
+          className="px-6 sm:px-8 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium flex items-center justify-center gap-2 text-sm sm:text-base"
         >
           {saving ? (
             <>
-              <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
@@ -305,7 +305,7 @@ function RepEditOrderPageContent() {
             </>
           ) : (
             <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               Save Changes

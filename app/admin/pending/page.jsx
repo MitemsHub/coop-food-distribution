@@ -181,28 +181,28 @@ function PendingAdminPageContent() {
 
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Admin — Pending Orders</h1>
+      <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-center sm:text-left break-words">Admin — Pending Orders</h1>
 
       </div>
 
-      <div className="flex flex-wrap gap-2 items-end mb-4">
-        <input className="border rounded px-3 py-2" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />
-        <select className="border rounded px-3 py-2" value={payment} onChange={e=>setPayment(e.target.value)}>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-end mb-4">
+        <input className="border rounded px-3 py-2 text-sm w-full sm:w-auto" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} />
+        <select className="border rounded px-3 py-2 text-sm w-full sm:w-auto" value={payment} onChange={e=>setPayment(e.target.value)}>
           <option value="">All payments</option>
           <option value="Savings">Savings</option>
           <option value="Loan">Loan</option>
           <option value="Cash">Cash</option>
         </select>
-        <input className="border rounded px-3 py-2" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} />
-        <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <input className="border rounded px-3 py-2 text-sm w-full sm:w-auto" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} />
+        <button className="px-4 py-2 bg-blue-600 text-white rounded text-sm w-full sm:w-auto" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 
-      <div className="flex gap-2 mb-3">
-        <button className="px-3 py-1 border rounded" onClick={selectAll}>Select All</button>
-        <button className="px-3 py-1 border rounded" onClick={clearSelected}>Clear</button>
-        <button className="px-3 py-1 bg-green-600 text-white rounded disabled:opacity-50" disabled={selected.size===0} onClick={postSelected}>
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <button className="px-3 py-2 border rounded text-sm" onClick={selectAll}>Select All</button>
+        <button className="px-3 py-2 border rounded text-sm" onClick={clearSelected}>Clear</button>
+        <button className="px-3 py-2 bg-green-600 text-white rounded disabled:opacity-50 text-sm" disabled={selected.size===0} onClick={postSelected}>
           Post Selected ({selected.size})
         </button>
       </div>
@@ -210,92 +210,102 @@ function PendingAdminPageContent() {
       {msg && <div className={`mb-3 text-sm ${msg.type==='success'?'text-green-700':'text-red-700'}`}>{msg.text}</div>}
 
       <div className="border rounded divide-y">
-        {orders.length === 0 && <div className="p-4 text-gray-600">No Pending orders.</div>}
+        {orders.length === 0 && <div className="p-4 text-gray-600 text-center">No Pending orders.</div>}
         {orders.map(o => (
-          <div key={o.order_id} className="p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggleSelect(o.order_id)} />
-              <div className="font-medium">#{o.order_id}</div>
-              <div>{new Date(o.created_at).toLocaleString()}</div>
-              <div className="ml-2">{o.member_id} — {o.member_name_snapshot}</div>
-              <div className="ml-2">Member: {o.member_branch?.name || '-'}</div>
-              <div className="ml-2">Delivery: {o.delivery?.name || '-'}</div>
-              <div className="ml-2">{o.departments?.name || '-'}</div>
-              <div className="ml-2">Payment: <b>{o.payment_option}</b></div>
-              <div className="ml-2">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
-              <div className="ml-auto flex gap-2">
-                <button className="px-3 py-1 border rounded" onClick={() => startEdit(o)}>Edit</button>
-                <button className="px-3 py-1 border rounded" onClick={() => doCancel(o.order_id)}>Cancel</button>
-                <button className="px-3 py-1 bg-green-600 text-white rounded" onClick={() => doPost(o.order_id)}>Post</button>
-                <button className="px-3 py-1 border rounded" onClick={() => doDelete(o.order_id)}>Delete</button>
+          <div key={o.order_id} className="p-3 sm:p-4">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggleSelect(o.order_id)} />
+                <div className="font-medium text-sm sm:text-base">#{o.order_id}</div>
+                <div className="text-xs sm:text-sm text-gray-600">{new Date(o.created_at).toLocaleString()}</div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs sm:text-sm">
+                <div><span className="font-medium">Member:</span> {o.member_id} — {o.member_name_snapshot}</div>
+                <div><span className="font-medium">Branch:</span> {o.member_branch?.name || '-'}</div>
+                <div><span className="font-medium">Delivery:</span> {o.delivery?.name || '-'}</div>
+                <div><span className="font-medium">Department:</span> {o.departments?.name || '-'}</div>
+                <div><span className="font-medium">Payment:</span> <b>{o.payment_option}</b></div>
+                <div><span className="font-medium">Total:</span> ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => startEdit(o)}>Edit</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => doCancel(o.order_id)}>Cancel</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded text-xs sm:text-sm" onClick={() => doPost(o.order_id)}>Post</button>
+                <button className="px-2 py-1 sm:px-3 sm:py-1 border rounded text-xs sm:text-sm" onClick={() => doDelete(o.order_id)}>Delete</button>
               </div>
             </div>
 
-            <table className="w-full text-sm border mt-2">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left p-2 border">SKU</th>
-                  <th className="text-left p-2 border">Item</th>
-                  <th className="text-right p-2 border">Qty</th>
-                  <th className="text-right p-2 border">Unit Price</th>
-                  <th className="text-right p-2 border">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(o.order_lines || []).map(l => (
-                  <tr key={l.id}>
-                    <td className="p-2 border">{l.items?.sku}</td>
-                    <td className="p-2 border">{l.items?.name}</td>
-                    <td className="p-2 border text-right">{l.qty}</td>
-                    <td className="p-2 border text-right">₦{Number(l.unit_price).toLocaleString()}</td>
-                    <td className="p-2 border text-right">₦{Number(l.amount).toLocaleString()}</td>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm border">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left p-1 sm:p-2 border">SKU</th>
+                    <th className="text-left p-1 sm:p-2 border">Item</th>
+                    <th className="text-right p-1 sm:p-2 border">Qty</th>
+                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
+                    <th className="text-right p-1 sm:p-2 border">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(o.order_lines || []).map(l => (
+                    <tr key={l.id}>
+                      <td className="p-1 sm:p-2 border text-xs">{l.items?.sku}</td>
+                      <td className="p-1 sm:p-2 border text-xs break-words">{l.items?.name}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">{l.qty}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.unit_price).toLocaleString()}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.amount).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
       </div>
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-2xl rounded p-4">
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-2xl rounded p-3 sm:p-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">Edit Order #{editing.order_id}</h3>
-              <button onClick={() => setEditing(null)} className="px-2">✕</button>
+              <h3 className="text-base sm:text-lg font-semibold">Edit Order #{editing.order_id}</h3>
+              <button onClick={() => setEditing(null)} className="px-2 text-lg">✕</button>
             </div>
-            <table className="w-full text-sm border mb-3">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left p-2 border">SKU</th>
-                  <th className="text-left p-2 border">Item</th>
-                  <th className="text-right p-2 border">Qty</th>
-                  <th className="text-right p-2 border">Unit Price</th>
-                  <th className="text-right p-2 border">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {editing.lines.map((l, idx) => (
-                  <tr key={l.sku}>
-                    <td className="p-2 border">{l.sku}</td>
-                    <td className="p-2 border">{l.name}</td>
-                    <td className="p-2 border text-right">
-                      <input type="number" min={0} value={l.qty} onChange={e=>setEditQty(idx, e.target.value)} className="border rounded px-2 py-1 w-20 text-right" />
-                    </td>
-                    <td className="p-2 border text-right">₦{l.price.toLocaleString()}</td>
-                    <td className="p-2 border text-right">₦{(Number(l.qty) * l.price).toLocaleString()}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm border mb-3">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left p-1 sm:p-2 border">SKU</th>
+                    <th className="text-left p-1 sm:p-2 border">Item</th>
+                    <th className="text-right p-1 sm:p-2 border">Qty</th>
+                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
+                    <th className="text-right p-1 sm:p-2 border">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex items-center gap-3">
-              <div className="ml-auto text-right">
-                <div className="text-sm text-gray-600">New Total</div>
-                <div className="text-xl font-semibold">₦{editedTotal.toLocaleString()}</div>
+                </thead>
+                <tbody>
+                  {editing.lines.map((l, idx) => (
+                    <tr key={l.sku}>
+                      <td className="p-1 sm:p-2 border text-xs">{l.sku}</td>
+                      <td className="p-1 sm:p-2 border text-xs break-words">{l.name}</td>
+                      <td className="p-1 sm:p-2 border text-right">
+                        <input type="number" min={0} value={l.qty} onChange={e=>setEditQty(idx, e.target.value)} className="border rounded px-1 py-1 w-16 sm:w-20 text-right text-xs" />
+                      </td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{l.price.toLocaleString()}</td>
+                      <td className="p-1 sm:p-2 border text-right text-xs">₦{(Number(l.qty) * l.price).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="sm:ml-auto text-center sm:text-right">
+                <div className="text-xs sm:text-sm text-gray-600">New Total</div>
+                <div className="text-lg sm:text-xl font-semibold">₦{editedTotal.toLocaleString()}</div>
               </div>
-              <button className="px-4 py-2 border rounded" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={saveEdit}>Save</button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button className="flex-1 sm:flex-none px-3 py-2 border rounded text-sm" onClick={() => setEditing(null)}>Cancel</button>
+                <button className="flex-1 sm:flex-none px-3 py-2 bg-blue-600 text-white rounded text-sm" onClick={saveEdit}>Save</button>
+              </div>
             </div>
           </div>
         </div>

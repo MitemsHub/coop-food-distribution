@@ -80,31 +80,31 @@ function OrdersPageContent() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         {/* Header */}
         <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
+              <div className="text-center md:text-left">
+                <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 break-words">
                   {isAdmin ? 'Admin - Member Orders' : 'My Orders'}
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-xs sm:text-sm md:text-base text-gray-600">
                   {isAdmin ? 'Viewing orders for member' : 'Track your order history and status'}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-row">
                 <button
-                  onClick={() => router.push(`/shop?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+                  onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                  className="px-2 py-2 sm:px-3 md:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M8 11v6a2 2 0 002 2h4a2 2 0 002-2v-6M8 11h8" />
                   </svg>
                   {isAdmin ? 'Shop for Member' : 'Shop'}
                 </button>
                 <button
                   onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+                  className="px-2 py-2 sm:px-3 md:px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
                   </svg>
                   Cart
@@ -112,9 +112,9 @@ function OrdersPageContent() {
                 {isAdmin && (
                   <button
                     onClick={() => router.push('/admin/orders')}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center"
+                    className="px-3 py-2 sm:px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center text-sm sm:text-base whitespace-nowrap"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
                     Back to Admin
@@ -127,10 +127,10 @@ function OrdersPageContent() {
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-600">Member ID: {memberId}</p>
+                  <p className="text-xs sm:text-sm text-blue-600">Member ID: {memberId}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm text-blue-600">Total Orders: {orders.length}</div>
+                  <div className="text-xs sm:text-sm text-blue-600">Total Orders: {orders.length}</div>
                 </div>
               </div>
             </div>
@@ -139,29 +139,33 @@ function OrdersPageContent() {
 
         {/* Filters */}
         <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-700">Filter by Status:</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="border rounded-lg px-3 py-2"
-              >
-                <option key="all" value="All">All Orders</option>
-                    <option key="pending" value="Pending">Pending</option>
-                    <option key="posted" value="Posted">Posted</option>
-                    <option key="delivered" value="Delivered">Delivered</option>
-                    <option key="cancelled" value="Cancelled">Cancelled</option>
-              </select>
-              <button
-                onClick={loadOrders}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh
-              </button>
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 items-end">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                <label className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Status:</label>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-xs sm:text-sm w-full sm:w-auto"
+                >
+                  <option key="all" value="All">All Orders</option>
+                      <option key="pending" value="Pending">Pending</option>
+                      <option key="posted" value="Posted">Posted</option>
+                      <option key="delivered" value="Delivered">Delivered</option>
+                      <option key="cancelled" value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="flex justify-end items-end">
+                <button
+                  onClick={loadOrders}
+                  className="px-3 py-2 sm:px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap h-10"
+                >
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -199,8 +203,8 @@ function OrdersPageContent() {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
-                          <p className="text-sm text-gray-600">
+                          <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
+                          <p className="text-xs sm:text-sm text-gray-600">
                             {new Date(order.created_at).toLocaleDateString('en-US', {
                               year: 'numeric',
                               month: 'long',
@@ -210,13 +214,13 @@ function OrdersPageContent() {
                             })}
                           </p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
                           {order.status}
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className="text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
-                        <div className="text-sm text-gray-600">{order.payment_option}</div>
+                        <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
+                        <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
                       </div>
                     </div>
                     
