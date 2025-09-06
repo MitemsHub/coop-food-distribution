@@ -322,12 +322,14 @@ function ShopPageContent() {
         throw new Error(json?.error || `Request failed (${res.status})`)
       }
 
-      // Optional: refresh eligibility
+      // Refresh eligibility to reflect the new order's impact on loan balance
       try {
-        const eRes = await fetch(`/api/members/eligibility?id=${encodeURIComponent(member.member_id)}`)
+        const eRes = await fetch(`/api/members/eligibility?member_id=${encodeURIComponent(member.member_id)}`)
         const eJson = await safeJson(eRes, '/api/members/eligibility (post-submit)')
         if (eJson.ok) setEligibility(eJson.eligibility)
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to refresh eligibility after order submission:', e)
+      }
 
       setMessage({ type: 'success', text: `Order submitted! ID: ${json.order_id}. Status: Pending.` })
       setQty({})

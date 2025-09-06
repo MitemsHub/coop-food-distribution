@@ -59,8 +59,9 @@ export async function GET(req) {
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
-    const rawLoanLimit = savings * 5 - outstandingLoansTotal
-    const loanEligible = Math.min(Math.max(rawLoanLimit, 0), globalLimit)
+    const rawLoanLimit = savings * 5
+    const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
+    const loanEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
 
     return NextResponse.json({
       ok: true,
