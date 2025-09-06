@@ -288,6 +288,11 @@ function ShopPageContent() {
     ? loanEligible
     : Number.POSITIVE_INFINITY
 
+  // Calculate remaining limit after current cart total
+  const remainingLimit = paymentOption === 'Cash' 
+    ? Number.POSITIVE_INFINITY 
+    : Math.max(0, currentLimit - cartTotal)
+
   const overLimit = cartTotal > currentLimit && paymentOption !== 'Cash'
   const canSubmit = !!member && !!deliveryBranchCode && !!departmentName && cartLines.length > 0 && !overLimit && !submitting
 
@@ -428,7 +433,7 @@ function ShopPageContent() {
                 <div className="mt-4 md:mt-6 bg-white rounded-lg p-3 sm:p-4 md:p-6 shadow-sm border border-gray-100">
                   <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-3 md:mb-4">Member Information</h3>
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4">
-                    <div className="bg-gray-50 rounded-lg p-2 sm:p-3 md:p-4 col-span-2">
+                    <div className="bg-gray-50 rounded-lg p-2 sm:p-3 md:p-4">
                       <div className="text-xs text-gray-600 mb-1">Full Name</div>
                       <div className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base break-words">{member.full_name}</div>
                     </div>
@@ -553,7 +558,7 @@ function ShopPageContent() {
                   <p className="text-sm sm:text-base text-gray-500">No items configured for this branch.</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 gap-3 md:gap-6">
                 {items.map(it => (
                   <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-xl md:rounded-2xl p-3 md:p-6 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
                     {/* Item Image */}
@@ -624,47 +629,46 @@ function ShopPageContent() {
                  </h3>
                </div>
                
-               <div className="grid grid-cols-3 gap-1 sm:gap-2 md:gap-3 mb-3 md:mb-4">
+               <div className="grid grid-cols-4 gap-1 sm:gap-2 md:gap-3 mb-3 md:mb-4">
                  <div className="bg-blue-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
                    <div className="text-xs text-blue-600 mb-0.5 md:mb-1">Items in Cart</div>
-                   <div className="text-xs sm:text-sm md:text-lg font-bold text-blue-700">{cartLines.length}</div>
+                   <div className="text-xs sm:text-xs md:text-sm font-bold text-blue-700">{cartLines.length}</div>
                  </div>
                  <div className="bg-green-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
                    <div className="text-xs text-green-600 mb-0.5 md:mb-1">Cart Total</div>
-                   <div className="text-xs sm:text-sm md:text-lg font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
+                   <div className="text-xs sm:text-xs md:text-sm font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
                  </div>
                  <div className={`rounded-lg p-1.5 sm:p-2 md:p-3 text-center ${
                    overLimit ? 'bg-red-50' : 'bg-purple-50'
                  }`}>
                    <div className={`text-xs mb-0.5 md:mb-1 ${
                      overLimit ? 'text-red-600' : 'text-purple-600'
-                   }`}>Limit ({paymentOption})</div>
-                   <div className={`text-xs sm:text-sm md:text-lg font-bold ${
+                   }`}>Remaining ({paymentOption})</div>
+                   <div className={`text-xs sm:text-xs md:text-sm font-bold ${
                      overLimit ? 'text-red-700' : 'text-purple-700'
                    }`}>
-                     {paymentOption === 'Cash' ? 'No limit' : `₦${currentLimit.toLocaleString()}`}
+                     {paymentOption === 'Cash' ? 'No limit' : `₦${remainingLimit.toLocaleString()}`}
                    </div>
                  </div>
-               </div>
-               
-               <div className="flex items-center justify-center mt-2 md:mt-0">
+                 <div className="flex items-center justify-center">
                    <button
                      disabled={cartLines.length === 0}
                      onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
-                     className={`w-full py-2 md:py-3 px-3 md:px-4 rounded-lg font-semibold text-xs md:text-sm transition-all duration-200 ${
+                     className={`w-full py-2 md:py-3 px-2 md:px-3 rounded-lg font-semibold text-xs md:text-sm transition-all duration-200 ${
                        cartLines.length > 0
-                         ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transform hover:scale-105' 
+                         ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-md hover:shadow-lg transform hover:scale-105' 
                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                      }`}
                    >
                      <div className="flex items-center justify-center">
-                       <svg className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <svg className="w-3 h-3 md:w-4 md:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
                        </svg>
                        Go to Cart
                      </div>
                    </button>
                  </div>
+               </div>
                </div>
         {overLimit && (
           <div className="text-red-600 text-sm mt-2">
