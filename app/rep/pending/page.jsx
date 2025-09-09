@@ -14,6 +14,8 @@ function RepPendingPageContent() {
   const [nextCursor, setNextCursor] = useState(null)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [showModal, setShowModal] = useState(null)
+  const [modalInput, setModalInput] = useState('')
   const { user, logout } = useAuth()
   const router = useRouter()
 
@@ -58,19 +60,24 @@ function RepPendingPageContent() {
   }
 
   const postOne = async (id) => {
-    if (!confirm(`Post order ${id}?`)) return
+    setShowModal({ type: 'post', orderId: id, title: 'Post Order', placeholder: 'Optional note for posting (leave blank if none)' })
+    setModalInput('')
+  }
+
+  const handlePostSubmit = async () => {
+    const { orderId } = showModal
     try {
-      // optional note for reps
-      const adminNote = window.prompt('Optional note for posting (leave blank if none):', '') || ''
       const res = await fetch('/api/rep/orders/post', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId:id, note: adminNote })
+        body: JSON.stringify({ orderId, note: modalInput || '' })
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
-      setOrders(orders.filter(o => o.order_id !== id))
-      setMsg({ type:'success', text:`Order ${id} posted successfully` })
+      setOrders(orders.filter(o => o.order_id !== orderId))
+      setMsg({ type:'success', text:`Order ${orderId} posted successfully` })
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -115,7 +122,7 @@ function RepPendingPageContent() {
       
       const itemsMap = new Map()
       itemsJson.items.forEach(item => {
-        itemsMap.set(item.sku, item.item_id)
+        itemsMap.set(item.sku, item.id)
       })
       
       // Convert to the format expected by rep API
@@ -144,36 +151,31 @@ function RepPendingPageContent() {
     }
   }
 
-  const cancelOne = async (id) => {
-    if (!confirm(`Cancel order ${id}? This action cannot be undone.`)) return
-    try {
-      const reason = window.prompt('Reason for cancellation:', '') || 'Cancelled by rep'
-      const res = await fetch('/api/rep/orders/cancel', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId:id, reason })
-      })
-      const j = await res.json()
-      if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
-      setOrders(orders.filter(o => o.order_id !== id))
-      setMsg({ type:'success', text:`Order ${id} cancelled successfully` })
-    } catch (e) {
-      setMsg({ type:'error', text:e.message })
-    }
+  const deleteOne = async (id) => {
+    setShowModal({ 
+      type: 'delete', 
+      orderId: id, 
+      title: 'Delete Order', 
+      message: `Are you sure you want to delete order ${id}? This action cannot be undone.`,
+      placeholder: 'Optional reason for deletion'
+    })
+    setModalInput('')
   }
 
-  const deleteOne = async (id) => {
-    if (!confirm(`Delete order ${id}? This action cannot be undone.`)) return
+  const handleDeleteSubmit = async () => {
+    const { orderId } = showModal
     try {
       const res = await fetch('/api/rep/orders/delete', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId:id })
+        body: JSON.stringify({ orderId, reason: modalInput || 'Deleted by rep' })
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
-      setOrders(orders.filter(o => o.order_id !== id))
-      setMsg({ type:'success', text:`Order ${id} deleted successfully` })
+      setOrders(orders.filter(o => o.order_id !== orderId))
+      setMsg({ type:'success', text:`Order ${orderId} deleted successfully` })
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -287,9 +289,8 @@ function RepPendingPageContent() {
               <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
               <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button>
-              <button className="px-2 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => cancelOne(o.order_id)}>Cancel</button>
               <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button>
               <button className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => postOne(o.order_id)}>Post</button>
             </div>
@@ -373,6 +374,53 @@ function RepPendingPageContent() {
                 <button className="flex-1 sm:flex-none px-4 py-2 border rounded text-sm" onClick={() => setEditing(null)}>Cancel</button>
                 <button className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded text-sm" onClick={saveEdit}>Save</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal for input prompts */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+            <p className="text-gray-600 mb-4">
+              {showModal.message || (
+                showModal.type === 'post' 
+                  ? `Post order ${showModal.orderId}? This will make it available for delivery.`
+                  : `Process order ${showModal.orderId}?`
+              )}
+            </p>
+            <input
+              type="text"
+              value={modalInput}
+              onChange={(e) => setModalInput(e.target.value)}
+              placeholder={showModal.placeholder}
+              className="w-full p-2 border rounded mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowModal(null)
+                  setModalInput('')
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (showModal.type === 'post') {
+                    handlePostSubmit()
+                  } else if (showModal.type === 'delete') {
+                    handleDeleteSubmit()
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                {showModal.type === 'post' ? 'Post Order' : showModal.type === 'delete' ? 'Delete Order' : 'Confirm'}
+              </button>
             </div>
           </div>
         </div>

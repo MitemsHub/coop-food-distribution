@@ -13,6 +13,8 @@ function RepPostedPageContent() {
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [nextCursor, setNextCursor] = useState(null)
+  const [showModal, setShowModal] = useState(null)
+  const [modalInput, setModalInput] = useState('')
   const { user, logout } = useAuth()
   const router = useRouter()
 
@@ -53,19 +55,33 @@ function RepPostedPageContent() {
   }
 
   const deliverOne = async (id) => {
-    const deliveredBy = window.prompt('Delivered by (name or rep):', 'rep') ?? null
-    if (deliveredBy === null) return
+    setShowModal({ 
+      type: 'deliver', 
+      orderId: id, 
+      title: 'Deliver Order', 
+      message: `Mark order ${id} as delivered?`,
+      placeholder: 'Delivered by (name or rep)'
+    })
+    setModalInput('rep')
+  }
+
+  const handleDeliverSubmit = async () => {
+    const { orderId } = showModal
+    const deliveredBy = modalInput.trim() || 'rep'
     try {
       const res = await fetch('/api/rep/orders/deliver', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId:id, deliveredBy })
+        body: JSON.stringify({ orderId, deliveredBy })
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Deliver failed')
-      setOrders(orders.filter(o => o.order_id !== id))
+      setOrders(orders.filter(o => o.order_id !== orderId))
+      setMsg({ type:'success', text:`Order ${orderId} delivered successfully` })
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
-      alert(e.message)
+      setMsg({ type:'error', text:e.message })
     }
   }
 
@@ -210,6 +226,38 @@ function RepPostedPageContent() {
           <button className="px-3 py-2 border rounded" onClick={() => fetchOrders(false)}>
             {loading ? 'Loading…' : 'Load more'}
           </button>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+            <p className="text-gray-600 mb-4">{showModal.message}</p>
+            <input
+              type="text"
+              value={modalInput}
+              onChange={(e) => setModalInput(e.target.value)}
+              placeholder={showModal.placeholder}
+              className="w-full p-2 border rounded mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+                onClick={() => { setShowModal(null); setModalInput('') }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                onClick={handleDeliverSubmit}
+              >
+                Deliver
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

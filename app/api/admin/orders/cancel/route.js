@@ -25,7 +25,7 @@ export async function POST(req) {
     const { error } = await admin.rpc('cancel_order', { p_order_id: orderId, p_admin: adminId || 'admin' })
     if (error) return NextResponse.json({ ok:false, error:error.message }, { status:400 })
 
-    await admin.from('orders').update({ cancel_reason: reason || null }).eq('order_id', orderId)
+    // Note: Cancellation reason is handled by the RPC function
 
     await admin.from('audit_log').insert({
       actor: adminId || 'admin',

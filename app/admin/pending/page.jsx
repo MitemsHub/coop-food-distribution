@@ -12,6 +12,8 @@ function PendingAdminPageContent() {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [editing, setEditing] = useState(null)
+  const [showModal, setShowModal] = useState(null)
+  const [modalInput, setModalInput] = useState('')
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -72,18 +74,24 @@ function PendingAdminPageContent() {
 
   // Actions with prompts
   const doPost = async (order_id) => {
-    if (!confirm(`Post order ${order_id}?`)) return
-    const adminNote = window.prompt('Optional note for posting (leave blank if none):', '') || ''
+    setShowModal({ type: 'post', orderId: order_id, title: 'Post Order', placeholder: 'Optional note for posting (leave blank if none)' })
+    setModalInput('')
+  }
+
+  const handlePostSubmit = async () => {
+    const { orderId } = showModal
     try {
       const res = await fetch('/api/admin/orders/post', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId: order_id, adminId:'admin@coop', adminNote })
+        body: JSON.stringify({ orderId, adminId:'admin@coop', adminNote: modalInput || '' })
       })
       const json = await safeJson(res, '/api/admin/orders/post')
       if (!json.ok) throw new Error(json.error || 'Post failed')
-      setMsg({ type:'success', text:`Order ${order_id} posted` })
+      setMsg({ type:'success', text:`Order ${orderId} posted` })
       fetchOrders(); setSelected(new Set())
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -91,67 +99,67 @@ function PendingAdminPageContent() {
 
   const postSelected = async () => {
     if (selected.size === 0) return
-    if (!confirm(`Post ${selected.size} order(s)?`)) return
-    // Optional: one note for bulk
-    const adminNote = window.prompt('Optional note for posting these orders:', '') || ''
+    setShowModal({ type: 'bulk-post', orderIds: Array.from(selected), title: 'Bulk Post Orders', placeholder: 'Optional note for posting these orders' })
+    setModalInput('')
+  }
+
+  const handleBulkPostSubmit = async () => {
+    const { orderIds } = showModal
     try {
       // First post in bulk
       const res = await fetch('/api/admin/orders/post-bulk', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderIds: Array.from(selected), adminId:'admin@coop' })
+        body: JSON.stringify({ orderIds, adminId:'admin@coop' })
       })
       const json = await safeJson(res, '/api/admin/orders/post-bulk')
       if (!json.ok) throw new Error(json.error || 'Bulk post failed')
 
       // Then patch admin_note for posted ones if provided
-      if (adminNote && Array.isArray(json.posted)) {
+      if (modalInput && Array.isArray(json.posted)) {
         await Promise.all(json.posted.map(id =>
           fetch('/api/admin/orders/post', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ orderId:id, adminId:'admin@coop', adminNote })
+            body: JSON.stringify({ orderId:id, adminId:'admin@coop', adminNote: modalInput })
           })
         ))
       }
 
       setMsg({ type:'success', text:`Posted ${json.posted?.length || 0} order(s)` })
       fetchOrders(); setSelected(new Set())
-    } catch (e) {
-      setMsg({ type:'error', text:e.message })
-    }
-  }
-
-  const doCancel = async (order_id) => {
-    const reason = window.prompt('Enter cancel reason:', '')
-    if (reason === null) return // user aborted
-    try {
-      const res = await fetch('/api/admin/orders/cancel', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId: order_id, adminId:'admin@coop', reason })
-      })
-      const json = await safeJson(res, '/api/admin/orders/cancel')
-      if (!json.ok) throw new Error(json.error || 'Cancel failed')
-      setMsg({ type:'success', text:`Order ${order_id} cancelled` })
-      fetchOrders(); setSelected(new Set())
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
   }
 
   const doDelete = async (order_id) => {
-    if (!confirm(`Delete order ${order_id}? This cannot be undone.`)) return
+    setShowModal({ 
+      type: 'delete', 
+      orderId: order_id, 
+      title: 'Delete Order', 
+      message: `Are you sure you want to delete order ${order_id}? This action cannot be undone.`,
+      placeholder: 'Optional reason for deletion'
+    })
+    setModalInput('')
+  }
+
+  const handleDeleteSubmit = async () => {
+    const { orderId } = showModal
     try {
       const res = await fetch('/api/admin/orders/delete', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId: order_id })
+        body: JSON.stringify({ orderId, reason: modalInput || 'Deleted by admin' })
       })
       const json = await safeJson(res, '/api/admin/orders/delete')
       if (!json.ok) throw new Error(json.error || 'Delete failed')
-      setMsg({ type:'success', text:`Order ${order_id} deleted` })
+      setMsg({ type:'success', text:`Order ${orderId} deleted` })
       fetchOrders(); setSelected(new Set())
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -251,7 +259,7 @@ function PendingAdminPageContent() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700" onClick={() => startEdit(o)}>Edit</button>
-                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-yellow-600 text-white rounded text-xs sm:text-sm hover:bg-yellow-700" onClick={() => doCancel(o.order_id)}>Cancel</button>
+
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded text-xs sm:text-sm hover:bg-green-700" onClick={() => doPost(o.order_id)}>Post</button>
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-red-600 text-white rounded text-xs sm:text-sm hover:bg-red-700" onClick={() => doDelete(o.order_id)}>Delete</button>
               </div>
@@ -328,6 +336,48 @@ function PendingAdminPageContent() {
                 <button className="flex-1 sm:flex-none px-3 py-2 border rounded text-sm" onClick={() => setEditing(null)}>Cancel</button>
                 <button className="flex-1 sm:flex-none px-3 py-2 bg-blue-600 text-white rounded text-sm" onClick={saveEdit}>Save</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal for input prompts */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+            <p className="text-gray-600 mb-4">
+              {showModal.type === 'delete'
+                ? showModal.message
+                : showModal.type === 'post'
+                ? `Post order ${showModal.orderId}?`
+                : `Post ${showModal.orderIds?.length || 0} order(s)?`
+              }
+            </p>
+            <input
+              type="text"
+              value={modalInput}
+              onChange={(e) => setModalInput(e.target.value)}
+              placeholder={showModal.placeholder}
+              className="w-full p-2 border rounded mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowModal(null)
+                  setModalInput('')
+                }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                 onClick={showModal.type === 'post' ? handlePostSubmit : showModal.type === 'delete' ? handleDeleteSubmit : handleBulkPostSubmit}
+                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+               >
+                 {showModal.type === 'post' ? 'Post Order' : showModal.type === 'delete' ? 'Delete Order' : 'Post Orders'}
+               </button>
             </div>
           </div>
         </div>

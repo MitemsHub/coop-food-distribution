@@ -41,9 +41,7 @@ export async function POST(request) {
     const { error: updateError } = await supabase
       .from('orders')
       .update({ 
-        status: 'Cancelled',
-        cancelled_at: new Date().toISOString(),
-        cancel_reason: reason || 'Cancelled by rep'
+        status: 'Cancelled'
       })
       .eq('order_id', orderId)
 
