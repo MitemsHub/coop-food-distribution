@@ -194,12 +194,12 @@ function DataManagementPageContent() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:gap-6">
+      <div className="grid gap-2 lg:gap-3 xl:gap-4">
         {/* Database Migration */}
         <DatabaseMigration />
 
         {/* Item Image Management */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-green-900 mb-2 sm:mb-3">🖼️ Item Image Management</h2>
           <p className="text-sm sm:text-base text-green-700 mb-3 sm:mb-4">
             Upload and manage images for inventory items to improve the shopping experience.
@@ -208,7 +208,7 @@ function DataManagementPageContent() {
         </div>
 
         {/* Backup Data */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>
           <p className="text-sm sm:text-base text-blue-700 mb-3 sm:mb-4">
             Export all current data (orders, members, inventory) as a backup before making changes.
@@ -224,7 +224,7 @@ function DataManagementPageContent() {
         </div>
 
         {/* Clear Delivered Orders */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 sm:p-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-yellow-900 mb-2 sm:mb-3">🗑️ Clear Delivered Orders</h2>
           <p className="text-sm sm:text-base text-yellow-700 mb-3 sm:mb-4">
             Remove all delivered orders to clean up the system. This is useful at the end of each year.
@@ -249,7 +249,7 @@ function DataManagementPageContent() {
         </div>
 
         {/* Reset Inventory */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 sm:p-6">
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-orange-900 mb-2 sm:mb-3">🔄 Reset Inventory</h2>
           <p className="text-sm sm:text-base text-orange-700 mb-3 sm:mb-4">
             Reset all inventory quantities to zero. Use this to start fresh for a new year.
@@ -274,7 +274,7 @@ function DataManagementPageContent() {
         </div>
 
         {/* Clear All Orders */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 sm:p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-red-900 mb-2 sm:mb-3">⚠️ Clear All Orders</h2>
           <p className="text-sm sm:text-base text-red-700 mb-3 sm:mb-4">
             <strong>DANGER:</strong> This will permanently delete ALL orders (pending, posted, and delivered). 

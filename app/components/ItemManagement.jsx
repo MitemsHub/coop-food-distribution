@@ -103,7 +103,7 @@ export default function ItemManagement() {
       )}
 
       {/* Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         {items.map(item => (
           <div key={item.item_id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
             {/* Item Image */}

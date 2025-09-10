@@ -302,7 +302,7 @@ function CartPageContent() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-2 lg:mb-3"></div>
           <p className="text-gray-600">Loading cart...</p>
         </div>
       </div>
@@ -313,7 +313,7 @@ function CartPageContent() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600 mb-4">Member data not found</p>
+          <p className="text-gray-600 mb-2 lg:mb-3">Member data not found</p>
           <button 
             onClick={() => router.push('/shop')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -366,10 +366,10 @@ function CartPageContent() {
               </div>
             
             {/* Delivery Details & Payment Method - Moved up */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pt-4 sm:pt-6 border-t border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3 xl:gap-4 pt-2 lg:pt-3 xl:pt-4 border-t border-gray-100">
               {/* Delivery Details */}
               <div>
-                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-4">Delivery Details</h3>
+                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Delivery Details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
@@ -405,7 +405,7 @@ function CartPageContent() {
 
               {/* Payment Method */}
               <div>
-                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-4">Payment Method</h3>
+                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Payment Method</h3>
                 <select
                   value={paymentOption}
                   onChange={(e) => setPaymentOption(e.target.value)}
@@ -435,11 +435,11 @@ function CartPageContent() {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-3 xl:gap-4">
           {/* Cart Items */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white rounded-xl shadow-lg p-2 lg:p-3 xl:p-4">
+              <div className="flex items-center justify-between mb-2 lg:mb-3">
                 <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">Cart Items</h2>
                 <button
                   onClick={addNewItem}
@@ -451,10 +451,10 @@ function CartPageContent() {
               
               {cartItems.length === 0 ? (
                 <div className="text-center py-12">
-                  <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-16 h-16 mx-auto text-gray-300 mb-2 lg:mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
                   </svg>
-                  <p className="text-gray-500 mb-4">Your cart is empty</p>
+                  <p className="text-gray-500 mb-2 lg:mb-3">Your cart is empty</p>
                   <button
                     onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -546,9 +546,9 @@ function CartPageContent() {
           <div className="space-y-6">
             {/* Order Summary */}
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-sm sm:text-base md:text-base font-semibold text-gray-800 mb-4">Order Summary</h3>
+              <h3 className="text-sm sm:text-base md:text-base font-semibold text-gray-800 mb-2 lg:mb-3">Order Summary</h3>
               
-              <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-2 lg:mb-3">
                 <div className="text-center bg-blue-50 rounded-lg p-2 sm:p-3">
                   <div className="text-xs sm:text-sm md:text-sm font-bold text-blue-800">{cartItems.length}</div>
                   <div className="text-xs text-blue-600">Items in Cart</div>

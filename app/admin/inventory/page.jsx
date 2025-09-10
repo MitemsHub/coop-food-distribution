@@ -70,12 +70,12 @@ function InventoryPageContent() {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+    <div className="p-2 lg:p-3 xl:p-4 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 lg:mb-4">
         <h1 className="text-xl sm:text-3xl font-semibold mb-2 sm:mb-0">Admin — Inventory</h1>
       </div>
 
-      <div className="mb-4 sm:mb-6 p-3 sm:p-4 border rounded-lg">
+      <div className="mb-3 lg:mb-4 p-2 lg:p-3 xl:p-4 border rounded-lg">
         <div className="text-base sm:text-lg font-medium mb-3">Post Adjustment</div>
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <input

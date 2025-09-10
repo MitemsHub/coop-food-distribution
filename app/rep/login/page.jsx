@@ -38,7 +38,7 @@ export default function RepLoginPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-md mx-auto">
+    <div className="p-2 lg:p-3 xl:p-4 max-w-md mx-auto">
       <h1 className="text-xl sm:text-2xl font-semibold mb-2">Branch Rep Portal</h1>
       <p className="text-xs sm:text-sm text-gray-600 mb-4">
         Enter your passcode (Delivery Branch Code, e.g., DUTSE).

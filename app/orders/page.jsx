@@ -68,7 +68,7 @@ function OrdersPageContent() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-2 lg:mb-3"></div>
           <p className="text-gray-600">Loading orders...</p>
         </div>
       </div>
@@ -81,7 +81,7 @@ function OrdersPageContent() {
         {/* Header */}
         <div className="max-w-6xl mx-auto mb-6">
           <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-2 lg:mb-3">
               <div className="text-center md:text-left">
                 <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 break-words">
                   {isAdmin ? 'Admin - Member Orders' : 'My Orders'}
@@ -183,10 +183,10 @@ function OrdersPageContent() {
             
             {filteredOrders.length === 0 ? (
               <div className="text-center py-12">
-                <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-16 h-16 mx-auto text-gray-300 mb-2 lg:mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-gray-500 mb-4">
+                <p className="text-gray-500 mb-2 lg:mb-3">
                   {selectedStatus === 'All' ? 'No orders found' : `No ${selectedStatus.toLowerCase()} orders found`}
                 </p>
                 <button
@@ -200,7 +200,7 @@ function OrdersPageContent() {
               <div className="space-y-4">
                 {filteredOrders.map((order) => (
                   <div key={order.order_id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2 lg:mb-3">
                       <div className="flex items-center gap-4">
                         <div>
                           <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
@@ -224,7 +224,7 @@ function OrdersPageContent() {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
                       <div>
                         <div className="text-sm text-gray-600">Delivery Branch</div>
                         <div className="font-medium">{order.branches?.name || 'N/A'}</div>
@@ -241,7 +241,7 @@ function OrdersPageContent() {
                     
                     {/* Order Items */}
                     {order.order_lines && order.order_lines.length > 0 && (
-                      <div className="mb-4">
+                      <div className="mb-2 lg:mb-3">
                         <div className="text-sm font-medium text-gray-700 mb-2">Items:</div>
                         <div className="bg-gray-50 rounded-lg p-3">
                           <div className="space-y-2">

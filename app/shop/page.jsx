@@ -386,8 +386,8 @@ function ShopPageContent() {
     <ProtectedRoute allowedRoles={['member']}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="p-4 md:p-6 max-w-7xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-4 md:p-8 mb-4 md:mb-6">
-            <div className="flex flex-col gap-4 mb-4 md:mb-6">
+          <div className="bg-white rounded-lg xl:rounded-xl shadow-xl p-4 md:p-8 mb-2 lg:mb-3">
+            <div className="flex flex-col gap-4 mb-2 lg:mb-3">
               <div className="text-center md:text-left">
                 <h1 className="text-xl sm:text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-1 md:mb-2 leading-tight">
                   {isAdmin ? 'Admin - Member Shopping' : 'Coop Food Distribution'}
@@ -440,8 +440,8 @@ function ShopPageContent() {
               </div>
             </div>
             {/* Member Lookup */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 md:p-6 mb-4 md:mb-6">
-              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 md:p-6 mb-2 lg:mb-3">
+              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-2 lg:mb-3 flex items-center">
                 <svg className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
@@ -473,7 +473,7 @@ function ShopPageContent() {
 
               {member && (
                 <div className="mt-4 md:mt-6 bg-white rounded-lg p-3 sm:p-4 md:p-6 shadow-sm border border-gray-100">
-                  <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-3 md:mb-4">Member Information</h3>
+                  <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Member Information</h3>
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4">
                     <div className="bg-gray-50 rounded-lg p-2 sm:p-3 md:p-4">
                       <div className="text-xs text-gray-600 mb-1">Full Name</div>
@@ -505,8 +505,8 @@ function ShopPageContent() {
             </div>
 
             {/* Branches & Department */}
-            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-4 md:mb-6">
-              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-2 lg:mb-3">
+              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-2 lg:mb-3 flex items-center">
                 <svg className="w-4 h-4 md:w-5 md:h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -564,8 +564,8 @@ function ShopPageContent() {
              </div>
 
              {/* Payment Method */}
-            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-4 md:mb-6">
-              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-2 lg:mb-3">
+              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-2 lg:mb-3 flex items-center">
                 <svg className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
@@ -585,8 +585,8 @@ function ShopPageContent() {
              </div>
 
             {/* Items */}
-            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-4 md:mb-6">
-              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4 flex items-center">
+            <div className="bg-white rounded-xl p-4 md:p-6 shadow-lg border border-gray-100 mb-2 lg:mb-3">
+              <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-2 lg:mb-3 flex items-center">
                 <svg className="w-4 h-4 md:w-5 md:h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
@@ -594,18 +594,18 @@ function ShopPageContent() {
               </h2>
               {items.length === 0 && (
                 <div className="text-center py-8 sm:py-12">
-                  <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-gray-300 mb-2 lg:mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                   </svg>
                   <p className="text-sm sm:text-base text-gray-500">No items configured for this branch.</p>
                 </div>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 gap-3 md:gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-3 xl:gap-4">
                 {items.map(it => (
-                  <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-xl md:rounded-2xl p-3 md:p-6 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
+                  <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-lg xl:rounded-xl p-2 lg:p-3 xl:p-4 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
                     {/* Item Image */}
-                    <div className="mb-3 md:mb-4">
-                      <div className="w-full h-32 md:h-40 bg-gray-100 rounded-lg overflow-hidden mb-3 flex items-center justify-center">
+                    <div className="mb-2 lg:mb-3">
+                      <div className="w-full h-28 lg:h-32 xl:h-36 bg-gray-100 rounded-lg overflow-hidden mb-2 lg:mb-3 flex items-center justify-center">
                         <img
                           src={it.image_url ? `${it.image_url}?t=${Date.now()}` : '/images/items/placeholder.svg'}
                           alt={it.name}
@@ -671,19 +671,19 @@ function ShopPageContent() {
                  </h3>
                </div>
                
-               <div className="grid grid-cols-4 gap-1 sm:gap-2 md:gap-3 mb-3 md:mb-4">
+               <div className="grid grid-cols-4 gap-1 sm:gap-2 md:gap-3 mb-2 lg:mb-3">
                  <div className="bg-blue-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
-                   <div className="text-xs text-blue-600 mb-0.5 md:mb-1">Items in Cart</div>
+                   <div className="text-xs text-blue-600 mb-0.5 lg:mb-1">Items in Cart</div>
                    <div className="text-xs sm:text-xs md:text-sm font-bold text-blue-700">{cartLines.length}</div>
                  </div>
                  <div className="bg-green-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
-                   <div className="text-xs text-green-600 mb-0.5 md:mb-1">Cart Total</div>
+                   <div className="text-xs text-green-600 mb-0.5 lg:mb-1">Cart Total</div>
                    <div className="text-xs sm:text-xs md:text-sm font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
                  </div>
                  <div className={`rounded-lg p-1.5 sm:p-2 md:p-3 text-center ${
                    overLimit ? 'bg-red-50' : 'bg-purple-50'
                  }`}>
-                   <div className={`text-xs mb-0.5 md:mb-1 ${
+                   <div className={`text-xs mb-0.5 lg:mb-1 ${
                      overLimit ? 'text-red-600' : 'text-purple-600'
                    }`}>Remaining ({paymentOption})</div>
                    <div className={`text-xs sm:text-xs md:text-sm font-bold ${

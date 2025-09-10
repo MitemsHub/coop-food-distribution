@@ -41,7 +41,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center gap-4">
+      <div className="max-w-7xl mx-auto px-3 lg:px-4 xl:px-6 h-12 lg:h-14 flex items-center gap-2 lg:gap-4">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-2 group">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-green-500 rounded-lg flex items-center justify-center">
@@ -62,7 +62,7 @@ export default function Navbar() {
             <>
               <Link
                 href={`/shop?mid=${user?.id}`}
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/shop') 
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
@@ -75,7 +75,7 @@ export default function Navbar() {
               </Link>
               <button
                 onClick={logout}
-                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -90,7 +90,7 @@ export default function Navbar() {
             <>
               <Link
                 href="/rep/pending"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/rep/pending') 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
@@ -103,7 +103,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/rep/posted"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/rep/posted') 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
@@ -116,7 +116,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/rep/delivered"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/rep/delivered') 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-green-50 hover:text-green-600'
@@ -129,7 +129,7 @@ export default function Navbar() {
               </Link>
               <button
                 onClick={logout}
-                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -144,7 +144,7 @@ export default function Navbar() {
             <>
               <Link
                 href="/admin/pending"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/pending') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -157,7 +157,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/posted"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/posted') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -170,7 +170,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/delivered"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/delivered') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -183,7 +183,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/import"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/import') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -196,7 +196,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/inventory"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/inventory') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -214,7 +214,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/reports"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/reports') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -227,7 +227,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/admin/data-management"
-                className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/data-management') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
@@ -240,7 +240,7 @@ export default function Navbar() {
               </Link>
               <button
                 onClick={logout}
-                className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
