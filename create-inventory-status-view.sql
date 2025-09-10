@@ -1,7 +1,10 @@
 -- Create v_inventory_status view for inventory management
 -- This view provides comprehensive inventory status across all branches and items
 
-CREATE OR REPLACE VIEW v_inventory_status AS
+-- Drop existing view if it exists to avoid column name conflicts
+DROP VIEW IF EXISTS v_inventory_status;
+
+CREATE VIEW v_inventory_status AS
 SELECT 
     b.code as branch_code,
     b.name as branch_name,
@@ -9,57 +12,58 @@ SELECT
     i.name as item_name,
     i.unit,
     i.category,
+    i.image_url,
     bip.price,
     bip.initial_stock,
     
     -- Calculate allocated quantity (sum of all pending and posted orders)
     COALESCE((
-        SELECT SUM(ol.quantity)
+        SELECT SUM(ol.qty)
         FROM order_lines ol
         JOIN orders o ON ol.order_id = o.order_id
         WHERE o.branch_id = b.id 
         AND ol.item_id = i.item_id
-        AND o.status IN ('pending', 'posted')
+        AND o.status IN ('Pending', 'Posted')
     ), 0) as allocated_qty,
     
     -- Calculate delivered quantity (sum of delivered orders)
     COALESCE((
-        SELECT SUM(ol.quantity)
+        SELECT SUM(ol.qty)
         FROM order_lines ol
         JOIN orders o ON ol.order_id = o.order_id
         WHERE o.branch_id = b.id 
         AND ol.item_id = i.item_id
-        AND o.status = 'delivered'
+        AND o.status = 'Delivered'
     ), 0) as delivered_qty,
     
     -- Calculate pending delivery quantity (posted but not delivered)
     COALESCE((
-        SELECT SUM(ol.quantity)
+        SELECT SUM(ol.qty)
         FROM order_lines ol
         JOIN orders o ON ol.order_id = o.order_id
         WHERE o.branch_id = b.id 
         AND ol.item_id = i.item_id
-        AND o.status = 'posted'
+        AND o.status = 'Posted'
     ), 0) as pending_delivery_qty,
     
     -- Calculate remaining after posted orders
     bip.initial_stock - COALESCE((
-        SELECT SUM(ol.quantity)
+        SELECT SUM(ol.qty)
         FROM order_lines ol
         JOIN orders o ON ol.order_id = o.order_id
         WHERE o.branch_id = b.id 
         AND ol.item_id = i.item_id
-        AND o.status IN ('pending', 'posted', 'delivered')
+        AND o.status IN ('Pending', 'Posted', 'Delivered')
     ), 0) as remaining_after_posted,
     
     -- Calculate remaining after delivered orders
     bip.initial_stock - COALESCE((
-        SELECT SUM(ol.quantity)
+        SELECT SUM(ol.qty)
         FROM order_lines ol
         JOIN orders o ON ol.order_id = o.order_id
         WHERE o.branch_id = b.id 
         AND ol.item_id = i.item_id
-        AND o.status = 'delivered'
+        AND o.status = 'Delivered'
     ), 0) as remaining_after_delivered
     
 FROM branches b

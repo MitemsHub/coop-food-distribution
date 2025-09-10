@@ -17,8 +17,19 @@ export async function POST(req) {
     const { data: o } = await admin.from('orders').select('order_id, delivery_branch_id').eq('order_id', orderId).single()
     if (!o || o.delivery_branch_id !== claim.branch_id) return NextResponse.json({ ok:false, error:'forbidden' }, { status:403 })
 
-    const { error } = await admin.rpc('post_order', { p_order_id: orderId, p_admin: `rep:${claim.branch_code}` })
-    if (error) return NextResponse.json({ ok:false, error: error.message }, { status:400 })
+    const { data, error } = await admin.rpc('post_order', { p_order_id: orderId, p_admin: `rep:${claim.branch_code}` })
+    console.log('RPC post_order result:', { orderId, data, error })
+    
+    // Check if RPC function returned an error in the data
+    if (error) {
+      console.error('RPC post_order error:', error)
+      return NextResponse.json({ ok:false, error: error.message }, { status:400 })
+    }
+    
+    if (data && !data.success) {
+      console.error('RPC post_order failed:', data)
+      return NextResponse.json({ ok:false, error: data.error || 'Post failed' }, { status:400 })
+    }
 
     await admin.from('orders').update({ admin_note: note || null }).eq('order_id', orderId)
     await admin.from('audit_log').insert({ actor:`rep:${claim.branch_code}`, action:'post', order_id: orderId, detail: { note } })

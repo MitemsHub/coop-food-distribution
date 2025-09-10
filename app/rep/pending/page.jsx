@@ -74,7 +74,9 @@ function RepPendingPageContent() {
       })
       const j = await res.json()
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
-      setOrders(orders.filter(o => o.order_id !== orderId))
+      
+      // Refresh data from server instead of just filtering local state
+      fetchOrders()
       setMsg({ type:'success', text:`Order ${orderId} posted successfully` })
       setShowModal(null)
       setModalInput('')

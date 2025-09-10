@@ -130,25 +130,48 @@ function ShopPageContent() {
           return
         }
 
-        // Get items with prices and stock
-        const { data: rows, error } = await supabase
-          .from('branch_item_prices')
+        // Get items with real-time stock from inventory status view (fallback to branch_item_prices if view doesn't exist)
+        let { data: rows, error } = await supabase
+          .from('v_inventory_status')
           .select(`
+            sku,
+            item_name,
+            unit,
+            category,
+            image_url,
             price,
             initial_stock,
-            items:item_id(
-              item_id,
-              name, 
-              sku, 
-              unit, 
-              category,
-              image_url
-            )
+            remaining_after_posted,
+            remaining_after_delivered
           `)
-          .eq('branch_id', br.id)
-          .order('name', { foreignTable: 'items' })
+          .eq('branch_code', deliveryBranchCode)
+          .order('item_name')
         
-        console.log('Branch items query result:', { rows, error, branchId: br.id })
+        // Fallback to original query if view doesn't exist
+        if (error && error.message.includes('does not exist')) {
+          console.log('v_inventory_status view not found, using fallback query')
+          const { data: fallbackRows, error: fallbackError } = await supabase
+            .from('branch_item_prices')
+            .select(`
+              price,
+              initial_stock,
+              items:item_id(
+                item_id,
+                name, 
+                sku, 
+                unit, 
+                category,
+                image_url
+              )
+            `)
+            .eq('branch_id', br.id)
+            .order('name', { foreignTable: 'items' })
+          
+          rows = fallbackRows
+          error = fallbackError
+        }
+        
+        console.log('Branch items query result:', { rows, error, branchCode: deliveryBranchCode })
         
         if (error) {
           console.error('items load error:', error.message)
@@ -156,16 +179,33 @@ function ShopPageContent() {
           return
         }
         
-        // Use initial_stock from branch_item_prices directly
-        const itemsWithStock = (rows || []).map(row => ({
-          sku: row.items.sku,
-          name: row.items.name,
-          unit: row.items.unit,
-          category: row.items.category,
-          price: Number(row.price),
-          initial_stock: Math.max(0, row.initial_stock || 0),
-          image_url: row.items.image_url,
-        }))
+        // Use remaining_after_posted as available stock (accounts for pending/posted orders)
+        const itemsWithStock = (rows || []).map(row => {
+          // Handle both v_inventory_status view format and fallback format
+          if (row.item_name) {
+            // v_inventory_status view format
+            return {
+              sku: row.sku,
+              name: row.item_name,
+              unit: row.unit,
+              category: row.category,
+              price: Number(row.price),
+              initial_stock: Math.max(0, row.remaining_after_posted || 0), // Use real-time available stock
+              image_url: row.image_url
+            }
+          } else {
+            // Fallback branch_item_prices format
+            return {
+              sku: row.items.sku,
+              name: row.items.name,
+              unit: row.items.unit,
+              category: row.items.category,
+              price: Number(row.price),
+              initial_stock: Math.max(0, row.initial_stock || 0), // Use static stock as fallback
+              image_url: row.items.image_url
+            }
+          }
+        })
 
         setItems(itemsWithStock)
         setQty({})

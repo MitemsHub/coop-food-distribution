@@ -1,6 +1,12 @@
 -- Create RPC functions for order management
 -- These functions are required for the Rep and Admin order management functionality
 
+-- Drop existing functions to avoid conflicts
+DROP FUNCTION IF EXISTS post_order(INTEGER, TEXT);
+DROP FUNCTION IF EXISTS post_order(BIGINT, TEXT);
+DROP FUNCTION IF EXISTS deliver_order(INTEGER, TEXT);
+DROP FUNCTION IF EXISTS deliver_order(BIGINT, TEXT);
+
 -- Function to post an order (change status from pending to posted)
 CREATE OR REPLACE FUNCTION post_order(
     p_order_id INTEGER,
@@ -30,7 +36,7 @@ BEGIN
     END IF;
     
     -- Return error if order is not in pending status
-    IF v_current_status != 'pending' THEN
+    IF v_current_status != 'Pending' THEN
         RETURN json_build_object(
             'success', false,
             'error', 'Order must be in pending status to post'
@@ -39,8 +45,8 @@ BEGIN
     
     -- Update order status to posted
     UPDATE orders 
-    SET status = 'posted', 
-        updated_at = NOW()
+    SET status = 'Posted', 
+        posted_at = NOW()
     WHERE order_id = p_order_id;
     
     -- Return success
@@ -88,7 +94,7 @@ BEGIN
     END IF;
     
     -- Return error if order is not in posted status
-    IF v_current_status != 'posted' THEN
+    IF v_current_status != 'Posted' THEN
         RETURN json_build_object(
             'success', false,
             'error', 'Order must be in posted status to deliver'
@@ -97,8 +103,8 @@ BEGIN
     
     -- Update order status to delivered
     UPDATE orders 
-    SET status = 'delivered', 
-        updated_at = NOW()
+    SET status = 'Delivered', 
+        delivered_at = NOW()
     WHERE order_id = p_order_id;
     
     -- Return success
