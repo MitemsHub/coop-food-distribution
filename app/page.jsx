@@ -95,6 +95,21 @@ export default function Landing() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-50 border-t border-gray-100 mt-12">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
+          <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
+            <div className="flex items-center space-x-1.5 text-gray-500">
+              <span className="text-xs">Powered by</span>
+              <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
+            </div>
+            <div className="text-xs text-gray-400">
+              © 2025 CBN Coop Food Distribution
+            </div>
+          </div>
+        </div>
+      </footer>
     </main>
   )
 }
