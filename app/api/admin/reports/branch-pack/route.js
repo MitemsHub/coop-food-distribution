@@ -1,16 +1,13 @@
 // app/api/admin/reports/branch-pack/route.js
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 import * as XLSX from 'xlsx/xlsx.mjs' // ESM namespace import
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function GET(req) {
   try {
+    const supabase = createClient()
     const { searchParams } = new URL(req.url)
     const branch = (searchParams.get('branch') || '').trim() // '' => ALL DELIVERY branches
     const from   = searchParams.get('from') || ''
@@ -37,7 +34,7 @@ export async function GET(req) {
       amount
     `
 
-    let q = admin.from('v_master_sheet').select(selectCols)
+    let q = supabase.from('v_master_sheet').select(selectCols)
 
     // Filter by DELIVERY branch code if provided
     if (branch) q = q.eq('branch_code', branch)

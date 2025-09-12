@@ -5,16 +5,16 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, serviceKey)
-
 export async function GET() {
   return NextResponse.json({ ok: true, message: 'orders API alive' })
 }
 
 export async function POST(req) {
   try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabase = createClient(url, serviceKey)
+    
     const body = await req.json()
     const { memberId, deliveryBranchCode, departmentName, paymentOption, lines } = body || {}
 
@@ -23,7 +23,7 @@ export async function POST(req) {
     }
 
     // Member (home branch + balances)
-    const { data: member, error: mErr } = await admin
+    const { data: member, error: mErr } = await supabase
       .from('members')
       .select('member_id, full_name, category, savings, loans, global_limit, branch_id')
       .eq('member_id', memberId)
@@ -31,14 +31,14 @@ export async function POST(req) {
     if (mErr || !member) return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 404 })
 
     // Delivery branch (pricing & inventory)
-    const { data: deliveryBranch, error: bErr } = await admin
+    const { data: deliveryBranch, error: bErr } = await supabase
       .from('branches').select('id, code, name')
       .eq('code', deliveryBranchCode)
       .single()
     if (bErr || !deliveryBranch) return NextResponse.json({ ok: false, error: 'Delivery branch not found' }, { status: 400 })
 
     // Department
-    const { data: deptRow, error: dErr } = await admin
+    const { data: deptRow, error: dErr } = await supabase
       .from('departments').select('id, name')
       .eq('name', departmentName).single()
     if (dErr || !deptRow) return NextResponse.json({ ok: false, error: 'Department not found' }, { status: 400 })
@@ -47,7 +47,8 @@ export async function POST(req) {
     const statuses = ['Pending','Posted','Delivered'];
     const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0);
 
-    const { data: loanRows, error: le } = await admin
+// Loans
+    const { data: loanRows, error: le } = await supabase
       .from('orders')
       .select('total_amount')
       .eq('member_id', memberId)
@@ -55,7 +56,8 @@ export async function POST(req) {
       .in('status', statuses);
     if (le) return NextResponse.json({ ok:false, error: le.message }, { status:500 });
 
-    const { data: savRows, error: se } = await admin
+// Savings
+    const { data: savRows, error: se } = await supabase
       .from('orders')
       .select('total_amount')
       .eq('member_id', memberId)
@@ -87,15 +89,15 @@ export async function POST(req) {
       const qty = Number(l?.qty || 0)
       if (!sku || qty <= 0) return NextResponse.json({ ok:false, error:'Invalid line item' }, { status:400 })
 
-      const { data: item, error: iErr } = await admin.from('items').select('item_id, sku').eq('sku', sku).single()
+      const { data: item, error: iErr } = await supabase.from('items').select('item_id, sku').eq('sku', sku).single()
       if (iErr || !item) return NextResponse.json({ ok:false, error:`Item not found: ${sku}` }, { status:400 })
 
-      const { data: bip, error: pErr } = await admin
+      const { data: bip, error: pErr } = await supabase
         .from('branch_item_prices').select('id, price')
         .eq('branch_id', deliveryBranch.id)
         .eq('item_id', item.item_id)
         .single()
-      if (pErr || !bip) return NextResponse.json({ ok:false, error:`No price for ${sku} in ${deliveryBranchCode}` }, { status:400 })
+      if (pErr || !bip) return NextResponse.json({ ok:false, error:`No price for ${sku} in this branch` }, { status:400 })
 
       const unit_price = Number(bip.price)
       const amount = unit_price * qty
@@ -115,7 +117,7 @@ export async function POST(req) {
     }
 
     // Insert order (home + delivery branches)
-    const { data: order, error: oErr } = await admin
+    const { data: order, error: oErr } = await supabase
       .from('orders')
       .insert({
         member_id: member.member_id,
@@ -133,7 +135,7 @@ export async function POST(req) {
     if (oErr || !order) return NextResponse.json({ ok:false, error:oErr?.message || 'Insert failed' }, { status:500 })
 
     const rows = pricedLines.map(pl => ({ order_id: order.order_id, ...pl }))
-    const { error: lErr } = await admin.from('order_lines').insert(rows)
+    const { error: lErr } = await supabase.from('order_lines').insert(rows)
     if (lErr) return NextResponse.json({ ok:false, error:lErr.message }, { status:500 })
 
     return NextResponse.json({ ok:true, order_id: order.order_id, total, paymentOption, eligibility: { savingsEligible, loanEligible } })

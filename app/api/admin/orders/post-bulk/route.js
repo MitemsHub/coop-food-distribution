@@ -1,16 +1,13 @@
 // app/api/admin/orders/post-bulk/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function POST(req) {
   try {
+    const supabase = createClient()
     const { orderIds, adminId } = await req.json()
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
       return NextResponse.json({ ok: false, error: 'orderIds must be a non-empty array' }, { status: 400 })
@@ -18,8 +15,14 @@ export async function POST(req) {
 
     const results = []
     for (const id of orderIds) {
-      const { error } = await admin.rpc('post_order', { p_order_id: id, p_admin: adminId || 'admin' })
-      results.push({ id, ok: !error, error: error?.message || null })
+      const { data: result, error } = await supabase.rpc('post_order', { p_order_id: id, p_admin: adminId || 'admin' })
+      if (error) {
+        results.push({ id, ok: false, error: error.message })
+      } else if (result && !result.success) {
+        results.push({ id, ok: false, error: result.error })
+      } else {
+        results.push({ id, ok: true, error: null })
+      }
     }
 
     const failed = results.filter(r => !r.ok)

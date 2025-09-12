@@ -1,14 +1,10 @@
 // app/api/admin/import/prices/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 import * as XLSX from 'xlsx/xlsx.mjs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
 
 const chunk = (arr, size = 500) => {
   const out = []
@@ -18,6 +14,7 @@ const chunk = (arr, size = 500) => {
 
 export async function POST(req) {
   try {
+    const supabase = createClient()
     const formData = await req.formData()
     const file = formData.get('file')
     if (!file) return NextResponse.json({ ok: false, error: 'file is required' }, { status: 400 })
@@ -32,7 +29,7 @@ export async function POST(req) {
     if (!rows.length) return NextResponse.json({ ok: false, error: 'No rows found' }, { status: 400 })
 
     // Fetch branches
-    const { data: branches, error: bErr } = await admin.from('branches').select('id,code')
+    const { data: branches, error: bErr } = await supabase.from('branches').select('id,code')
     if (bErr) return NextResponse.json({ ok: false, error: bErr.message }, { status: 500 })
     const branchByCode = new Map(branches.map(b => [String(b.code).trim().toUpperCase(), b.id]))
 
@@ -55,7 +52,7 @@ export async function POST(req) {
     // Upsert items
     let itemsAffected = 0
     for (const part of chunk(itemUpserts, 500)) {
-      const { error: iErr, count } = await admin
+      const { error: iErr, count } = await supabase
         .from('items')
         .upsert(part, { onConflict: 'sku', ignoreDuplicates: false, count: 'exact' })
       if (iErr) {
@@ -66,12 +63,12 @@ export async function POST(req) {
     }
 
     // Fetch items to map ids
-    const { data: itemsAll, error: fiErr } = await admin.from('items').select('item_id,sku')
+    const { data: itemsAll, error: fiErr } = await supabase.from('items').select('item_id,sku')
     if (fiErr) return NextResponse.json({ ok: false, error: fiErr.message }, { status: 500 })
     const itemIdBySku = new Map(itemsAll.map(i => [String(i.sku).trim().toUpperCase(), i.item_id]))
 
     // Get active cycle for inventory movements
-    const { data: activeCycle } = await admin
+    const { data: activeCycle } = await supabase
       .from('cycles')
       .select('id')
       .eq('is_active', true)
@@ -113,7 +110,7 @@ export async function POST(req) {
     for (const part of chunk(priceUpserts, 500)) {
       for (const priceData of part) {
         // Check if record exists
-        const { data: existing } = await admin
+        const { data: existing } = await supabase
           .from('branch_item_prices')
           .select('id')
           .eq('branch_id', priceData.branch_id)
@@ -122,7 +119,7 @@ export async function POST(req) {
         
         if (existing) {
           // Update existing record
-          const { error: updateErr } = await admin
+          const { error: updateErr } = await supabase
              .from('branch_item_prices')
              .update({ price: priceData.price, initial_stock: priceData.initial_stock })
              .eq('branch_id', priceData.branch_id)
@@ -133,7 +130,7 @@ export async function POST(req) {
           }
         } else {
           // Insert new record
-          const { error: insertErr } = await admin
+          const { error: insertErr } = await supabase
             .from('branch_item_prices')
             .insert(priceData)
           if (insertErr) {
@@ -149,7 +146,7 @@ export async function POST(req) {
     let inventoryAffected = 0
     if (inventoryMovements.length > 0) {
       for (const part of chunk(inventoryMovements, 500)) {
-        const { error: invErr } = await admin
+        const { error: invErr } = await supabase
           .from('inventory_movements')
           .insert(part)
         

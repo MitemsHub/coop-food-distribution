@@ -6,7 +6,7 @@ import { verify } from '@/lib/signing'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const admin = createClient(
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
@@ -30,7 +30,7 @@ export async function GET(request) {
     const { branch_id } = claim
 
     // Get order with order lines and related data
-    const { data: order, error: orderError } = await admin
+    const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(`
         order_id,

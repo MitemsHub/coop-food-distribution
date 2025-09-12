@@ -1,16 +1,13 @@
 // app/api/items/prices/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(supabaseUrl, serviceKey)
-
 export async function GET(req) {
   try {
+    const supabase = createClient()
     const { searchParams } = new URL(req.url)
     const branchCode = searchParams.get('branch')
     
@@ -19,7 +16,7 @@ export async function GET(req) {
     }
     
     // Get branch ID from code
-    const { data: branch, error: branchError } = await admin
+    const { data: branch, error: branchError } = await supabase
       .from('branches')
       .select('id')
       .eq('code', branchCode)
@@ -30,7 +27,7 @@ export async function GET(req) {
     }
     
     // Get items with prices for this branch
-    const { data: itemsWithPrices, error } = await admin
+    const { data: itemsWithPrices, error } = await supabase
       .from('branch_item_prices')
       .select(`
         price,

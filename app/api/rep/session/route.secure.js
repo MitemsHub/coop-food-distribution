@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, serviceKey)
+const supabase = createClient(url, serviceKey)
 
 // Rate limiting configuration
 const RATE_LIMIT_ATTEMPTS = 5 // Max attempts per window
@@ -101,7 +101,7 @@ export async function POST(req) {
     
     try {
       // Verify branch exists in database
-      const { data: branch, error: branchError } = await admin
+      const { data: branch, error: branchError } = await supabase
         .from('branches')
         .select('id, code, name, active')
         .eq('code', branchValidation.sanitized)

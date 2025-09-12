@@ -1,20 +1,17 @@
 // app/api/orders/[id]/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function GET(_req, { params }) {
   try {
+    const supabase = createClient()
     const id = Number(params?.id)
     if (!id || Number.isNaN(id)) return NextResponse.json({ ok:false, error:'Invalid id' }, { status:400 })
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from('orders')
       .select(`
         order_id, status, created_at, payment_option, total_amount,

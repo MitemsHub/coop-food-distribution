@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function POST(req) {
   try {
+    const supabase = createClient()
     const { branchCode, sku, qty, note } = await req.json()
     const adjQty = Number(qty)
     if (!branchCode || !sku || !adjQty) {
@@ -17,15 +14,15 @@ export async function POST(req) {
     }
 
     const [{ data: br }, { data: it }, { data: cyc }] = await Promise.all([
-      admin.from('branches').select('id,code').eq('code', branchCode).single(),
-      admin.from('items').select('item_id,sku').eq('sku', sku).single(),
-      admin.from('cycles').select('id').eq('is_active', true).single()
+      supabase.from('branches').select('id,code').eq('code', branchCode).single(),
+      supabase.from('items').select('item_id,sku').eq('sku', sku).single(),
+      supabase.from('cycles').select('id').eq('is_active', true).single()
     ])
     if (!br) return NextResponse.json({ ok:false, error:'Branch not found' }, { status:404 })
     if (!it) return NextResponse.json({ ok:false, error:'Item not found' }, { status:404 })
     if (!cyc) return NextResponse.json({ ok:false, error:'No active cycle' }, { status:400 })
 
-    const { data: bip, error: e4 } = await admin
+    const { data: bip, error: e4 } = await supabase
       .from('branch_item_prices')
       .select('id')
       .eq('branch_id', br.id)
@@ -34,15 +31,17 @@ export async function POST(req) {
       .single()
     if (e4 || !bip) return NextResponse.json({ ok:false, error:'Price row not found for active cycle' }, { status:404 })
 
-    const { error: insErr } = await admin
+    const { error: insErr } = await supabase
       .from('inventory_movements')
       .insert({
-        branch_item_price_id: bip.id,
+        item_id: it.item_id,
+        branch_id: br.id,
+        cycle_id: cyc.id,
         movement_type: 'Adjustment',
-        qty: adjQty, // positive to add, negative to subtract
-        order_id: null,
-        created_by: 'admin@coop', // optionally set from session later
-        cycle_id: cyc.id
+        quantity: adjQty, // positive to add, negative to subtract
+        reference_type: 'adjustment',
+        reference_id: null,
+        notes: note || 'Admin adjustment'
       })
     if (insErr) return NextResponse.json({ ok:false, error: insErr.message }, { status:500 })
 

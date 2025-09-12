@@ -1,17 +1,13 @@
 // app/api/admin/orders/list/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
 export async function GET(req) {
   try {
+    const supabase = createClient()
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || 'Pending'
     const branchCode = (searchParams.get('branch') || '').trim().toUpperCase()
@@ -24,7 +20,7 @@ export async function GET(req) {
     // resolve delivery branch id if provided
     let deliveryBranchId = null
     if (branchCode) {
-      const { data: br } = await admin.from('branches').select('id').eq('code', branchCode).single()
+      const { data: br } = await supabase.from('branches').select('id').eq('code', branchCode).single()
       deliveryBranchId = br?.id || null
     }
 
@@ -37,7 +33,7 @@ export async function GET(req) {
       order_lines(id, qty, unit_price, amount, items:item_id(sku,name))
     `
 
-    let q = admin
+    let q = supabase
       .from('orders')
       .select(selectCols)
       .eq('status', status)
@@ -45,7 +41,7 @@ export async function GET(req) {
 
     if (deliveryBranchId) q = q.eq('delivery_branch_id', deliveryBranchId)
     if (payment) q = q.eq('payment_option', payment)
-    if (term) q = q.or(`member_id.ilike.%${term}%,member_name_snapshot.ilike.%${term}%`)
+    if (term) q = q.or('member_id.ilike.%' + term + '%,member_name_snapshot.ilike.%' + term + '%')
     if (cursor) {
       // descending by order_id: "next" page means < cursor
       q = dir === 'next' ? q.lt('order_id', Number(cursor)) : q.gt('order_id', Number(cursor))
@@ -65,10 +61,10 @@ export async function GET(req) {
     let count = 0
     let totalAmount = 0
     {
-      let qs = admin.from('orders').select('total_amount', { count: 'exact' }).eq('status', status)
+      let qs = supabase.from('orders').select('total_amount', { count: 'exact' }).eq('status', status)
       if (deliveryBranchId) qs = qs.eq('delivery_branch_id', deliveryBranchId)
       if (payment) qs = qs.eq('payment_option', payment)
-      if (term) qs = qs.or(`member_id.ilike.%${term}%,member_name_snapshot.ilike.%${term}%`)
+      if (term) qs = qs.or('member_id.ilike.%' + term + '%,member_name_snapshot.ilike.%' + term + '%')
       const { data: all, error: sErr, count: c } = await qs
       if (!sErr) {
         count = c || 0

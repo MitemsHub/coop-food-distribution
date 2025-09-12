@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, serviceKey)
+const supabase = createClient(url, serviceKey)
 
 // Standardized error response
 function errorResponse(message, status = 400, code = null) {
@@ -90,7 +90,7 @@ export async function POST(req) {
     // Database operations with proper error handling
     try {
       // Fetch member with timeout
-      const { data: member, error: mErr } = await admin
+      const { data: member, error: mErr } = await supabase
         .from('members')
         .select('member_id, full_name, category, savings, loans, global_limit, branch_id')
         .eq('member_id', memberValidation.sanitized)
@@ -102,7 +102,7 @@ export async function POST(req) {
       }
 
       // Fetch delivery branch
-      const { data: deliveryBranch, error: bErr } = await admin
+      const { data: deliveryBranch, error: bErr } = await supabase
         .from('branches')
         .select('id, code, name')
         .eq('code', branchValidation.sanitized)
@@ -114,7 +114,7 @@ export async function POST(req) {
       }
 
       // Fetch department
-      const { data: deptRow, error: dErr } = await admin
+      const { data: deptRow, error: dErr } = await supabase
         .from('departments')
         .select('id, name')
         .eq('name', sanitizedDepartmentName)
@@ -130,14 +130,14 @@ export async function POST(req) {
       const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
 
       const [loanResult, savingsResult] = await Promise.all([
-        admin
+        supabase
           .from('orders')
           .select('total_amount')
           .eq('member_id', memberValidation.sanitized)
           .eq('payment_option', 'Loan')
           .in('status', statuses)
           .abortSignal(AbortSignal.timeout(5000)),
-        admin
+        supabase
           .from('orders')
           .select('total_amount')
           .eq('member_id', memberValidation.sanitized)
@@ -147,8 +147,8 @@ export async function POST(req) {
       ])
 
       if (loanResult.error) {
-        console.error('Loan exposure query failed:', loanResult.error)
-        return errorResponse('Failed to calculate loan exposure', 500, 'DATABASE_ERROR')
+        console.error('Shopping exposure query failed:', loanResult.error)
+        return errorResponse('Failed to calculate shopping exposure', 500, 'DATABASE_ERROR')
       }
 
       if (savingsResult.error) {
@@ -176,7 +176,7 @@ export async function POST(req) {
 
       for (const line of linesValidation.sanitized) {
         // Fetch item
-        const { data: item, error: iErr } = await admin
+        const { data: item, error: iErr } = await supabase
           .from('items')
           .select('item_id, sku')
           .eq('sku', line.sku)
@@ -188,7 +188,7 @@ export async function POST(req) {
         }
 
         // Fetch price
-        const { data: bip, error: pErr } = await admin
+        const { data: bip, error: pErr } = await supabase
           .from('branch_item_prices')
           .select('id, price')
           .eq('branch_id', deliveryBranch.id)
@@ -237,7 +237,7 @@ export async function POST(req) {
       }
 
       // Insert order with transaction
-      const { data: order, error: oErr } = await admin
+      const { data: order, error: oErr } = await supabase
         .from('orders')
         .insert({
           member_id: member.member_id,
@@ -261,7 +261,7 @@ export async function POST(req) {
 
       // Insert order lines
       const orderLines = pricedLines.map(pl => ({ order_id: order.order_id, ...pl }))
-      const { error: lErr } = await admin
+      const { error: lErr } = await supabase
         .from('order_lines')
         .insert(orderLines)
         .abortSignal(AbortSignal.timeout(10000))
@@ -269,7 +269,7 @@ export async function POST(req) {
       if (lErr) {
         console.error('Order lines insert failed:', lErr)
         // Try to clean up the order
-        await admin.from('orders').delete().eq('order_id', order.order_id)
+        await supabase.from('orders').delete().eq('order_id', order.order_id)
         return errorResponse('Failed to create order lines', 500, 'ORDER_LINES_INSERT_FAILED')
       }
 

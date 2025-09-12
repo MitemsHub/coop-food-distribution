@@ -1,17 +1,14 @@
 // app/api/rep/orders/delete/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 import { verify } from '@/lib/signing'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function POST(request) {
   try {
+    const supabase = createClient()
     const { orderId } = await request.json()
     
     if (!orderId) {
@@ -28,7 +25,7 @@ export async function POST(request) {
     const { branch_id } = claim
 
     // Check if order exists and belongs to the rep's branch
-    const { data: order, error: orderError } = await admin
+    const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('order_id, status, delivery_branch_id')
       .eq('order_id', orderId)
@@ -44,7 +41,7 @@ export async function POST(request) {
     }
 
     // Delete order lines first (due to foreign key constraints)
-    const { error: deleteLinesError } = await admin
+    const { error: deleteLinesError } = await supabase
       .from('order_lines')
       .delete()
       .eq('order_id', orderId)
@@ -55,7 +52,7 @@ export async function POST(request) {
     }
 
     // Delete the order
-    const { error: deleteOrderError } = await admin
+    const { error: deleteOrderError } = await supabase
       .from('orders')
       .delete()
       .eq('order_id', orderId)

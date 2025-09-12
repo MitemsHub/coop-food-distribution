@@ -1,18 +1,14 @@
 // app/api/departments/list/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
 export async function GET() {
   try {
-    const { data, error } = await admin
+    const supabase = createClient()
+    const { data, error } = await supabase
       .from('departments')
       .select('name')
       .order('name')

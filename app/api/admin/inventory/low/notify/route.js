@@ -3,16 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 
 export async function POST(req) {
   try {
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     const { threshold = 20 } = await req.json().catch(()=>({}))
     const th = Number(threshold)
-    const { data: cyc } = await admin.from('cycles').select('id,code').eq('is_active',true).single()
+    const { data: cyc } = await supabase.from('cycles').select('id,code').eq('is_active',true).single()
     if (!cyc) return NextResponse.json({ ok:false, error:'No active cycle' }, { status:400 })
 
-    const { data: low } = await admin.from('v_inventory_status').select('*').lte('remaining_after_posted', th)
+    const { data: low } = await supabase.from('v_inventory_status').select('*').lte('remaining_after_posted', th)
     const rows = low || []
     if (!rows.length) return NextResponse.json({ ok:true, sent:0 })
 
@@ -37,7 +37,7 @@ export async function POST(req) {
 
     // mark alerts (first detection)
     for (const r of rows) {
-      const { data: bip } = await admin
+      const { data: bip } = await supabase
         .from('branch_item_prices')
         .select('id')
         .eq('branch_id', (await branchIdByName(r.branch_name))) // simplified: ideally resolve by code

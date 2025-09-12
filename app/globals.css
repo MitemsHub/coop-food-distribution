@@ -24,3 +24,35 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Performance optimizations for shop buttons */
+.shop-button {
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.shop-button:hover {
+  transform: translateZ(0) scale(1.02);
+}
+
+.shop-button:active {
+  transform: translateZ(0) scale(0.98);
+}
+
+/* Optimize loading spinner animation */
+@keyframes optimized-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.optimized-spinner {
+  animation: optimized-spin 1s linear infinite;
+  will-change: transform;
+}
+
+/* Reduce paint operations */
+.shop-item-card {
+  contain: layout style paint;
+  transform: translateZ(0);
+}

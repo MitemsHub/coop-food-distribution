@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 import { verify } from '@/lib/signing'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function GET(req) {
   try {
+    const supabase = createClient()
     const token = req.cookies.get('rep_token')?.value
     const claim = token && verify(token)
     if (!claim || claim.role !== 'rep') return NextResponse.json({ ok:false, error:'unauthorized' }, { status:401 })
@@ -30,7 +27,7 @@ export async function GET(req) {
       departments:department_id(name),
       order_lines(id, qty, unit_price, amount, items:item_id(sku,name))
     `
-    let q = admin
+    let q = supabase
       .from('orders')
       .select(selectCols)
       .eq('delivery_branch_id', claim.branch_id)
@@ -60,7 +57,7 @@ export async function GET(req) {
   }
 
   async function deptId(name) {
-    const { data } = await admin.from('departments').select('id').eq('name', name).single()
+    const { data } = await supabase.from('departments').select('id').eq('name', name).single()
     return data?.id || -1
   }
 }

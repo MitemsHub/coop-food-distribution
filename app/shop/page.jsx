@@ -1,7 +1,7 @@
 // app/shop/page.jsx
 'use client'
 
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import React, { useEffect, useMemo, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -39,6 +39,8 @@ function ShopPageContent() {
   // UI state
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [loadingItems, setLoadingItems] = useState(new Set()) // Track items with pending API calls
+  const [inputTimeouts, setInputTimeouts] = useState(new Map()) // Debounce input changes
 
   // Safe JSON helper
   const safeJson = async (res, label) => {
@@ -122,10 +124,9 @@ function ShopPageContent() {
           .eq('is_active', true)
           .single()
         
-        console.log('Active cycle query result:', { activeCycle, cycleError })
+
         
         if (!activeCycle) {
-          console.error('No active cycle found')
           setItems([])
           return
         }
@@ -149,7 +150,6 @@ function ShopPageContent() {
         
         // Fallback to original query if view doesn't exist
         if (error && error.message.includes('does not exist')) {
-          console.log('v_inventory_status view not found, using fallback query')
           const { data: fallbackRows, error: fallbackError } = await supabase
             .from('branch_item_prices')
             .select(`
@@ -171,10 +171,9 @@ function ShopPageContent() {
           error = fallbackError
         }
         
-        console.log('Branch items query result:', { rows, error, branchCode: deliveryBranchCode })
+
         
         if (error) {
-          console.error('items load error:', error.message)
           setItems([])
           return
         }
@@ -184,24 +183,28 @@ function ShopPageContent() {
           // Handle both v_inventory_status view format and fallback format
           if (row.item_name) {
             // v_inventory_status view format
+            const availableStock = Math.max(0, row.remaining_after_posted || 0)
             return {
               sku: row.sku,
               name: row.item_name,
               unit: row.unit,
               category: row.category,
               price: Number(row.price),
-              initial_stock: Math.max(0, row.remaining_after_posted || 0), // Use real-time available stock
+              initial_stock: availableStock,
+              remaining_after_posted: availableStock, // Set both fields consistently
               image_url: row.image_url
             }
           } else {
             // Fallback branch_item_prices format
+            const availableStock = Math.max(0, row.initial_stock || 0)
             return {
               sku: row.items.sku,
               name: row.items.name,
               unit: row.items.unit,
               category: row.items.category,
               price: Number(row.price),
-              initial_stock: Math.max(0, row.initial_stock || 0), // Use static stock as fallback
+              initial_stock: availableStock,
+              remaining_after_posted: availableStock, // Set both fields consistently
               image_url: row.items.image_url
             }
           }
@@ -210,7 +213,6 @@ function ShopPageContent() {
         setItems(itemsWithStock)
         setQty({})
       } catch (e) {
-        console.error('items fetch failed:', e)
         setItems([])
       }
     })()
@@ -336,15 +338,167 @@ function ShopPageContent() {
   const overLimit = cartTotal > currentLimit && paymentOption !== 'Cash'
   const canSubmit = !!member && !!deliveryBranchCode && !!departmentName && cartLines.length > 0 && !overLimit && !submitting
 
-  const setQtySafe = (sku, val) => {
-    const n = Math.max(0, Math.min(9999, Number(val) || 0))
-    setQty(prev => ({ ...prev, [sku]: n }))
-  }
+  const setQtySafe = useCallback(async (sku, val) => {
+    const newQty = Math.max(0, Math.min(9999, Number(val) || 0))
+    const currentQty = qty[sku] || 0
+    const adjustment = newQty - currentQty
+    
+    // If no change, return early
+    if (adjustment === 0) {
+      return
+    }
+    
+    // Find the item to get current stock info
+    const item = items.find(it => it.sku === sku)
+    if (!item) {
+      return
+    }
+    
+    // Check if member and delivery branch are set
+    if (!member?.member_id) {
+      setMessage({ type: 'error', text: 'Please select a member first' })
+      return
+    }
+    
+    if (!deliveryBranchCode) {
+      setMessage({ type: 'error', text: 'Please select a delivery branch first' })
+      return
+    }
+    
+    // Check stock availability for increases - use real-time available stock
+    if (adjustment > 0) {
+      const availableStock = item.remaining_after_posted || item.initial_stock || 0
+      if (newQty > availableStock) {
+        setMessage({ 
+          type: 'error', 
+          text: `Only ${availableStock} items available. Current cart: ${currentQty}` 
+        })
+        return
+      }
+    }
+    
+    // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
+    const previousQty = currentQty
+    setQty(prev => ({ ...prev, [sku]: newQty }))
+    
+    // Add loading state for this item
+    setLoadingItems(prev => new Set([...prev, sku]))
+    
+    // Clear any previous error messages
+    if (message?.type === 'error') {
+      setMessage(null)
+    }
+    
+    // Handle API call asynchronously
+    try {
+      const action = adjustment > 0 ? 'reserve' : 'release'
+      const response = await fetch('/api/inventory/adjust-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sku,
+          branchCode: deliveryBranchCode,
+          adjustment: Math.abs(adjustment),
+          memberId: member.member_id,
+          action
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (!response.ok || !result.ok) {
+        // ROLLBACK: Revert optimistic update on API failure
+        setQty(prev => ({ ...prev, [sku]: previousQty }))
+        setMessage({ type: 'error', text: result.error || 'Stock adjustment failed' })
+        return
+      }
+      
+      // Note: We don't update local stock here as the API already accounts for the adjustment
+      // The optimistic update in qty state is sufficient for UI responsiveness
+      // Real stock will be refreshed on page reload or through other mechanisms
+      
+    } catch (error) {
+      // ROLLBACK: Revert optimistic update on network error
+      setQty(prev => ({ ...prev, [sku]: previousQty }))
+      setMessage({ type: 'error', text: 'Failed to update stock. Please try again.' })
+    } finally {
+      // Remove loading state for this item
+      setLoadingItems(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(sku)
+        return newSet
+      })
+    }
+  }, [items, member, deliveryBranchCode, qty, message, loadingItems])
+
+  // Debounced input handler for better performance
+  const handleInputChange = useCallback((sku, value) => {
+    // Clear existing timeout for this item
+    const currentTimeout = inputTimeouts.get(sku)
+    if (currentTimeout) {
+      clearTimeout(currentTimeout)
+    }
+    
+    // Update local state immediately for responsive UI
+    const newQty = Math.max(0, Math.min(9999, Number(value) || 0))
+    setQty(prev => ({ ...prev, [sku]: newQty }))
+    
+    // Debounce API call by 300ms
+    const timeoutId = setTimeout(() => {
+      setQtySafe(sku, newQty)
+      setInputTimeouts(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(sku)
+        return newMap
+      })
+    }, 300)
+    
+    setInputTimeouts(prev => {
+      const newMap = new Map(prev)
+      newMap.set(sku, timeoutId)
+      return newMap
+    })
+  }, [setQtySafe, inputTimeouts])
 
   const submitOrder = async () => {
     setSubmitting(true)
     setMessage(null)
+    
+    // Store current cart for potential rollback
+    const currentCart = { ...qty }
+    
     try {
+      // Convert reserved stock to purchased stock for each item
+      const purchasePromises = cartLines.map(async (line) => {
+        try {
+          const response = await fetch('/api/inventory/adjust-stock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sku: line.sku,
+              branchCode: deliveryBranchCode,
+              adjustment: line.qty,
+              memberId: member.member_id,
+              action: 'purchase'
+            })
+          })
+          
+          const result = await response.json()
+          if (!response.ok || !result.ok) {
+            throw new Error(`Failed to process purchase for ${line.sku}: ${result.error}`)
+          }
+          
+          return result
+        } catch (error) {
+          console.error(`Purchase processing failed for ${line.sku}:`, error)
+          throw error
+        }
+      })
+      
+      // Wait for all stock purchases to complete
+      await Promise.all(purchasePromises)
+      
+      // Submit the order
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -371,12 +525,42 @@ function ShopPageContent() {
         console.warn('Failed to refresh eligibility after order submission:', e)
       }
 
+      // Clear cart and redirect on success
       setMessage({ type: 'success', text: `Order submitted! ID: ${json.order_id}. Status: Pending.` })
       setQty({})
+      
+      // Clear saved cart from localStorage
+      if (member?.member_id) {
+        localStorage.removeItem(`cart_${member.member_id}`)
+      }
+      
       router.push(`/shop/success/${json.order_id}?mid=${encodeURIComponent(member.member_id)}`)
+      
     } catch (e) {
       console.error('submitOrder error:', e)
       setMessage({ type: 'error', text: e.message })
+      
+      // Rollback: Release any reserved stock if order submission failed
+      try {
+        const rollbackPromises = cartLines.map(async (line) => {
+          await fetch('/api/inventory/adjust-stock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sku: line.sku,
+              branchCode: deliveryBranchCode,
+              adjustment: line.qty,
+              memberId: member.member_id,
+              action: 'release'
+            })
+          })
+        })
+        
+        await Promise.all(rollbackPromises)
+      } catch (rollbackError) {
+        // Rollback failed - this should be logged in production
+      }
+      
     } finally {
       setSubmitting(false)
     }
@@ -480,15 +664,15 @@ function ShopPageContent() {
                       <div className="font-semibold text-gray-900 text-xs sm:text-sm md:text-base break-words">{member.full_name}</div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-2 sm:p-3 md:p-4">
-                      <div className="text-xs text-green-600 mb-1">Savings (Core)</div>
+                      <div className="text-xs text-green-600 mb-1">Savings (Coop)</div>
                       <div className="font-semibold text-green-700 text-xs sm:text-sm md:text-base">₦{Number(member.savings || 0).toLocaleString()}</div>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-2 sm:p-3 md:p-4">
-                      <div className="text-xs text-blue-600 mb-1">Loans (Core)</div>
+                      <div className="text-xs text-blue-600 mb-1">Loans (Coop)</div>
                       <div className="font-semibold text-blue-700 text-xs sm:text-sm md:text-base">₦{Number(member.loans || 0).toLocaleString()}</div>
                     </div>
                     <div className="bg-orange-50 rounded-lg p-2 sm:p-3 md:p-4">
-                      <div className="text-xs text-orange-600 mb-1">Loan Exposure</div>
+                      <div className="text-xs text-orange-600 mb-1">Shopping Exposure</div>
                       <div className="font-semibold text-orange-700 text-xs sm:text-sm md:text-base">₦{Number(eligibility.loanExposure || 0).toLocaleString()}</div>
                     </div>
                     <div className="bg-red-50 rounded-lg p-2 sm:p-3 md:p-4">
@@ -601,13 +785,31 @@ function ShopPageContent() {
                 </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-3 xl:gap-4">
-                {items.map(it => (
-                  <div key={it.sku} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-lg xl:rounded-xl p-2 lg:p-3 xl:p-4 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
+                {React.useMemo(() => items.map(it => {
+                  // Pre-calculate all values to avoid repeated calculations in render
+                  const currentQty = qty[it.sku] || 0
+                  const availableStock = it.remaining_after_posted || it.initial_stock || 0
+                  // Calculate remaining stock after current cart quantity
+                  const remainingStock = Math.max(0, availableStock - currentQty)
+                  const isLoading = loadingItems.has(it.sku)
+                  const canDecrease = currentQty > 0
+                  const canIncrease = availableStock > 0 && currentQty < availableStock
+                  
+                  const stockColorClass = remainingStock > 10 ? 'bg-green-100 text-green-700' : 
+                                         remainingStock > 0 ? 'bg-yellow-100 text-yellow-700' : 
+                                         'bg-red-100 text-red-700'
+                  
+                  const decreaseButtonClass = 'shop-button w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full font-bold transition-colors duration-200 flex items-center justify-center text-sm md:text-base ' + (canDecrease ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
+                  
+                  const increaseButtonClass = 'shop-button w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full font-bold transition-colors duration-200 flex items-center justify-center text-sm md:text-base ' + (canIncrease ? 'bg-orange-100 hover:bg-orange-200 text-orange-700 cursor-pointer' : 'bg-orange-100 text-orange-400 cursor-not-allowed')
+                  
+                  return (
+                  <div key={it.sku} className="shop-item-card bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-lg xl:rounded-xl p-2 lg:p-3 xl:p-4 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
                     {/* Item Image */}
                     <div className="mb-2 lg:mb-3">
                       <div className="w-full h-28 lg:h-32 xl:h-36 bg-gray-100 rounded-lg overflow-hidden mb-2 lg:mb-3 flex items-center justify-center">
                         <img
-                          src={it.image_url ? `${it.image_url}?t=${Date.now()}` : '/images/items/placeholder.svg'}
+                          src={it.image_url || '/images/items/placeholder.svg'}
                           alt={it.name}
                           className="max-w-full max-h-full object-contain"
                           onError={(e) => {
@@ -619,44 +821,45 @@ function ShopPageContent() {
                       <div className="text-xs md:text-sm text-gray-500 mb-2 break-words">{it.unit} • {it.category}</div>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                         <div className="text-base md:text-xl font-bold text-orange-600">₦{it.price.toLocaleString()}</div>
-                        <div className={`text-xs px-2 py-1 rounded-full text-center whitespace-nowrap ${
-                          it.initial_stock > 10 ? 'bg-green-100 text-green-700' : 
-                          it.initial_stock > 0 ? 'bg-yellow-100 text-yellow-700' : 
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          Stock: {it.initial_stock}
+                        <div className={`text-xs px-2 py-1 rounded-full text-center whitespace-nowrap ${stockColorClass}`}>
+                          Stock: {remainingStock}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center justify-center gap-2 md:gap-3">
-                      <button 
-                        className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition-colors duration-200 flex items-center justify-center text-sm md:text-base" 
-                        onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) - 1)}
-                        disabled={!qty[it.sku] || qty[it.sku] <= 0}
-                      >
-                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                        </svg>
-                      </button>
-                      <input
-                        type="number"
-                        min={0}
-                        value={qty[it.sku] || 0}
-                        onChange={e => setQtySafe(it.sku, e.target.value)}
-                        className="w-12 h-7 sm:w-16 sm:h-8 md:w-20 md:h-10 border-2 border-gray-200 rounded-lg text-center font-semibold focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 text-xs sm:text-sm"
-                      />
-                      <button 
-                        className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold transition-colors duration-200 flex items-center justify-center text-sm md:text-base" 
-                        onClick={() => setQtySafe(it.sku, (qty[it.sku] || 0) + 1)}
-                        disabled={it.initial_stock <= 0 || (qty[it.sku] || 0) >= it.initial_stock}
-                      >
-                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                      <>
+                        <button 
+                           className={decreaseButtonClass}
+                           onClick={() => setQtySafe(it.sku, currentQty - 1)}
+                           type="button"
+                         >
+                           <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                           </svg>
+                             </button>
+                         <input
+                            type="number"
+                            min={0}
+                            max={availableStock}
+                            value={currentQty}
+                            onChange={(e) => handleInputChange(it.sku, e.target.value)}
+
+                            className="w-12 h-7 sm:w-16 sm:h-8 md:w-20 md:h-10 border-2 border-gray-200 rounded-lg text-center font-semibold focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 text-xs sm:text-sm disabled:opacity-50"
+                          />
+                         <button 
+                             className={increaseButtonClass}
+                             onClick={() => setQtySafe(it.sku, currentQty + 1)}
+                             type="button"
+                           >
+                             <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                             </svg>
+                           </button>
+                       </>
+                     </div>
+                   </div>
+                 )
+               }), [items, qty, loadingItems])}
               </div>
             </div>
 

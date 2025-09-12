@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(supabaseUrl, serviceKey)
+const supabase = createClient(supabaseUrl, serviceKey)
 
 export async function GET(req) {
   try {
@@ -18,7 +18,7 @@ export async function GET(req) {
     }
 
     // 1) Member snapshot (core balances)
-    const { data: m, error: mErr } = await admin
+    const { data: m, error: mErr } = await supabase
       .from('members')
       .select('member_id,savings,loans,global_limit')
       .eq('member_id', memberId)
@@ -30,13 +30,13 @@ export async function GET(req) {
     // 2) Exposure = sum of order totals for Pending + Posted + Delivered
     const statuses = ['Pending', 'Posted', 'Delivered']
     const [loanExp, savExp] = await Promise.all([
-      admin
+      supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
         .in('status', statuses),
-      admin
+      supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)

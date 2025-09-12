@@ -1,26 +1,23 @@
 // app/api/admin/reports/summary/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function GET() {
   try {
-    const byBranchQ       = admin.from('v_applications_by_branch').select('*')
-    const byBranchDeptQ   = admin.from('v_applications_by_branch_department').select('*')
-    const byCategoryQ     = admin.from('v_applications_by_category').select('*')
-    const inventoryQ      = admin.from('v_inventory_status').select('*')
+    const supabase = createClient()
+    const byBranchQ       = supabase.from('v_applications_by_branch').select('*')
+  const byBranchDeptQ   = supabase.from('v_applications_by_branch_department').select('*')
+  const byCategoryQ     = supabase.from('v_applications_by_category').select('*')
+  const inventoryQ      = supabase.from('v_inventory_status').select('*')
 
-    const totalPostedQ    = admin.from('orders').select('order_id', { count: 'exact', head: true }).in('status', ['Posted','Delivered'])
-    const totalPendingQ   = admin.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Pending')
-    const totalDeliveredQ = admin.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Delivered')
-    const totalCancelledQ = admin.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Cancelled')
-    const totalAllQ       = admin.from('orders').select('order_id', { count: 'exact', head: true })
+  const totalPostedQ    = supabase.from('orders').select('order_id', { count: 'exact', head: true }).in('status', ['Posted','Delivered'])
+  const totalPendingQ   = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Pending')
+  const totalDeliveredQ = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Delivered')
+  const totalCancelledQ = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Cancelled')
+  const totalAllQ       = supabase.from('orders').select('order_id', { count: 'exact', head: true })
 
     const [
       byBranch, byBranchDept, byCat, inventory,

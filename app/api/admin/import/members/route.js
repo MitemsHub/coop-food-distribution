@@ -1,14 +1,10 @@
 // app/api/admin/import/members/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../../lib/supabaseServer'
 import * as XLSX from 'xlsx/xlsx.mjs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
 
 // chunk helper
 const chunk = (arr, size = 500) => {
@@ -19,8 +15,11 @@ const chunk = (arr, size = 500) => {
 
 export async function POST(req) {
   try {
+    console.log('Members import request received')
+    const supabase = createClient()
     const formData = await req.formData()
     const file = formData.get('file')
+    console.log('File received:', file ? file.name : 'No file')
     if (!file) return NextResponse.json({ ok: false, error: 'file is required' }, { status: 400 })
 
     const buf = Buffer.from(await file.arrayBuffer())
@@ -34,7 +33,7 @@ export async function POST(req) {
     if (!rows.length) return NextResponse.json({ ok: false, error: 'No rows found' }, { status: 400 })
 
     // Fetch branches once (we do NOT create new branches here; enforce known codes)
-    const { data: branches, error: bErr } = await admin.from('branches').select('id,code')
+    const { data: branches, error: bErr } = await supabase.from('branches').select('id,code')
     if (bErr) return NextResponse.json({ ok: false, error: bErr.message }, { status: 500 })
     const branchByCode = new Map(branches.map(b => [String(b.code).trim().toUpperCase(), b.id]))
 
@@ -42,11 +41,11 @@ export async function POST(req) {
     const deptNames = [...new Set(rows.map(r => String(r.department_name || '').trim()).filter(Boolean))]
     if (deptNames.length) {
       const deptRows = deptNames.map(n => ({ name: n }))
-      const { error: duErr } = await admin.from('departments').upsert(deptRows, { onConflict: 'name' })
+      const { error: duErr } = await supabase.from('departments').upsert(deptRows, { onConflict: 'name' })
       if (duErr) return NextResponse.json({ ok: false, error: duErr.message }, { status: 500 })
     }
     // Re-fetch departments to map ids
-    const { data: depts, error: dErr } = await admin.from('departments').select('id,name')
+    const { data: depts, error: dErr } = await supabase.from('departments').select('id,name')
     if (dErr) return NextResponse.json({ ok: false, error: dErr.message }, { status: 500 })
     const deptByName = new Map(depts.map(d => [String(d.name).trim(), d.id]))
 
@@ -89,13 +88,15 @@ export async function POST(req) {
     })
 
     if (invalidBranch.size) {
+      console.log('Invalid branch codes found:', [...invalidBranch])
+      console.log('Available branches:', branches.map(b => b.code))
       return NextResponse.json({ ok: false, error: `Unknown branch_code(s): ${[...invalidBranch].join(', ')}` }, { status: 400 })
     }
 
     // Upsert in chunks
     let total = 0
     for (const part of chunk(upsertRows, 500)) {
-      const { error: uErr, count } = await admin
+      const { error: uErr, count } = await supabase
         .from('members')
         .upsert(part, { onConflict: 'member_id', ignoreDuplicates: false, count: 'exact' })
       if (uErr) return NextResponse.json({ ok: false, error: uErr.message }, { status: 500 })

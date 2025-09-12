@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, serviceKey)
+const supabase = createClient(url, serviceKey)
 
 // Rate limiting configuration
 const RATE_LIMIT_REQUESTS = 30 // Max requests per window
@@ -51,7 +51,7 @@ function safeNumber(value, defaultValue = 0, min = 0, max = Number.MAX_SAFE_INTE
 async function calculateEligibility(memberId) {
   try {
     // Fetch member data with timeout
-    const { data: member, error: memberError } = await admin
+    const { data: member, error: memberError } = await supabase
       .from('members')
       .select('member_id, full_name, savings, loans, global_limit, category, branch_id')
       .eq('member_id', memberId)
@@ -71,14 +71,14 @@ async function calculateEligibility(memberId) {
     const statuses = ['Pending', 'Posted', 'Delivered']
     
     const [loanResult, savingsResult] = await Promise.all([
-      admin
+      supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
         .in('status', statuses)
         .abortSignal(AbortSignal.timeout(5000)),
-      admin
+      supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
@@ -88,8 +88,8 @@ async function calculateEligibility(memberId) {
     ])
 
     if (loanResult.error) {
-      console.error('Loan exposure query failed:', loanResult.error)
-      return { error: 'Failed to calculate loan exposure', code: 'DATABASE_ERROR' }
+      console.error('Shopping exposure query failed:', loanResult.error)
+        return { error: 'Failed to calculate shopping exposure', code: 'DATABASE_ERROR' }
     }
 
     if (savingsResult.error) {

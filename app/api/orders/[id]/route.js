@@ -1,16 +1,13 @@
 // app/api/orders/[id]/route.js
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-const admin = createClient(url, key)
-
 export async function GET(_req, { params }) {
   try {
+    const supabase = createClient()
     const id = Number(params?.id)
     if (!id || Number.isNaN(id)) {
       return NextResponse.json({ ok: false, error: 'Invalid order id' }, { status: 400 })
@@ -34,7 +31,7 @@ export async function GET(_req, { params }) {
       order_lines(qty, unit_price, amount, items:item_id(sku, name))
     `
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from('orders')
       .select(selectCols)
       .eq('order_id', id)
@@ -48,13 +45,13 @@ export async function GET(_req, { params }) {
     const fixes = []
     if (!data.delivery && data.delivery_branch_id) {
       fixes.push(
-        admin.from('branches').select('code,name').eq('id', data.delivery_branch_id).single()
+        supabase.from('branches').select('code,name').eq('id', data.delivery_branch_id).single()
           .then(r => ({ key: 'delivery', val: r.data || null }))
       )
     }
     if (!data.member_branch && data.branch_id) {
       fixes.push(
-        admin.from('branches').select('code,name').eq('id', data.branch_id).single()
+        supabase.from('branches').select('code,name').eq('id', data.branch_id).single()
           .then(r => ({ key: 'member_branch', val: r.data || null }))
       )
     }

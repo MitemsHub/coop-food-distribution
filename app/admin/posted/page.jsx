@@ -14,6 +14,8 @@ function PostedAdminPageContent() {
   const [to, setTo] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(false)
+  const [showModal, setShowModal] = useState(null)
+  const [modalInput, setModalInput] = useState('')
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -70,20 +72,37 @@ function PostedAdminPageContent() {
     }
   }
 
+  const clearSelected = () => {
+    setSelected(new Set())
+  }
+
   const deliverOne = async (order_id) => {
-    const deliveredBy = window.prompt('Delivered by (name or rep):', 'rep')
-    if (deliveredBy === null) return
+    setShowModal({ 
+      type: 'deliver', 
+      orderId: order_id, 
+      title: 'Deliver Order', 
+      message: `Mark order ${order_id} as delivered?`,
+      placeholder: 'Delivered by (name or rep)'
+    })
+    setModalInput('rep')
+  }
+
+  const handleDeliverSubmit = async () => {
+    const { orderId } = showModal
+    const deliveredBy = modalInput.trim() || 'rep'
     try {
       const res = await fetch('/api/admin/orders/deliver', {
         method:'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId: order_id, adminId:'admin@coop', deliveredBy })
+        body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy })
       })
       const json = await safeJson(res, '/api/admin/orders/deliver')
       if (!json.ok) throw new Error(json.error || 'Deliver failed')
-      setMsg({ type:'success', text:`Order ${order_id} marked Delivered` })
-      setOrders(orders.filter(o => o.order_id !== order_id))
+      setMsg({ type:'success', text:`Order ${orderId} marked Delivered` })
+      setOrders(orders.filter(o => o.order_id !== orderId))
       clearSelected()
+      setShowModal(null)
+      setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     }
@@ -223,6 +242,38 @@ function PostedAdminPageContent() {
           </div>
         ))}
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+            <p className="text-gray-600 mb-4">{showModal.message}</p>
+            <input
+              type="text"
+              value={modalInput}
+              onChange={(e) => setModalInput(e.target.value)}
+              placeholder={showModal.placeholder}
+              className="w-full p-2 border rounded mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+                onClick={() => { setShowModal(null); setModalInput('') }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                onClick={handleDeliverSubmit}
+              >
+                Deliver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
