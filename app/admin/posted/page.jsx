@@ -88,19 +88,38 @@ function PostedAdminPageContent() {
   }
 
   const handleDeliverSubmit = async () => {
-    const { orderId } = showModal
     const deliveredBy = modalInput.trim() || 'rep'
+    
     try {
-      const res = await fetch('/api/admin/orders/deliver', {
-        method:'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy })
-      })
-      const json = await safeJson(res, '/api/admin/orders/deliver')
-      if (!json.ok) throw new Error(json.error || 'Deliver failed')
-      setMsg({ type:'success', text:`Order ${orderId} marked Delivered` })
-      setOrders(orders.filter(o => o.order_id !== orderId))
-      clearSelected()
+      if (showModal.type === 'deliverMultiple') {
+        // Handle multiple deliveries
+        const { selectedIds } = showModal
+        for (const id of selectedIds) {
+          const res = await fetch('/api/admin/orders/deliver', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ orderId:id, adminId:'admin@coop', deliveredBy })
+          })
+          const json = await safeJson(res, '/api/admin/orders/deliver')
+          if (!json.ok) throw new Error(json.error || 'Deliver failed')
+        }
+        setMsg({ type:'success', text:`Delivered ${selectedIds.length} order(s)` })
+        fetchOrders()
+        clearSelected()
+      } else {
+        // Handle single delivery
+        const { orderId } = showModal
+        const res = await fetch('/api/admin/orders/deliver', {
+          method:'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy })
+        })
+        const json = await safeJson(res, '/api/admin/orders/deliver')
+        if (!json.ok) throw new Error(json.error || 'Deliver failed')
+        setMsg({ type:'success', text:`Order ${orderId} marked Delivered` })
+        setOrders(orders.filter(o => o.order_id !== orderId))
+        clearSelected()
+      }
       setShowModal(null)
       setModalInput('')
     } catch (e) {
@@ -110,21 +129,14 @@ function PostedAdminPageContent() {
 
   const deliverSelected = async () => {
     if (selected.size === 0) return
-    const deliveredBy = window.prompt('Delivered by (name or rep) for selected:', 'rep')
-    if (deliveredBy === null) return
-    try {
-      for (const id of selected) {
-        await fetch('/api/admin/orders/deliver', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ orderId:id, adminId:'admin@coop', deliveredBy })
-        })
-      }
-      setMsg({ type:'success', text:`Delivered ${selected.size} order(s)` })
-      fetchOrders(); clearSelected()
-    } catch (e) {
-      setMsg({ type:'error', text:e.message })
-    }
+    setShowModal({ 
+      type: 'deliverMultiple', 
+      selectedIds: Array.from(selected),
+      title: 'Deliver Selected Orders', 
+      message: `Mark ${selected.size} selected order(s) as delivered?`,
+      placeholder: 'Delivered by (name or rep)'
+    })
+    setModalInput('rep')
   }
 
   const exportCSV = () => {
