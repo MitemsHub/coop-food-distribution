@@ -5,6 +5,11 @@ import { verify } from '@/lib/signing'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function deptId(supabase, name) {
+  const { data } = await supabase.from('departments').select('id').eq('name', name).single()
+  return data?.id || -1
+}
+
 export async function GET(req) {
   try {
     const supabase = createClient()
@@ -34,7 +39,7 @@ export async function GET(req) {
       .eq('status', status)
       .order('order_id', { ascending: false })
 
-    if (dept) q = q.eq('department_id', (await deptId(dept)))
+    if (dept) q = q.eq('department_id', (await deptId(supabase, dept)))
     if (cursor) {
       q = direction === 'next'
         ? q.lt('order_id', Number(cursor))
@@ -54,10 +59,5 @@ export async function GET(req) {
     return NextResponse.json({ ok:true, orders: page, nextCursor, branch: claim.branch_code })
   } catch (e) {
     return NextResponse.json({ ok:false, error:e.message }, { status:500 })
-  }
-
-  async function deptId(name) {
-    const { data } = await supabase.from('departments').select('id').eq('name', name).single()
-    return data?.id || -1
   }
 }
