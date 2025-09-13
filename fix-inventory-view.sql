@@ -1,10 +1,11 @@
--- Create v_inventory_status view for inventory management
--- This view provides comprehensive inventory status across all branches and items
--- FIXED: Now uses delivery_branch_id instead of branch_id for stock calculations
+-- Fix for Inventory View - Use delivery_branch_id instead of branch_id
+-- This fixes the issue where orders delivered to DUTSE weren't affecting DUTSE stock levels
+-- Run this SQL script in Supabase SQL Editor
 
--- Drop existing view if it exists to avoid column name conflicts
+-- Drop existing view
 DROP VIEW IF EXISTS v_inventory_status;
 
+-- Create updated view with delivery_branch_id logic
 CREATE VIEW v_inventory_status AS
 SELECT 
     b.code as branch_code,
@@ -75,9 +76,21 @@ SELECT
 FROM branches b
 CROSS JOIN items i
 LEFT JOIN branch_item_prices bip ON b.id = bip.branch_id AND i.item_id = bip.item_id
-WHERE bip.id IS NOT NULL  -- Only include items that have prices set for the branch
+WHERE bip.id IS NOT NULL
 ORDER BY b.name, i.name;
 
--- Create an index on the view for better performance
+-- Create index for better performance
 CREATE INDEX IF NOT EXISTS idx_v_inventory_status_branch_item 
 ON branch_item_prices(branch_id, item_id);
+
+-- Test the fix - Check DUTSE stock levels
+SELECT 
+    branch_code,
+    sku,
+    item_name,
+    initial_stock,
+    allocated_qty,
+    remaining_after_posted
+FROM v_inventory_status 
+WHERE branch_code = 'DUTSE'
+ORDER BY sku;

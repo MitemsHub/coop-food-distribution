@@ -148,8 +148,11 @@ function ShopPageContent() {
           .eq('branch_code', deliveryBranchCode)
           .order('item_name')
         
+
+        
         // Fallback to original query if view doesn't exist
         if (error && error.message.includes('does not exist')) {
+
           const { data: fallbackRows, error: fallbackError } = await supabase
             .from('branch_item_prices')
             .select(`
@@ -169,11 +172,13 @@ function ShopPageContent() {
           
           rows = fallbackRows
           error = fallbackError
+
         }
         
 
         
         if (error) {
+  
           setItems([])
           return
         }
@@ -184,6 +189,7 @@ function ShopPageContent() {
           if (row.item_name) {
             // v_inventory_status view format
             const availableStock = Math.max(0, row.remaining_after_posted || 0)
+
             return {
               sku: row.sku,
               name: row.item_name,
@@ -197,6 +203,7 @@ function ShopPageContent() {
           } else {
             // Fallback branch_item_prices format
             const availableStock = Math.max(0, row.initial_stock || 0)
+
             return {
               sku: row.items.sku,
               name: row.items.name,
