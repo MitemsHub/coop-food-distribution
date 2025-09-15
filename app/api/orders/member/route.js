@@ -86,9 +86,23 @@ export async function GET(request) {
       return NextResponse.json({ ok: false, error: 'Failed to fetch orders' }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, orders: orders || [] })
+    const response = NextResponse.json({ ok: true, orders: orders || [] })
+    
+    // Add headers for better Chrome compatibility
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
   } catch (error) {
     console.error('Member orders API error:', error)
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+    const errorResponse = NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+    
+    // Add headers for error responses too
+    errorResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    errorResponse.headers.set('Pragma', 'no-cache')
+    errorResponse.headers.set('Expires', '0')
+    
+    return errorResponse
   }
 }

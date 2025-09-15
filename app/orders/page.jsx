@@ -30,7 +30,12 @@ function OrdersPageContent() {
     try {
       setLoading(true)
       const res = await fetch(`/api/orders/member?member_id=${memberId}`, {
-        credentials: 'include'
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
       })
       const data = await res.json()
       
@@ -61,7 +66,7 @@ function OrdersPageContent() {
   }
 
   const downloadReceipt = (orderId) => {
-    window.open(`/shop/success/${orderId}?member_id=${memberId}`, '_blank')
+    window.open(`/shop/success/${orderId}?mid=${memberId}`, '_blank')
   }
 
   if (loading) {

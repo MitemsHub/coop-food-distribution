@@ -287,7 +287,7 @@ function CartPageContent() {
         localStorage.removeItem(`cart_${memberId}`)
         
         // Redirect to success page
-        router.push(`/shop/success/${data.order_id}?member_id=${memberId}`)
+        router.push(`/shop/success/${data.order_id}?mid=${memberId}`)
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to submit order' })
       }
