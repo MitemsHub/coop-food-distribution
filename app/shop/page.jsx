@@ -812,7 +812,7 @@ function ShopPageContent() {
                   <p className="text-sm sm:text-base text-gray-500">No items configured for this branch.</p>
                 </div>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 lg:gap-3 xl:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6 2xl:grid-cols-7 gap-2 lg:gap-3 xl:gap-4">
                 {React.useMemo(() => items.map(it => {
                   // Pre-calculate all values to avoid repeated calculations in render
                   const currentQty = qty[it.sku] || 0
@@ -849,7 +849,7 @@ function ShopPageContent() {
                       <div className="font-bold text-sm md:text-lg text-gray-900 mb-1 leading-tight break-words">{it.name}</div>
                       <div className="text-xs md:text-sm text-gray-500 mb-2 break-words">{it.unit} • {it.category}</div>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                        <div className="text-base md:text-xl font-bold text-orange-600">₦{it.price.toLocaleString()}</div>
+                        <div className="text-sm lg:text-base xl:text-lg font-bold text-orange-600">₦{it.price.toLocaleString()}</div>
                         <div className={`text-xs sm:text-xs md:text-sm px-2 py-1 rounded-full text-center whitespace-nowrap font-medium ${stockColorClass}`}>
                           {it.demand_tracking_mode ? `Demand: ${it.total_demand || 0}` : `No Stock Data`}
                         </div>
