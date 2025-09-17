@@ -11,24 +11,22 @@ export async function GET() {
     const byBranchQ       = supabase.from('v_applications_by_branch').select('*')
   const byBranchDeptQ   = supabase.from('v_applications_by_branch_department').select('*')
   const byCategoryQ     = supabase.from('v_applications_by_category').select('*')
-  const inventoryQ      = supabase.from('v_inventory_status').select('*')
 
   const totalPostedQ    = supabase.from('orders').select('order_id', { count: 'exact', head: true }).in('status', ['Posted','Delivered'])
   const totalPendingQ   = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Pending')
   const totalDeliveredQ = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Delivered')
-  const totalCancelledQ = supabase.from('orders').select('order_id', { count: 'exact', head: true }).eq('status', 'Cancelled')
   const totalAllQ       = supabase.from('orders').select('order_id', { count: 'exact', head: true })
 
     const [
-      byBranch, byBranchDept, byCat, inventory,
-      totalPosted, totalPending, totalDelivered, totalCancelled, totalAll
+      byBranch, byBranchDept, byCat,
+      totalPosted, totalPending, totalDelivered, totalAll
     ] = await Promise.all([
-      byBranchQ, byBranchDeptQ, byCategoryQ, inventoryQ,
-      totalPostedQ, totalPendingQ, totalDeliveredQ, totalCancelledQ, totalAllQ
+      byBranchQ, byBranchDeptQ, byCategoryQ,
+      totalPostedQ, totalPendingQ, totalDeliveredQ, totalAllQ
     ])
 
-    const err = byBranch.error || byBranchDept.error || byCat.error || inventory.error
-            || totalPosted.error || totalPending.error || totalDelivered.error || totalCancelled.error || totalAll.error
+    const err = byBranch.error || byBranchDept.error || byCat.error
+            || totalPosted.error || totalPending.error || totalDelivered.error || totalAll.error
     if (err) throw new Error(err.message)
 
     return NextResponse.json({
@@ -37,13 +35,11 @@ export async function GET() {
         totalPosted: totalPosted.count ?? 0,
         totalPending: totalPending.count ?? 0,
         totalDelivered: totalDelivered.count ?? 0,
-        totalCancelled: totalCancelled.count ?? 0,
         totalAll: totalAll.count ?? 0
       },
       byBranch: byBranch.data || [],
       byBranchDept: byBranchDept.data || [],
-      byCategory: byCat.data || [],
-      inventory: inventory.data || []
+      byCategory: byCat.data || []
     })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })

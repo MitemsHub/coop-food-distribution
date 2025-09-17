@@ -131,7 +131,7 @@ function ShopPageContent() {
           return
         }
 
-        // Get items with real-time stock from inventory status view (fallback to branch_item_prices if view doesn't exist)
+        // Get items with demand tracking data from inventory status view (fallback to branch_item_prices if view doesn't exist)
         let { data: rows, error } = await supabase
           .from('v_inventory_status')
           .select(`
@@ -141,9 +141,11 @@ function ShopPageContent() {
             category,
             image_url,
             price,
-            initial_stock,
-            remaining_after_posted,
-            remaining_after_delivered
+            demand_tracking_mode,
+            total_demand,
+            pending_demand,
+            confirmed_demand,
+            delivered_demand
           `)
           .eq('branch_code', deliveryBranchCode)
           .order('item_name')
@@ -157,7 +159,6 @@ function ShopPageContent() {
             .from('branch_item_prices')
             .select(`
               price,
-              initial_stock,
               items:item_id(
                 item_id,
                 name, 
@@ -183,41 +184,43 @@ function ShopPageContent() {
           return
         }
         
-        // Use remaining_after_posted as available stock (accounts for pending/posted orders)
-        const itemsWithStock = (rows || []).map(row => {
+        // Process items for demand tracking mode
+        const itemsWithDemand = (rows || []).map(row => {
           // Handle both v_inventory_status view format and fallback format
           if (row.item_name) {
             // v_inventory_status view format
-            const availableStock = Math.max(0, row.remaining_after_posted || 0)
-
             return {
               sku: row.sku,
               name: row.item_name,
               unit: row.unit,
               category: row.category,
               price: Number(row.price),
-              initial_stock: availableStock,
-              remaining_after_posted: availableStock, // Set both fields consistently
-              image_url: row.image_url
+              image_url: row.image_url,
+              demand_tracking_mode: row.demand_tracking_mode,
+              total_demand: row.total_demand || 0,
+              pending_demand: row.pending_demand || 0,
+              confirmed_demand: row.confirmed_demand || 0,
+              delivered_demand: row.delivered_demand || 0
             }
           } else {
-            // Fallback branch_item_prices format
-            const availableStock = Math.max(0, row.initial_stock || 0)
-
+            // Fallback branch_item_prices format - pure demand tracking
             return {
               sku: row.items.sku,
               name: row.items.name,
               unit: row.items.unit,
               category: row.items.category,
               price: Number(row.price),
-              initial_stock: availableStock,
-              remaining_after_posted: availableStock, // Set both fields consistently
-              image_url: row.items.image_url
+              image_url: row.items.image_url,
+              demand_tracking_mode: true, // Always use demand tracking
+              total_demand: 0,
+              pending_demand: 0,
+              confirmed_demand: 0,
+              delivered_demand: 0
             }
           }
         })
 
-        setItems(itemsWithStock)
+        setItems(itemsWithDemand)
         setQty({})
       } catch (e) {
         setItems([])
@@ -372,17 +375,7 @@ function ShopPageContent() {
       return
     }
     
-    // Check stock availability for increases - use real-time available stock
-    if (adjustment > 0) {
-      const availableStock = item.remaining_after_posted || item.initial_stock || 0
-      if (newQty > availableStock) {
-        setMessage({ 
-          type: 'error', 
-          text: `Only ${availableStock} items available. Current cart: ${currentQty}` 
-        })
-        return
-      }
-    }
+    // Demand tracking mode - no stock limits, allow unlimited ordering
     
     // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
     const previousQty = currentQty
@@ -773,6 +766,34 @@ function ShopPageContent() {
                 <option key="cash" value="Cash">Cash</option>
                  </select>
                </div>
+               
+               {/* Cash Payment Instructions */}
+               {paymentOption === 'Cash' && (
+                 <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                   <div className="flex items-start">
+                     <svg className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                     </svg>
+                     <div>
+                       <h3 className="text-sm font-semibold text-blue-800 mb-2">Cash Payment Instructions</h3>
+                       <p className="text-sm text-blue-700 mb-3">
+                         After placing your order, kindly send your payment receipt to the Cooperative for verification.
+                       </p>
+                       <a 
+                         href="https://wa.me/+2349061388502" 
+                         target="_blank" 
+                         rel="noopener noreferrer"
+                         className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors duration-200"
+                       >
+                         <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.097z"/>
+                         </svg>
+                         Send Receipt via WhatsApp
+                       </a>
+                     </div>
+                   </div>
+                 </div>
+               )}
              </div>
 
             {/* Items */}
@@ -795,16 +816,17 @@ function ShopPageContent() {
                 {React.useMemo(() => items.map(it => {
                   // Pre-calculate all values to avoid repeated calculations in render
                   const currentQty = qty[it.sku] || 0
-                  const availableStock = it.remaining_after_posted || it.initial_stock || 0
-                  // Calculate remaining stock after current cart quantity
-                  const remainingStock = Math.max(0, availableStock - currentQty)
                   const isLoading = loadingItems.has(it.sku)
                   const canDecrease = currentQty > 0
-                  const canIncrease = availableStock > 0 && currentQty < availableStock
+                  // In demand tracking mode, always allow ordering (no stock constraints)
+                  const canIncrease = it.demand_tracking_mode || false // For traditional stock mode, would need stock data
                   
-                  const stockColorClass = remainingStock > 10 ? 'bg-green-100 text-green-700' : 
-                                         remainingStock > 0 ? 'bg-yellow-100 text-yellow-700' : 
-                                         'bg-red-100 text-red-700'
+                  // Different color logic for demand tracking vs stock tracking
+                  const stockColorClass = it.demand_tracking_mode ? 
+                    // For demand tracking: consistent green color for all demand values
+                    'bg-green-100 text-green-700' :
+                    // For stock tracking: would need stock data to determine color
+                    'bg-gray-100 text-gray-700'
                   
                   const decreaseButtonClass = 'shop-button w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full font-bold transition-colors duration-200 flex items-center justify-center text-sm md:text-base ' + (canDecrease ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
                   
@@ -829,7 +851,7 @@ function ShopPageContent() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                         <div className="text-base md:text-xl font-bold text-orange-600">₦{it.price.toLocaleString()}</div>
                         <div className={`text-xs sm:text-xs md:text-sm px-2 py-1 rounded-full text-center whitespace-nowrap font-medium ${stockColorClass}`}>
-                          Stock: {remainingStock}
+                          {it.demand_tracking_mode ? `Demand: ${it.total_demand || 0}` : `No Stock Data`}
                         </div>
                       </div>
                     </div>
@@ -847,7 +869,7 @@ function ShopPageContent() {
                          <input
                             type="number"
                             min={0}
-                            max={availableStock}
+                            max={it.demand_tracking_mode ? 999 : availableStock}
                             value={currentQty}
                             onChange={(e) => handleInputChange(it.sku, e.target.value)}
 

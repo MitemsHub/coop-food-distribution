@@ -11,7 +11,7 @@ export default function Navbar() {
   const { user, logout } = useAuth()
   const [lowCount, setLowCount] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
+  const [isDemandTrackingMode, setIsDemandTrackingMode] = useState(false)
 
   const userType = user?.type
 
@@ -22,9 +22,29 @@ export default function Navbar() {
 
   const closeMobileMenu = () => setMobileMenuOpen(false)
 
-  // Low-stock poll (every 90s) - only for admin
+  // Check demand tracking mode - only for admin
   useEffect(() => {
     if (userType !== 'admin') return
+    
+    const checkMode = async () => {
+      try {
+        const res = await fetch('/api/admin/system/mode')
+        const data = await res.json()
+        if (data?.ok) {
+          setIsDemandTrackingMode(data.isDemandTrackingMode || false)
+        }
+      } catch {}
+    }
+    checkMode()
+  }, [userType])
+
+  // Low-stock poll (every 90s) - only for admin and only in stock tracking mode
+  useEffect(() => {
+    if (userType !== 'admin' || isDemandTrackingMode) {
+      // Reset low count when in demand tracking mode or not admin
+      setLowCount(0)
+      return
+    }
     
     let t
     const load = async () => {
@@ -32,12 +52,14 @@ export default function Navbar() {
         const res = await fetch('/api/admin/inventory/low?threshold=20', { cache: 'no-store' })
         const j = await res.json()
         if (j?.ok) setLowCount(j.count || 0)
-      } catch {}
+      } catch {
+        setLowCount(0)
+      }
       t = setTimeout(load, 90_000)
     }
     load()
     return () => t && clearTimeout(t)
-  }, [userType])
+  }, [userType, isDemandTrackingMode])
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
@@ -206,7 +228,7 @@ export default function Navbar() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 Inventory
-                {lowCount > 0 && (
+                {!isDemandTrackingMode && lowCount > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs bg-red-500 text-white rounded-full animate-pulse">
                     {lowCount}
                   </span>
@@ -418,7 +440,7 @@ export default function Navbar() {
                   }`}
                 >
                   Inventory
-                  {lowCount > 0 && (
+                  {!isDemandTrackingMode && lowCount > 0 && (
                     <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs bg-red-500 text-white rounded-full animate-pulse">
                       {lowCount}
                     </span>

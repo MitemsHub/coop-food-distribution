@@ -20,50 +20,41 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Only Pending orders can be edited' }, { status: 400 })
     }
 
-    // Price lines from DB (server-side)
-    let total = 0
-    const priced = []
-    for (const l of lines) {
-      const sku = l.sku
+    // Validate lines format
+    const validatedLines = lines.map(l => {
       const qty = Number(l.qty || 0)
-      if (!sku || qty <= 0) return NextResponse.json({ ok: false, error: 'Invalid line' }, { status: 400 })
+      if (!l.sku || qty <= 0) {
+        throw new Error('Invalid line: SKU and positive quantity required')
+      }
+      return { sku: l.sku, qty }
+    })
 
-      const { data: item, error: iErr } = await supabase.from('items').select('item_id, sku').eq('sku', sku).single()
-      if (iErr || !item) return NextResponse.json({ ok: false, error: `Item not found: ${sku}` }, { status: 400 })
+    // Use optimized batch RPC function
+    const { data, error } = await supabase.rpc('update_order_lines_batch', {
+      p_order_id: orderId,
+      p_lines: JSON.stringify(validatedLines),
+      p_delivery_branch_id: order.delivery_branch_id
+    })
 
-      const { data: priceRow, error: pErr } = await supabase
-        .from('branch_item_prices')
-        .select('id, price')
-        .eq('branch_id', order.delivery_branch_id)
-        .eq('item_id', item.item_id)
-        .single()
-      if (pErr || !priceRow) return NextResponse.json({ ok: false, error: `No price for ${sku} in this branch` }, { status: 400 })
+    console.log('Update lines RPC result:', { orderId, linesCount: validatedLines.length, data, error })
 
-      const amount = Number(priceRow.price) * qty
-      total += amount
-      priced.push({
-        order_id: orderId,
-        item_id: item.item_id,
-        branch_item_price_id: priceRow.id,
-        unit_price: Number(priceRow.price),
-        qty,
-        amount,
-      })
+    if (error) {
+      console.error('Update lines RPC error:', error)
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
     }
 
-    // Replace lines (delete then insert)
-    const { error: delErr } = await supabase.from('order_lines').delete().eq('order_id', orderId)
-    if (delErr) return NextResponse.json({ ok: false, error: delErr.message }, { status: 400 })
+    if (!data || !data.success) {
+      console.error('Update lines RPC failed:', data)
+      return NextResponse.json({ ok: false, error: data?.error || 'Update failed' }, { status: 400 })
+    }
 
-    const { error: insErr } = await supabase.from('order_lines').insert(priced)
-    if (insErr) return NextResponse.json({ ok: false, error: insErr.message }, { status: 400 })
-
-    // Update order total
-    const { error: upErr } = await supabase.from('orders').update({ total_amount: total }).eq('order_id', orderId)
-    if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 400 })
-
-    return NextResponse.json({ ok: true, total })
+    return NextResponse.json({ 
+      ok: true, 
+      total: data.total_amount,
+      lines_updated: data.lines_count
+    })
   } catch (e) {
+    console.error('Update lines error:', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }
 }

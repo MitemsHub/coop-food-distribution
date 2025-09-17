@@ -21,7 +21,7 @@ DECLARE
     v_current_status TEXT;
     v_result JSON;
 BEGIN
-    -- Check if order exists and get current status
+    -- Check if order exists and get current status in a single query
     SELECT EXISTS(SELECT 1 FROM orders WHERE order_id = p_order_id), 
            status INTO v_order_exists, v_current_status
     FROM orders 
@@ -43,11 +43,21 @@ BEGIN
         );
     END IF;
     
-    -- Update order status to posted
+    -- Update order status to posted with optimized query
     UPDATE orders 
     SET status = 'Posted', 
-        posted_at = NOW()
-    WHERE order_id = p_order_id;
+        posted_at = NOW(),
+        updated_at = NOW()
+    WHERE order_id = p_order_id
+    AND status = 'Pending'; -- Additional safety check
+    
+    -- Check if update was successful
+    IF NOT FOUND THEN
+        RETURN json_build_object(
+            'success', false,
+            'error', 'Order could not be updated'
+        );
+    END IF;
     
     -- Return success
     RETURN json_build_object(

@@ -117,39 +117,46 @@ function RepPendingPageContent() {
       const filteredLines = editing.lines.filter(l => Number(l.qty) > 0)
       if (!filteredLines.length) throw new Error('At least one line qty > 0 required')
       
-      // Get item_ids for the SKUs
-      const itemsRes = await fetch('/api/items/list', { cache: 'no-store' })
-      const itemsJson = await safeJson(itemsRes, '/api/items/list')
-      if (!itemsJson.ok) throw new Error('Failed to load items')
-      
-      const itemsMap = new Map()
-      itemsJson.items.forEach(item => {
-        itemsMap.set(item.sku, item.id)
+      // Use batch API to get item IDs efficiently
+      const skus = filteredLines.map(l => l.sku)
+      const itemsRes = await fetch('/api/items/batch', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skus }),
+        cache: 'no-store' 
       })
+      const itemsJson = await safeJson(itemsRes, '/api/items/batch')
+      if (!itemsJson.ok) throw new Error('Failed to load items: ' + itemsJson.error)
+      
+      if (itemsJson.missing_count > 0) {
+        throw new Error(`Items not found: ${itemsJson.missing_skus.join(', ')}`)
+      }
       
       // Convert to the format expected by rep API
-      const orderLines = filteredLines.map(l => {
-        const item_id = itemsMap.get(l.sku)
-        if (!item_id) throw new Error(`Item not found: ${l.sku}`)
-        return {
-          item_id,
-          qty: Number(l.qty)
-          // Note: unit_price is no longer sent - server will validate and use correct price
-        }
-      })
+      const orderLines = filteredLines.map(l => ({
+        item_id: itemsJson.items[l.sku]?.id,
+        qty: Number(l.qty)
+      }))
+      
+      // Validate all items were found
+      const invalidLines = orderLines.filter(l => !l.item_id)
+      if (invalidLines.length > 0) {
+        throw new Error('Some items could not be resolved')
+      }
       
       const res = await fetch('/api/rep/orders/update', {
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId: editing.order_id, orderLines })
       })
       const json = await safeJson(res, '/api/rep/orders/update')
       if (!json.ok) throw new Error(json.error || 'Update failed')
-      setMsg({ type:'success', text:`Order ${editing.order_id} updated` })
+      
+      setMsg({ type: 'success', text: `Order ${editing.order_id} updated successfully` })
       setEditing(null)
-      fetchOrders(true)
+      fetchOrders()
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      setMsg({ type: 'error', text: e.message })
     }
   }
 
@@ -291,9 +298,10 @@ function RepPendingPageContent() {
               <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
               <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button>
-              <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button>
+            <div className="grid grid-cols-1 gap-2">
+              {/* Edit and Delete buttons disabled for reps - only admin can perform these actions */}
+              {/* <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button> */}
+              {/* <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button> */}
               <button className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => postOne(o.order_id)}>Post</button>
             </div>
 

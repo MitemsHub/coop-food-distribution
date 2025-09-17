@@ -113,27 +113,11 @@ CREATE TABLE IF NOT EXISTS cycles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert sample data
-INSERT INTO branches (code, name) VALUES 
-('BR001', 'Main Branch'),
-('BR002', 'North Branch'),
-('BR003', 'South Branch'),
-('DUTSE', 'Dutse Branch'),
-('ABUJA', 'Abuja Branch'),
-('LAGOS', 'Lagos Branch'),
-('KANO', 'Kano Branch')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO departments (name) VALUES 
-('General'),
-('Produce'),
-('Dairy'),
-('Bakery')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO cycles (name, status) VALUES 
-('Current Cycle', 'active')
-ON CONFLICT (name) DO NOTHING;
+-- Sample data removed - add your own branches, departments, and cycles as needed
+-- Example:
+-- INSERT INTO branches (code, name) VALUES ('YOUR_BRANCH', 'Your Branch Name');
+-- INSERT INTO departments (name) VALUES ('Your Department');
+-- INSERT INTO cycles (name, status) VALUES ('Your Cycle', 'active');
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_members_branch_id ON members(branch_id);

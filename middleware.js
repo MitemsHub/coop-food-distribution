@@ -123,8 +123,8 @@ export async function middleware(request) {
     
     // Admin API protection
     if (pathname.startsWith('/api/admin/')) {
-      // Very strict rate limiting for admin APIs
-      const adminRateLimit = checkRateLimit(`admin:${clientIP}`, 20, 60000) // 20 admin requests per minute
+      // Reasonable rate limiting for admin APIs
+      const adminRateLimit = checkRateLimit(`admin:${clientIP}`, 60, 60000) // 60 admin requests per minute
       if (!adminRateLimit) {
         console.warn(`Admin API rate limit exceeded for IP: ${clientIP}`);
         return new NextResponse('Too Many Admin Requests', { 

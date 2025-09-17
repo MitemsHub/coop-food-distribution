@@ -7,31 +7,47 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req) {
   try {
-    const supabase = createClient()
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     const { orderIds, adminId } = await req.json()
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
-      return NextResponse.json({ ok: false, error: 'orderIds must be a non-empty array' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: 'orderIds array is required' }, { status: 400 })
     }
 
-    const results = []
-    for (const id of orderIds) {
-      const { data: result, error } = await supabase.rpc('post_order', { p_order_id: id, p_admin: adminId || 'admin' })
-      if (error) {
-        results.push({ id, ok: false, error: error.message })
-      } else if (result && !result.success) {
-        results.push({ id, ok: false, error: result.error })
-      } else {
-        results.push({ id, ok: true, error: null })
-      }
+    // Use optimized bulk RPC function
+    const { data, error } = await supabase.rpc('post_orders_bulk', { 
+      p_order_ids: orderIds, 
+      p_admin: adminId || 'admin@coop' 
+    })
+    
+    console.log('Bulk post RPC result:', { orderIds: orderIds.length, data, error })
+    
+    if (error) {
+      console.error('Bulk post RPC error:', error)
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
+    }
+    
+    if (!data || !data.success) {
+      console.error('Bulk post RPC failed:', data)
+      return NextResponse.json({ 
+        ok: false, 
+        error: data?.error || 'Bulk post failed',
+        posted: data?.posted || [],
+        failed: data?.failed || []
+      }, { status: 400 })
     }
 
-    const failed = results.filter(r => !r.ok)
-    return NextResponse.json({
-      ok: failed.length === 0,
-      posted: results.filter(r => r.ok).map(r => r.id),
-      failed
+    // Extract results from RPC response
+    const posted = data.posted || []
+    const failed = data.failed || []
+
+    return NextResponse.json({ 
+      ok: true, 
+      posted, 
+      failed,
+      message: `Posted ${posted.length} orders, ${failed.length} failed`
     })
   } catch (e) {
+    console.error('Bulk post error:', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }
 }

@@ -25,7 +25,7 @@ export async function POST(req) {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
 
     // Expected headers:
-    // sku, item_name, unit, category, branch_code, price, initial_stock
+    // sku, item_name, unit, category, branch_code, price
     if (!rows.length) return NextResponse.json({ ok: false, error: 'No rows found' }, { status: 400 })
 
     // Fetch branches
@@ -81,7 +81,6 @@ export async function POST(req) {
       const sku = String(r.sku || '').trim().toUpperCase()
       const branch_code = String(r.branch_code || '').trim().toUpperCase()
       const price = Number(String(r.price || '0').replace(/[, ]/g, '')) || 0
-      const initial_stock = Number(String(r.initial_stock || '0').replace(/[, ]/g, '')) || 0
 
       const item_id = itemIdBySku.get(sku)
       const branch_id = branchByCode.get(branch_code)
@@ -89,20 +88,7 @@ export async function POST(req) {
         if (!branch_id) unknownBranches.add(branch_code)
         continue
       }
-      priceUpserts.push({ branch_id, item_id, price, initial_stock })
-      
-      // Add inventory movement for initial stock if provided
-      if (initial_stock > 0 && activeCycle) {
-        inventoryMovements.push({
-          branch_id,
-          item_id,
-          cycle_id: activeCycle.id,
-          movement_type: 'In',
-          quantity: initial_stock,
-          reference_type: 'initial',
-          notes: 'Initial stock from import'
-        })
-      }
+      priceUpserts.push({ branch_id, item_id, price })
     }
 
     // Insert/Update prices using manual conflict resolution
@@ -121,7 +107,7 @@ export async function POST(req) {
           // Update existing record
           const { error: updateErr } = await supabase
              .from('branch_item_prices')
-             .update({ price: priceData.price, initial_stock: priceData.initial_stock })
+             .update({ price: priceData.price })
              .eq('branch_id', priceData.branch_id)
              .eq('item_id', priceData.item_id)
           if (updateErr) {
@@ -142,27 +128,10 @@ export async function POST(req) {
       }
     }
     
-    // Insert inventory movements for initial stock
-    let inventoryAffected = 0
-    if (inventoryMovements.length > 0) {
-      for (const part of chunk(inventoryMovements, 500)) {
-        const { error: invErr } = await supabase
-          .from('inventory_movements')
-          .insert(part)
-        
-        if (invErr) {
-          console.error('Inventory movements error:', invErr)
-        } else {
-          inventoryAffected += part.length
-        }
-      }
-    }
-
     return NextResponse.json({
       ok: true,
       itemsUpserted: itemsAffected,
       priceRowsUpserted: pricesAffected,
-      inventoryMovementsCreated: inventoryAffected,
       unknownBranches: [...unknownBranches].filter(Boolean)
     })
   } catch (e) {

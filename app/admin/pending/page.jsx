@@ -106,7 +106,7 @@ function PendingAdminPageContent() {
   const handleBulkPostSubmit = async () => {
     const { orderIds } = showModal
     try {
-      // First post in bulk
+      // Use optimized bulk post API
       const res = await fetch('/api/admin/orders/post-bulk', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -115,18 +115,26 @@ function PendingAdminPageContent() {
       const json = await safeJson(res, '/api/admin/orders/post-bulk')
       if (!json.ok) throw new Error(json.error || 'Bulk post failed')
 
-      // Then patch admin_note for posted ones if provided
-      if (modalInput && Array.isArray(json.posted)) {
-        await Promise.all(json.posted.map(id =>
+      // Handle admin notes for successfully posted orders
+      if (modalInput && Array.isArray(json.posted) && json.posted.length > 0) {
+        // Update admin notes in parallel for better performance
+        const notePromises = json.posted.map(id =>
           fetch('/api/admin/orders/post', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ orderId:id, adminId:'admin@coop', adminNote: modalInput })
           })
-        ))
+        )
+        await Promise.all(notePromises)
       }
 
-      setMsg({ type:'success', text:`Posted ${json.posted?.length || 0} order(s)` })
+      // Show detailed results
+      let message = `Posted ${json.posted?.length || 0} order(s)`
+      if (json.failed?.length > 0) {
+        message += `, ${json.failed.length} failed`
+      }
+
+      setMsg({ type:'success', text: message })
       fetchOrders(); setSelected(new Set())
       setShowModal(null)
       setModalInput('')
