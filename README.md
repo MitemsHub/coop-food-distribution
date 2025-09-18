@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Coop Food Distribution System
+
+A comprehensive food distribution management system built with Next.js and Supabase for cooperative food distribution operations.
+
+## Features
+
+- **Member Management**: Handle member registrations, eligibility, and order tracking
+- **Inventory Management**: Track stock levels, pricing, and item availability
+- **Order Processing**: Complete order lifecycle from placement to delivery
+- **Branch Operations**: Multi-branch support with branch-specific configurations
+- **Admin Dashboard**: Comprehensive administrative tools and reporting
+- **Representative Portal**: Tools for field representatives to manage deliveries
 
 ## Getting Started
 
-First, run the development server:
-
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up environment variables:
+   - Copy `.env.example` to `.env.local`
+   - Configure your Supabase credentials and other required variables
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `/app` - Next.js app router pages and API routes
+- `/components` - Reusable React components
+- `/lib` - Utility functions and database connections
+- `/migrations` - Database schema and migration files
+- `/docs` - Project documentation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Database
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This project uses Supabase as the backend database. Run the migrations in the `/migrations` folder to set up the required database schema.
 
-## Deploy on Vercel
+## Security
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The system implements comprehensive security measures including rate limiting, authentication, and data validation. See `/docs/SECURITY_IMPLEMENTATION.md` for details.
