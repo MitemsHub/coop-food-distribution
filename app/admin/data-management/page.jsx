@@ -156,10 +156,10 @@ function DataManagementPageContent() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `coop-backup-${new Date().toISOString().split('T')[0]}.json`
+        a.download = `coop-backup-${new Date().toISOString().split('T')[0]}.csv`
         a.click()
         URL.revokeObjectURL(url)
-        setMessage('Backup exported successfully')
+        setMessage('Backup exported successfully as CSV')
       } else {
         const result = await response.json()
         setMessage(`Error: ${result.error}`)

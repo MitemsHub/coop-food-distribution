@@ -11,6 +11,8 @@ export default function ItemManagement() {
   const [showImageUpload, setShowImageUpload] = useState(false)
   const [message, setMessage] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 8
 
   useEffect(() => {
     fetchItems()
@@ -71,6 +73,16 @@ export default function ItemManagement() {
     )
   }
 
+  // Pagination logic
+  const totalPages = Math.ceil(items.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentItems = items.slice(startIndex, endIndex)
+
+  const goToPage = (page) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -87,7 +99,7 @@ export default function ItemManagement() {
             Refresh
           </button>
           <div className="text-sm text-gray-600">
-            {items.length} items total
+            {items.length} items total • Page {currentPage} of {totalPages} • Showing {currentItems.length} items
           </div>
         </div>
       </div>
@@ -104,7 +116,7 @@ export default function ItemManagement() {
 
       {/* Items Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-        {items.map(item => (
+        {currentItems.map(item => (
           <div key={item.item_id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
             {/* Item Image */}
             <div className="mb-3">
@@ -154,6 +166,43 @@ export default function ItemManagement() {
           </div>
         ))}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 rounded-lg transition-colors text-sm"
+          >
+            Previous
+          </button>
+          
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                onClick={() => goToPage(page)}
+                className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                  currentPage === page
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+          </div>
+          
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 rounded-lg transition-colors text-sm"
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {items.length === 0 && (
         <div className="text-center py-8">
