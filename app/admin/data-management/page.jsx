@@ -156,10 +156,10 @@ function DataManagementPageContent() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `coop-backup-${new Date().toISOString().split('T')[0]}.csv`
+        a.download = `coop-backup-${new Date().toISOString().split('T')[0]}.xlsx`
         a.click()
         URL.revokeObjectURL(url)
-        setMessage('Backup exported successfully as CSV')
+        setMessage('Backup exported successfully as Excel file with multiple sheets')
       } else {
         const result = await response.json()
         setMessage(`Error: ${result.error}`)
@@ -211,7 +211,7 @@ function DataManagementPageContent() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>
           <p className="text-sm sm:text-base text-blue-700 mb-3 sm:mb-4">
-            Export all current data (orders, members, inventory) as a backup before making changes.
+            Export all current data (orders, members, inventory) as an Excel file with separate sheets for each data type.
           </p>
           <button
               type="button"
