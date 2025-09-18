@@ -767,6 +767,40 @@ function ShopPageContent() {
                  </select>
                </div>
                
+               {/* Savings Payment Instructions */}
+               {paymentOption === 'Savings' && savingsEligible > 0 && (
+                 <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                   <div className="flex items-start">
+                     <svg className="w-5 h-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                     </svg>
+                     <div>
+                       <h3 className="text-sm font-semibold text-green-800 mb-2">Savings Payment Information</h3>
+                       <p className="text-sm text-green-700">
+                         <strong>Important:</strong> Members can only use 50% of their total savings balance for purchases. Your current available savings limit is ₦{savingsEligible.toLocaleString()}.
+                       </p>
+                     </div>
+                   </div>
+                 </div>
+               )}
+
+               {/* Loan Payment Instructions */}
+               {paymentOption === 'Loan' && (
+                 <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                   <div className="flex items-start">
+                     <svg className="w-5 h-5 text-orange-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                     </svg>
+                     <div>
+                       <h3 className="text-sm font-semibold text-orange-800 mb-2">Loan Payment Information</h3>
+                       <p className="text-sm text-orange-700">
+                         Interest Rate: A 14% interest will be charged on all items purchased using the loan payment option.
+                       </p>
+                     </div>
+                   </div>
+                 </div>
+               )}
+
                {/* Cash Payment Instructions */}
                {paymentOption === 'Cash' && (
                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
