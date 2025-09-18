@@ -28,6 +28,7 @@ export async function GET(req) {
     
     // Get items with prices for this branch
     // Get items with prices and demand data from inventory view
+    // Only return items with prices > 0 (properly configured items)
     const { data: itemsWithPrices, error } = await supabase
       .from('v_inventory_status')
       .select(`
@@ -43,6 +44,7 @@ export async function GET(req) {
         category
       `)
       .eq('branch_code', branchCode)
+      .gt('price', 0)
       .order('item_name')
     
     if (error) {

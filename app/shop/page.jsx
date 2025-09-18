@@ -132,6 +132,7 @@ function ShopPageContent() {
         }
 
         // Get items with demand tracking data from inventory status view (fallback to branch_item_prices if view doesn't exist)
+        // Filter out zero-price items
         let { data: rows, error } = await supabase
           .from('v_inventory_status')
           .select(`
@@ -148,6 +149,7 @@ function ShopPageContent() {
             delivered_demand
           `)
           .eq('branch_code', deliveryBranchCode)
+          .gt('price', 0)
           .order('item_name')
         
 
@@ -169,6 +171,7 @@ function ShopPageContent() {
               )
             `)
             .eq('branch_id', br.id)
+            .gt('price', 0)
             .order('name', { foreignTable: 'items' })
           
           rows = fallbackRows
