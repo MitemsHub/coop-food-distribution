@@ -127,6 +127,10 @@ function CartPageContent() {
         loadEligibility(memberId)
       }
       
+      // Load branches and departments first, then set saved values
+      await Promise.all([loadBranches(), loadDepartments()])
+      
+      // Set saved values after departments are loaded
       if (savedDeliveryBranch) {
         setDeliveryBranch(savedDeliveryBranch)
       }
@@ -137,8 +141,6 @@ function CartPageContent() {
         setPaymentOption(savedPayment)
       }
       
-      loadBranches()
-      loadDepartments()
       setLoading(false)
     }
     
@@ -315,7 +317,10 @@ function CartPageContent() {
         <div className="text-center">
           <p className="text-gray-600 mb-2 lg:mb-3">Member data not found</p>
           <button 
-            onClick={() => router.push('/shop')}
+            onClick={() => {
+              sessionStorage.setItem('navigatingFromCart', 'true')
+              router.push('/shop')
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Back to Shop
@@ -353,7 +358,10 @@ function CartPageContent() {
                     </button>
                   ) : (
                     <button
-                      onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                      onClick={() => {
+                        sessionStorage.setItem('navigatingFromCart', 'true')
+                        router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                      }}
                       className="w-full md:w-auto px-2 py-1.5 sm:px-3 sm:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,7 +464,10 @@ function CartPageContent() {
                   </svg>
                   <p className="text-gray-500 mb-2 lg:mb-3">Your cart is empty</p>
                   <button
-                    onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                    onClick={() => {
+                      sessionStorage.setItem('navigatingFromCart', 'true')
+                      router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                    }}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     Start Shopping

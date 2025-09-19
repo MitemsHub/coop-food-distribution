@@ -10,6 +10,9 @@ function PendingAdminPageContent() {
   const [branch, setBranch] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [postingOrder, setPostingOrder] = useState(null) // Track which order is being posted
+  const [postingBulk, setPostingBulk] = useState(false) // Track bulk posting
+  const [savingEdit, setSavingEdit] = useState(false) // Track edit saving
   const [selected, setSelected] = useState(new Set())
   const [editing, setEditing] = useState(null)
   const [showModal, setShowModal] = useState(null)
@@ -80,6 +83,7 @@ function PendingAdminPageContent() {
 
   const handlePostSubmit = async () => {
     const { orderId } = showModal
+    setPostingOrder(orderId)
     try {
       const res = await fetch('/api/admin/orders/post', {
         method:'POST',
@@ -94,6 +98,8 @@ function PendingAdminPageContent() {
       setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
+    } finally {
+      setPostingOrder(null)
     }
   }
 
@@ -105,6 +111,7 @@ function PendingAdminPageContent() {
 
   const handleBulkPostSubmit = async () => {
     const { orderIds } = showModal
+    setPostingBulk(true)
     try {
       // Use optimized bulk post API
       const res = await fetch('/api/admin/orders/post-bulk', {
@@ -140,6 +147,8 @@ function PendingAdminPageContent() {
       setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
+    } finally {
+      setPostingBulk(false)
     }
   }
 
@@ -194,6 +203,7 @@ function PendingAdminPageContent() {
   }
   const editedTotal = useMemo(() => editing?.lines?.reduce((s, l) => s + Number(l.qty) * Number(l.price), 0) || 0, [editing])
   const saveEdit = async () => {
+    setSavingEdit(true)
     try {
       const payload = editing.lines.filter(l => Number(l.qty) > 0).map(l => ({ sku: l.sku, qty: Number(l.qty) }))
       if (!payload.length) throw new Error('At least one line qty > 0 required')
@@ -209,6 +219,8 @@ function PendingAdminPageContent() {
       fetchOrders()
     } catch (e) {
       setMsg({ type:'error', text:e.message })
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -240,8 +252,26 @@ function PendingAdminPageContent() {
       <div className="grid grid-cols-3 gap-3 mb-4">
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>{selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}</button>
-        <button className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50 text-xs sm:text-sm hover:bg-green-700 transition-colors shadow-sm" disabled={selected.size===0} onClick={postSelected}>
-          Post Selected ({selected.size})
+        <button 
+          className={`px-4 py-2 rounded-lg text-xs sm:text-sm transition-all duration-200 shadow-sm ${
+            postingBulk || selected.size === 0
+              ? 'bg-gray-400 text-white cursor-not-allowed' 
+              : 'bg-green-600 text-white hover:bg-green-700'
+          }`}
+          disabled={selected.size === 0 || postingBulk} 
+          onClick={postSelected}
+        >
+          {postingBulk ? (
+            <div className="flex items-center">
+              <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Posting...
+            </div>
+          ) : (
+            `Post Selected (${selected.size})`
+          )}
         </button>
       </div>
 
@@ -268,7 +298,27 @@ function PendingAdminPageContent() {
               <div className="flex flex-wrap gap-2">
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700" onClick={() => startEdit(o)}>Edit</button>
 
-                <button className="px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded text-xs sm:text-sm hover:bg-green-700" onClick={() => doPost(o.order_id)}>Post</button>
+                <button 
+                  className={`px-2 py-1 sm:px-3 sm:py-1 rounded text-xs sm:text-sm transition-all duration-200 ${
+                    postingOrder === o.order_id 
+                      ? 'bg-gray-400 text-white cursor-not-allowed' 
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  }`}
+                  onClick={() => doPost(o.order_id)}
+                  disabled={postingOrder === o.order_id}
+                >
+                  {postingOrder === o.order_id ? (
+                    <div className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Posting...
+                    </div>
+                  ) : (
+                    'Post'
+                  )}
+                </button>
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-red-600 text-white rounded text-xs sm:text-sm hover:bg-red-700" onClick={() => doDelete(o.order_id)}>Delete</button>
               </div>
             </div>
@@ -342,7 +392,27 @@ function PendingAdminPageContent() {
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
                 <button className="flex-1 sm:flex-none px-3 py-2 border rounded text-sm" onClick={() => setEditing(null)}>Cancel</button>
-                <button className="flex-1 sm:flex-none px-3 py-2 bg-blue-600 text-white rounded text-sm" onClick={saveEdit}>Save</button>
+                <button 
+                  className={`flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-all duration-200 ${
+                    savingEdit 
+                      ? 'bg-gray-400 text-white cursor-not-allowed' 
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                  onClick={saveEdit}
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </div>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
               </div>
             </div>
           </div>

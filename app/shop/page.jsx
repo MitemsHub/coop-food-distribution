@@ -19,8 +19,8 @@ function ShopPageContent() {
 
   // Branches: member (home/reporting) vs delivery (pricing/stock)
   const [memberBranchCode, setMemberBranchCode] = useState('')
-  const [deliveryBranchCode, setDeliveryBranchCode] = useState('DUTSE') // default
-  const [departmentName, setDepartmentName] = useState('Branch Operations Department')
+  const [deliveryBranchCode, setDeliveryBranchCode] = useState('') // Remove default to show placeholder
+  const [departmentName, setDepartmentName] = useState('') // Remove default to show placeholder
 
   // Items/cart
   const [items, setItems] = useState([])
@@ -38,9 +38,11 @@ function ShopPageContent() {
 
   // UI state
   const [submitting, setSubmitting] = useState(false)
+  const [goingToCart, setGoingToCart] = useState(false)
   const [message, setMessage] = useState(null)
   const [loadingItems, setLoadingItems] = useState(new Set()) // Track items with pending API calls
   const [inputTimeouts, setInputTimeouts] = useState(new Map()) // Debounce input changes
+  const [lookingUpMember, setLookingUpMember] = useState(false) // Track member lookup loading
 
   // Safe JSON helper
   const safeJson = async (res, label) => {
@@ -102,8 +104,10 @@ function ShopPageContent() {
       ])
       setBranches(b || [])
       setDepartments(d || [])
+      
+      // Don't auto-load saved values on login - let member make fresh selections
     })()
-  }, [])
+  }, [memberId])
 
   // Load items for DELIVERY branch (cycle-scoped view)
   useEffect(() => {
@@ -252,22 +256,33 @@ function ShopPageContent() {
     }
   }, [memberId, items])
 
-  // Load saved delivery preferences from localStorage
+  // Load saved preferences from localStorage (only during session navigation, not on fresh login)
   useEffect(() => {
     if (memberId) {
-      const savedDeliveryBranch = localStorage.getItem(`deliveryBranch_${memberId}`)
-      const savedDepartment = localStorage.getItem(`department_${memberId}`)
       const savedPayment = localStorage.getItem(`paymentOption_${memberId}`)
       
-      if (savedDeliveryBranch) {
-        setDeliveryBranchCode(savedDeliveryBranch)
-      }
-      if (savedDepartment) {
-        setDepartmentName(savedDepartment)
-      }
       if (savedPayment) {
         setPaymentOption(savedPayment)
       }
+      
+      // Only load delivery branch and department if coming from cart (session navigation)
+      // Check if we have a referrer or navigation state indicating we're coming from cart
+      const isFromCart = document.referrer.includes('/cart') || sessionStorage.getItem('navigatingFromCart')
+      
+      if (isFromCart) {
+        const savedDeliveryBranch = localStorage.getItem(`deliveryBranch_${memberId}`)
+        const savedDepartment = localStorage.getItem(`department_${memberId}`)
+        
+        if (savedDeliveryBranch) {
+          setDeliveryBranchCode(savedDeliveryBranch)
+        }
+        if (savedDepartment) {
+          setDepartmentName(savedDepartment)
+        }
+      }
+      
+      // Clear the navigation flag
+      sessionStorage.removeItem('navigatingFromCart')
     }
   }, [memberId])
 
@@ -276,48 +291,57 @@ function ShopPageContent() {
     setMessage(null)
     if (!memberId) return
 
-    const normalizedMemberId = memberId.trim().toUpperCase()
-    const { data, error } = await supabase
-      .from('members')
-      .select(`
-        member_id,
-        full_name,
-        savings,
-        loans,
-        global_limit,
-        category,
-        branches:branch_id(code, name),
-        departments:department_id(name)
-      `)
-      .eq('member_id', normalizedMemberId)
-      .single()
-
-    if (error || !data) {
-      setMember(null)
-      setEligibility({
-        savingsEligible: 0,
-        loanEligible: 0,
-        outstandingLoansTotal: 0,
-        savingsExposure: 0,
-        loanExposure: 0,
-      })
-      setMessage({ type: 'error', text: 'Member not found. Please upload members or use a test member.' })
-      return
-    }
-
-    setMember(data)
-    if (data?.branches?.code) {
-      setMemberBranchCode(data.branches.code)
-      setDeliveryBranchCode(prev => prev || data.branches.code)
-    }
-    if (data?.departments?.name) setDepartmentName(data.departments.name)
-
+    setLookingUpMember(true)
+    
     try {
-      const res = await fetch(`/api/members/eligibility?member_id=${encodeURIComponent(normalizedMemberId)}`)
-      const json = await safeJson(res, '/api/members/eligibility')
-      if (json.ok) setEligibility(json.eligibility)
-    } catch (e) {
-      console.warn('eligibility fetch failed:', e.message)
+      const normalizedMemberId = memberId.trim().toUpperCase()
+      const { data, error } = await supabase
+        .from('members')
+        .select(`
+          member_id,
+          full_name,
+          savings,
+          loans,
+          global_limit,
+          category,
+          branches:branch_id(code, name),
+          departments:department_id(name)
+        `)
+        .eq('member_id', normalizedMemberId)
+        .single()
+
+      if (error || !data) {
+        setMember(null)
+        setEligibility({
+          savingsEligible: 0,
+          loanEligible: 0,
+          outstandingLoansTotal: 0,
+          savingsExposure: 0,
+          loanExposure: 0,
+        })
+        setMessage({ type: 'error', text: 'Member not found. Please upload members or use a test member.' })
+        return
+      }
+
+      setMember(data)
+      if (data?.branches?.code) {
+        setMemberBranchCode(data.branches.code)
+        // Don't auto-set delivery branch - let member choose
+      }
+      // Don't auto-set department - let member choose
+
+      try {
+        const res = await fetch(`/api/members/eligibility?member_id=${encodeURIComponent(normalizedMemberId)}`)
+        const json = await safeJson(res, '/api/members/eligibility')
+        if (json.ok) setEligibility(json.eligibility)
+      } catch (e) {
+        console.warn('eligibility fetch failed:', e.message)
+      }
+    } catch (error) {
+      console.error('Member lookup error:', error)
+      setMessage({ type: 'error', text: 'Error looking up member. Please try again.' })
+    } finally {
+      setLookingUpMember(false)
     }
   }
 
@@ -641,19 +665,30 @@ function ShopPageContent() {
                     type="text"
                     value={memberId}
                     onChange={e => setMemberId(e.target.value.toUpperCase())}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 md:px-4 md:py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 text-sm"
+                    disabled={lookingUpMember}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 md:px-4 md:py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 text-sm disabled:bg-gray-50 disabled:cursor-not-allowed"
                     placeholder="e.g. A12345"
                   />
                 </div>
                 <div className="col-span-1 flex items-end">
                   <button 
                     onClick={lookupMember} 
-                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 md:px-6 md:py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm"
+                    disabled={lookingUpMember || !memberId.trim()}
+                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 md:px-6 md:py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:from-blue-500 disabled:hover:to-blue-600"
                   >
-                    <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    Lookup
+                    {lookingUpMember ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2 inline-block"></div>
+                        Looking up...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        Lookup
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -963,20 +998,33 @@ function ShopPageContent() {
                  </div>
                  <div className="flex items-center justify-center">
                    <button
-                     disabled={cartLines.length === 0}
-                     onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                     disabled={cartLines.length === 0 || goingToCart}
+                     onClick={async () => {
+                       setGoingToCart(true)
+                       router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                     }}
                      className={`w-full py-2 md:py-3 px-2 md:px-3 rounded-lg font-semibold text-xs md:text-sm transition-all duration-200 ${
-                       cartLines.length > 0
+                       cartLines.length > 0 && !goingToCart
                          ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-md hover:shadow-lg transform hover:scale-105' 
                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                      }`}
                    >
-                     <div className="flex items-center justify-center">
-                       <svg className="w-3 h-3 md:w-4 md:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-                       </svg>
-                       Go to Cart
-                     </div>
+                     {goingToCart ? (
+                       <div className="flex items-center justify-center">
+                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                         </svg>
+                         Loading...
+                       </div>
+                     ) : (
+                       <div className="flex items-center justify-center">
+                         <svg className="w-3 h-3 md:w-4 md:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                         </svg>
+                         Go to Cart
+                       </div>
+                     )}
                    </button>
                  </div>
                </div>

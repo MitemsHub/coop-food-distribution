@@ -1,26 +1,38 @@
 // app/components/MemberLauncher.jsx
 'use client'
 
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 
 export default function MemberLauncher() {
   const { login } = useAuth()
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
   
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     const mid = new FormData(e.currentTarget).get('mid')?.toString().trim().toUpperCase()
     if (!mid) return
     
-    // Set user as authenticated member
-    login({
-      type: 'member',
-      id: mid,
-      authenticated: true
-    })
+    setIsLoading(true)
     
-    router.push(`/shop?mid=${encodeURIComponent(mid)}`)
+    try {
+      // Set user as authenticated member
+      login({
+        type: 'member',
+        id: mid,
+        authenticated: true
+      })
+      
+      // Add a small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      router.push(`/shop?mid=${encodeURIComponent(mid)}`)
+    } catch (error) {
+      console.error('Navigation error:', error)
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -28,7 +40,8 @@ export default function MemberLauncher() {
       <div className="relative">
         <input
           name="mid"
-          className="w-full px-3 py-2 md:px-4 md:py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 outline-none text-sm md:text-base text-gray-700 placeholder-gray-400"
+          disabled={isLoading}
+          className="w-full px-3 py-2 md:px-4 md:py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 outline-none text-sm md:text-base text-gray-700 placeholder-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
           placeholder="Enter your Member ID (e.g., A12345)"
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3">
@@ -37,11 +50,24 @@ export default function MemberLauncher() {
           </svg>
         </div>
       </div>
-      <button className="w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm md:text-base font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl">
-        <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-        </svg>
-        Start Shopping
+      <button 
+        type="submit"
+        disabled={isLoading}
+        className="w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm md:text-base font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:from-blue-500 disabled:hover:to-blue-600"
+      >
+        {isLoading ? (
+          <>
+            <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-2 border-white border-t-transparent mr-2"></div>
+            Loading...
+          </>
+        ) : (
+          <>
+            <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+            </svg>
+            Start Shopping
+          </>
+        )}
       </button>
     </form>
   )

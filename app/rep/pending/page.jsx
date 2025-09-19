@@ -13,6 +13,7 @@ function RepPendingPageContent() {
   const [msg, setMsg] = useState(null)
   const [nextCursor, setNextCursor] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [postingOrder, setPostingOrder] = useState(null) // Track which order is being posted
   const [editing, setEditing] = useState(null)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
@@ -66,6 +67,7 @@ function RepPendingPageContent() {
 
   const handlePostSubmit = async () => {
     const { orderId } = showModal
+    setPostingOrder(orderId)
     try {
       const res = await fetch('/api/rep/orders/post', {
         method:'POST',
@@ -82,6 +84,8 @@ function RepPendingPageContent() {
       setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
+    } finally {
+      setPostingOrder(null)
     }
   }
 
@@ -302,7 +306,27 @@ function RepPendingPageContent() {
               {/* Edit and Delete buttons disabled for reps - only admin can perform these actions */}
               {/* <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button> */}
               {/* <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button> */}
-              <button className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => postOne(o.order_id)}>Post</button>
+              <button 
+                className={`px-3 py-1 rounded text-xs sm:text-sm whitespace-nowrap transition-all duration-200 ${
+                  postingOrder === o.order_id 
+                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+                onClick={() => postOne(o.order_id)}
+                disabled={postingOrder === o.order_id}
+              >
+                {postingOrder === o.order_id ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Posting...
+                  </div>
+                ) : (
+                  'Post'
+                )}
+              </button>
             </div>
 
             <div className="overflow-x-auto mt-2">
