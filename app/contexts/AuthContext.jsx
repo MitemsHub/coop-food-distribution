@@ -12,19 +12,7 @@ function AuthProviderContent({ children }) {
   const router = useRouter()
 
   useEffect(() => {
-    // Check for member ID in URL params
-    const mid = searchParams.get('mid')
-    if (mid) {
-      setUser({
-        type: 'member',
-        id: mid,
-        authenticated: true
-      })
-      setLoading(false)
-      return
-    }
-
-    // Check for stored user data
+    // Only check for stored user data, don't auto-authenticate based on URL params
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
       try {

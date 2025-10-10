@@ -1,115 +1,181 @@
 // app/page.jsx
 import Link from 'next/link'
-import MemberLauncher from './components/MemberLauncher'
+import { ProfessionalDeliveryTruck, ProfessionalWarehouse, ProfessionalCommunitySymbol, ProfessionalFoodBasket, ProfessionalDistributionNetwork, ProfessionalCooperativeLogo } from './components/ProfessionalBackground'
 
-export default function Landing() {
+export default function MemberVerification() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-green-600/10"></div>
-        <div className="relative px-4 md:px-6 py-8 md:py-16 text-center">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent mb-2 md:mb-4">
-              CBN Coop
-            </h1>
-            <p className="text-lg md:text-2xl lg:text-3xl text-gray-700 font-light mb-1 md:mb-2">Food Distribution Portal</p>
-            <p className="text-sm md:text-lg text-gray-600 max-w-2xl mx-auto px-2">
-              Your one-stop platform for cooperative food distribution management
-            </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 via-white to-emerald-50 flex flex-col">
+      <main className="flex-1 flex items-center justify-center relative overflow-hidden py-4 md:py-6">
+        {/* Enhanced professional gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/5 via-transparent to-green-900/5"></div>
+        <div className="absolute inset-0 bg-gradient-to-bl from-indigo-800/3 via-transparent to-emerald-800/3"></div>
+      {/* Professional Welcoming Background Design - Responsive */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Strategic placement for visual hierarchy and professional composition */}
+        
+        {/* Top section - Corporate identity and logistics */}
+        <div className="absolute top-0 left-0 w-full h-1/3">
+          <ProfessionalCooperativeLogo 
+            className="absolute top-4 left-4 md:top-8 md:left-12 opacity-8" 
+            size={80}
+          />
+          <ProfessionalDeliveryTruck 
+            className="absolute top-8 right-4 md:top-16 md:right-20 opacity-12" 
+            size={80}
+          />
+          <ProfessionalDistributionNetwork 
+            className="hidden md:block absolute top-24 left-1/4 opacity-15" 
+            width={220}
+            height={60}
+          />
+        </div>
+        
+        {/* Middle section - Community and cooperation focus */}
+        <div className="absolute top-1/3 left-0 w-full h-1/3 flex items-center justify-between px-4 md:px-16">
+          <ProfessionalCommunitySymbol 
+            className="opacity-18" 
+            size={70}
+          />
+          <ProfessionalFoodBasket 
+            className="opacity-15" 
+            size={60}
+          />
+        </div>
+        
+        {/* Bottom section - Infrastructure and distribution */}
+        <div className="absolute bottom-0 left-0 w-full h-1/3">
+          <ProfessionalWarehouse 
+            className="absolute bottom-6 left-4 md:bottom-12 md:left-16 opacity-10" 
+            size={100}
+          />
+          <ProfessionalDistributionNetwork 
+            className="hidden md:block absolute bottom-20 right-1/4 transform rotate-12 opacity-12" 
+            width={180}
+            height={50}
+          />
+          <ProfessionalFoodBasket 
+            className="absolute bottom-8 right-4 md:bottom-16 md:right-12 opacity-14" 
+            size={55}
+          />
+        </div>
+        
+        {/* Subtle corner accents for professional framing - Hidden on mobile */}
+        <div className="hidden lg:block absolute top-4 right-4 opacity-6">
+          <ProfessionalCommunitySymbol size={60} />
+        </div>
+        <div className="hidden lg:block absolute bottom-4 left-4 opacity-6">
+          <ProfessionalDeliveryTruck size={70} />
+        </div>
+        
+        {/* Central connecting elements for visual flow - Hidden on mobile */}
+        <div className="hidden md:block absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+          <ProfessionalDistributionNetwork 
+            className="opacity-8 transform -rotate-45" 
+            width={160}
+            height={40}
+          />
+        </div>
+      </div>
+      
+      <div className="w-full max-w-2xl mx-auto px-4 md:px-6 relative z-10">
+        {/* Main Card */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-green-600 px-6 md:px-8 py-8 md:py-12 text-center">
+            <div className="mb-4">
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl md:text-4xl font-bold text-white mb-2">
+                Welcome to CBN Coop
+              </h1>
+              <p className="text-lg md:text-xl text-white/90 font-light">
+                Food Distribution Portal
+              </p>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 md:px-8 py-8 md:py-12">
+            <div className="text-center mb-8 md:mb-12">
+              <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4">
+                Are you a member of the CBN Coop?
+              </h2>
+              <p className="text-gray-600 text-sm md:text-base leading-relaxed">
+                Please select your membership status to continue to the appropriate portal.
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div className="space-y-4 md:space-y-6">
+              {/* Yes, I am a member */}
+              <Link 
+                href="/portal" 
+                className="group w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl px-6 md:px-8 py-4 md:py-5 flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+              >
+                <svg className="w-5 h-5 md:w-6 md:h-6 mr-3 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-lg md:text-xl font-semibold">
+                  Yes, I am a member
+                </span>
+              </Link>
+
+              {/* No, I want to join */}
+              <a 
+                href="https://cbn.coop.ng/Signup" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl px-6 md:px-8 py-4 md:py-5 flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+              >
+                <svg className="w-5 h-5 md:w-6 md:h-6 mr-3 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                <span className="text-lg md:text-xl font-semibold">
+                  Not yet, I want to join
+                </span>
+                <svg className="w-4 h-4 md:w-5 md:h-5 ml-2 group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+
+            {/* Additional Info */}
+            <div className="mt-8 md:mt-12 pt-6 md:pt-8 border-t border-gray-100">
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-2">
+                  Need help with your membership?
+                </p>
+                <p className="text-xs text-gray-400">
+                  Contact us at customerservice@cbncoopng.com or call 09096797982, 08180578550
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Main Content */}
-      <div className="px-4 md:px-6 pb-8 md:pb-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
-            {/* Members Card */}
-            <div className="group relative bg-white rounded-lg xl:rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden md:col-span-2 lg:col-span-1">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-              <div className="p-3 lg:p-4 xl:p-5">
-                <div className="flex items-center mb-2 lg:mb-3">
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl flex items-center justify-center mr-1 lg:mr-2">
-                    <svg className="w-5 h-5 md:w-6 md:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">Members</h2>
-                </div>
-                <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
-                  Welcome to your shopping portal! Enter your Member ID to browse and order from our cooperative food distribution system.
-                </p>
-                <MemberLauncher />
-              </div>
-            </div>
-
-            {/* Branch Reps Card */}
-            <div className="group relative bg-white rounded-lg xl:rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
-              <div className="p-3 lg:p-4 xl:p-5">
-                <div className="flex items-center mb-2 lg:mb-3">
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-xl flex items-center justify-center mr-1 lg:mr-2">
-                    <svg className="w-5 h-5 md:w-6 md:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Branch Representatives</h2>
-                </div>
-                <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
-                  Manage pending and delivered orders for your delivery branch. Access order processing and delivery coordination tools.
-                </p>
-                <Link href="/rep/login" className="inline-flex items-center px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm md:text-base font-semibold rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-lg hover:shadow-xl">
-                  <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  Access Rep Portal
-                </Link>
-              </div>
-            </div>
-
-            {/* Admin Card */}
-            <div className="group relative bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-purple-600"></div>
-              <div className="p-3 lg:p-4 xl:p-5">
-                <div className="flex items-center mb-2 lg:mb-3">
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-100 rounded-xl flex items-center justify-center mr-1 lg:mr-2">
-                    <svg className="w-5 h-5 md:w-6 md:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Administration</h2>
-                </div>
-                <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
-                  Complete system control including inventory management, order approvals, reporting, and data imports.
-                </p>
-                <Link href="/admin/pin" className="inline-flex items-center px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-sm md:text-base font-semibold rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl">
-                  <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Admin Access
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-gray-50 border-t border-gray-100 mt-12">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
-          <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
-            <div className="flex items-center space-x-1.5 text-gray-500">
-              <span className="text-xs">Powered by</span>
-              <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
-            </div>
-            <div className="text-xs text-gray-400">
-              © 2025 CBN Coop Food Distribution
-            </div>
-          </div>
-        </div>
-      </footer>
     </main>
+
+    {/* Footer - Outside main content, full width with same background */}
+    <footer className="bg-gradient-to-br from-blue-50 via-indigo-50 via-white to-emerald-50 border-t border-gray-200/50 relative">
+      {/* Same gradient overlays as main background */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/5 via-transparent to-green-900/5"></div>
+      <div className="absolute inset-0 bg-gradient-to-bl from-indigo-800/3 via-transparent to-emerald-800/3"></div>
+      
+      <div className="relative max-w-7xl mx-auto px-4 md:px-6 py-4">
+        <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
+          <div className="flex items-center space-x-1.5 text-gray-500">
+            <span className="text-xs">Powered by</span>
+            <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
+          </div>
+          <div className="text-xs text-gray-400">
+            © 2025 CBN Coop Food Distribution
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
   )
 }
