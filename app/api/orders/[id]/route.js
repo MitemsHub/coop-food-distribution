@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(_req, { params }) {
   try {
     const supabase = createClient()
-    const id = Number(params?.id)
+    const resolvedParams = await params
+    const id = Number(resolvedParams?.id)
     if (!id || Number.isNaN(id)) {
       return NextResponse.json({ ok: false, error: 'Invalid order id' }, { status: 400 })
     }
