@@ -182,7 +182,7 @@ function DataManagementPageContent() {
     try {
       setShoppingLoading(true)
       setShoppingMsg('')
-      const res = await fetch('/api/admin/system/shopping', { cache: 'no-store' })
+      const res = await fetch('/api/admin/system/shopping', { cache: 'no-store', credentials: 'same-origin' })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load status')
       setShoppingOpen(!!json.open)
@@ -201,6 +201,7 @@ function DataManagementPageContent() {
       const res = await fetch('/api/admin/system/shopping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ open: shoppingOpen })
       })
       const json = await res.json()
@@ -220,7 +221,7 @@ function DataManagementPageContent() {
       try {
         setShoppingLoading(true)
         setShoppingMsg('')
-        const res = await fetch('/api/admin/system/shopping', { cache: 'no-store' })
+        const res = await fetch('/api/admin/system/shopping', { cache: 'no-store', credentials: 'same-origin' })
         const json = await res.json()
         if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load status')
         if (!cancelled) setShoppingOpen(!!json.open)

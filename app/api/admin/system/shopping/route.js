@@ -31,7 +31,7 @@ export async function GET(request) {
     return NextResponse.json({ ok: true, open })
   } catch (error) {
     console.error('GET /api/admin/system/shopping error:', error)
-    return NextResponse.json({ ok: false, error: 'Failed to read setting' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: error?.message || 'Failed to read setting' }, { status: 500 })
   }
 }
 
@@ -59,6 +59,6 @@ export async function POST(request) {
     return NextResponse.json({ ok: true, open })
   } catch (error) {
     console.error('POST /api/admin/system/shopping error:', error)
-    return NextResponse.json({ ok: false, error: 'Failed to update setting' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: error?.message || 'Failed to update setting' }, { status: 500 })
   }
 }
