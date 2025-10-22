@@ -183,6 +183,10 @@ function DataManagementPageContent() {
       setShoppingLoading(true)
       setShoppingMsg('')
       const res = await fetch('/api/admin/system/shopping', { cache: 'no-store', credentials: 'same-origin' })
+      if (res.status === 401) {
+        setShoppingMsg('Error: Unauthorized. Please log in via Admin PIN.')
+        return
+      }
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load status')
       setShoppingOpen(!!json.open)
@@ -204,6 +208,10 @@ function DataManagementPageContent() {
         credentials: 'same-origin',
         body: JSON.stringify({ open: shoppingOpen })
       })
+      if (res.status === 401) {
+        setShoppingMsg('Error: Unauthorized. Please log in via Admin PIN.')
+        return
+      }
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to save')
       setShoppingMsg('Shopping status saved successfully')
