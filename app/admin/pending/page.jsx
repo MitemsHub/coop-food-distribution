@@ -1,6 +1,6 @@
 // app/admin/pending/page.jsx
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
 
 function PendingAdminPageContent() {
@@ -18,6 +18,7 @@ function PendingAdminPageContent() {
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
   const [deletingOrder, setDeletingOrder] = useState(false) // Track delete action loading
+  const fetchCtl = useRef(null)
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -29,6 +30,9 @@ function PendingAdminPageContent() {
   const fetchOrders = async () => {
     setLoading(true); setMsg(null)
     try {
+      if (fetchCtl.current) fetchCtl.current.abort()
+      const ctl = new AbortController()
+      fetchCtl.current = ctl
       const qs = new URLSearchParams({
         status: 'Pending',
         limit: '200',
@@ -36,12 +40,16 @@ function PendingAdminPageContent() {
         ...(payment ? { payment } : {}),
         ...(branch ? { branch } : {}),
       })
-      const res = await fetch(`/api/admin/orders/list?${qs.toString()}`, { cache:'no-store' })
+      const res = await fetch(`/api/admin/orders/list?${qs.toString()}`, { cache:'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/orders/list')
       if (!json.ok) throw new Error(json.error || 'Failed to load')
       setOrders(json.orders || [])
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        // Ignore aborted fetches triggered by navigation or refresh
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
       setLoading(false)
     }
@@ -139,7 +147,8 @@ function PendingAdminPageContent() {
       // Show detailed results
       let message = `Posted ${json.posted?.length || 0} order(s)`
       if (json.failed?.length > 0) {
-        message += `, ${json.failed.length} failed`
+        const reasons = json.failed.slice(0, 5).map(f => `#${f.order_id}: ${f.error}`).join('; ')
+        message += `, ${json.failed.length} failed — ${reasons}`
       }
 
       setMsg({ type:'success', text: message })

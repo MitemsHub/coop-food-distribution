@@ -40,6 +40,20 @@ export async function POST(req) {
     const posted = data.posted || []
     const failed = data.failed || []
 
+    // If everything failed, return an error to trigger UI banner and show reasons
+    if (posted.length === 0 && failed.length > 0) {
+      const reasonsSummary = failed
+        .slice(0, 5)
+        .map(f => `#${f.order_id}: ${f.error}`)
+        .join('; ')
+      return NextResponse.json({
+        ok: false,
+        error: `No orders posted. ${failed.length} failed: ${reasonsSummary}`,
+        posted,
+        failed
+      }, { status: 400 })
+    }
+
     return NextResponse.json({ 
       ok: true, 
       posted, 

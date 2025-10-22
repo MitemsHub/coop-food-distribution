@@ -117,7 +117,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     line_data JSON;
-    total_amount DECIMAL := 0;
+    v_total_amount DECIMAL := 0;
     new_lines JSON[] := '{}';
     item_record RECORD;
     price_record RECORD;
@@ -165,7 +165,7 @@ BEGIN
         
         -- Calculate line amount
         line_amount := price_record.price * (line_data->>'qty')::INTEGER;
-        total_amount := total_amount + line_amount;
+        v_total_amount := v_total_amount + line_amount;
         
         -- Build new line data
         new_lines := new_lines || json_build_object(
@@ -192,14 +192,14 @@ BEGIN
         (line->>'amount')::DECIMAL
     FROM unnest(new_lines) AS line;
     
-    -- Update order total
+    -- Update order total using variable (disambiguated)
     UPDATE orders 
-    SET total_amount = total_amount 
+    SET total_amount = v_total_amount 
     WHERE order_id = p_order_id;
     
     RETURN json_build_object(
         'success', true,
-        'total_amount', total_amount,
+        'total_amount', v_total_amount,
         'lines_count', array_length(new_lines, 1)
     );
     

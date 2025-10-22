@@ -158,7 +158,7 @@ function ReportsPageContent() {
   )
   if (!data) return <div className="p-6">No data</div>
 
-  const { totals, byBranch, byBranchDept, byCategory } = data
+  const { totals, byBranch, byBranchDept, byCategory, amounts } = data
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
@@ -171,10 +171,18 @@ function ReportsPageContent() {
 
       {/* Totals */}
       <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Card title="Total (Posted)" value={totals?.totalPosted ?? 0} />
         <Card title="Pending" value={totals?.totalPending ?? 0} />
+        <Card title="Posted" value={totals?.totalPosted ?? 0} />
         <Card title="Delivered" value={totals?.totalDelivered ?? 0} />
         <Card title="All Orders" value={totals?.totalAll ?? 0} />
+      </section>
+
+      {/* Amount Totals */}
+      <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        <Card title="Loans" value={amounts?.loans ?? 0} currency />
+        <Card title="Savings" value={amounts?.savings ?? 0} currency />
+        <Card title="Cash" value={amounts?.cash ?? 0} currency />
+        <Card title="Total Amount" value={amounts?.totalAll ?? 0} currency />
       </section>
 
       {/* Branch Pack */}
@@ -308,11 +316,12 @@ function ReportsPageContent() {
 }
 
 /* Helpers */
-function Card({ title, value }) {
+function Card({ title, value, currency = false }) {
+  const display = currency ? `₦${Number(value || 0).toLocaleString()}` : Number(value || 0).toLocaleString()
   return (
     <div className="border rounded p-2 sm:p-3 bg-white shadow-sm">
       <div className="text-xs text-gray-500 truncate">{title}</div>
-      <div className="text-lg sm:text-xl font-semibold">{Number(value).toLocaleString()}</div>
+      <div className="text-lg sm:text-xl font-semibold">{display}</div>
     </div>
   )
 }

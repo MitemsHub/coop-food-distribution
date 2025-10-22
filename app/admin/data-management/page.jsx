@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import ItemManagement from '../../components/ItemManagement'
@@ -172,6 +172,68 @@ function DataManagementPageContent() {
     setProcessingAction(null)
   }
 
+  // Shopping toggle state
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingLoading, setShoppingLoading] = useState(false)
+  const [shoppingMsg, setShoppingMsg] = useState('')
+
+  // Load current shopping status
+  const loadShoppingStatus = async () => {
+    try {
+      setShoppingLoading(true)
+      setShoppingMsg('')
+      const res = await fetch('/api/admin/system/shopping', { cache: 'no-store' })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load status')
+      setShoppingOpen(!!json.open)
+    } catch (e) {
+      setShoppingMsg(`Error: ${e.message}`)
+    } finally {
+      setShoppingLoading(false)
+    }
+  }
+
+  // Save shopping status
+  const saveShoppingStatus = async () => {
+    try {
+      setShoppingLoading(true)
+      setShoppingMsg('')
+      const res = await fetch('/api/admin/system/shopping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ open: shoppingOpen })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to save')
+      setShoppingMsg('Shopping status saved successfully')
+    } catch (e) {
+      setShoppingMsg(`Error: ${e.message}`)
+    } finally {
+      setShoppingLoading(false)
+    }
+  }
+
+  // Initial load (moved to useEffect)
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        setShoppingLoading(true)
+        setShoppingMsg('')
+        const res = await fetch('/api/admin/system/shopping', { cache: 'no-store' })
+        const json = await res.json()
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch (e) {
+        if (!cancelled) setShoppingMsg(`Error: ${e.message}`)
+      } finally {
+        if (!cancelled) setShoppingLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
       <div className="grid grid-cols-2 sm:flex sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
@@ -197,6 +259,40 @@ function DataManagementPageContent() {
       <div className="grid gap-2 lg:gap-3 xl:gap-4">
         {/* Database Migration */}
         <DatabaseMigration />
+
+        {/* Shopping Control */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
+          <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">🛍️ Shopping Control</h2>
+          <p className="text-sm sm:text-base text-blue-700 mb-2 sm:mb-3">
+            Toggle whether members can start shopping from the portal.
+          </p>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setShoppingOpen(!shoppingOpen)}>
+              <div className={`w-12 h-6 rounded-full px-1 flex items-center ${shoppingOpen ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                <div className="w-4 h-4 bg-white rounded-full shadow" />
+              </div>
+              <span className={`text-sm font-medium ${shoppingOpen ? 'text-green-700' : 'text-gray-600'}`}>
+                {shoppingOpen ? 'Open' : 'Closed'}
+              </span>
+            </label>
+            <input
+              type="checkbox"
+              checked={shoppingOpen}
+              onChange={(e) => setShoppingOpen(e.target.checked)}
+              className="hidden"
+            />
+            <button
+              onClick={saveShoppingStatus}
+              disabled={shoppingLoading}
+              className={`px-3 py-2 rounded text-white text-sm ${shoppingLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {shoppingLoading ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {shoppingMsg && (
+            <div className={`mt-2 p-2 rounded text-sm ${shoppingMsg.startsWith('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{shoppingMsg}</div>
+          )}
+        </div>
 
         {/* Item Image Management */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-2 lg:p-3 xl:p-4">

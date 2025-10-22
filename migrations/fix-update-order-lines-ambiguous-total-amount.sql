@@ -1,87 +1,7 @@
--- Optimized bulk operations for better performance
--- This migration adds batch processing capabilities to reduce database round trips
+-- Migration: Fix ambiguous total_amount reference in update_order_lines_batch
+-- Problem: PL/pgSQL variable name total_amount conflicts with orders.total_amount column
+-- Fix: Rename variable to v_total_amount and use it explicitly in UPDATE
 
--- Function to post multiple orders in a single transaction
-CREATE OR REPLACE FUNCTION post_orders_bulk(
-    p_order_ids INTEGER[],
-    p_admin TEXT DEFAULT 'admin@coop'
-)
-RETURNS JSON
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    posted_orders INTEGER[] := '{}';
-    failed_orders JSON[] := '{}';
-    v_order_id INTEGER;
-    order_status TEXT;
-    result_json JSON;
-BEGIN
-    -- Process each order in the array
-    FOREACH v_order_id IN ARRAY p_order_ids
-    LOOP
-        BEGIN
-            -- Check order status
-            SELECT status INTO order_status 
-            FROM orders 
-            WHERE orders.order_id = v_order_id;
-            
-            IF order_status IS NULL THEN
-                failed_orders := failed_orders || json_build_object(
-                    'order_id', v_order_id,
-                    'error', 'Order not found'
-                );
-                CONTINUE;
-            END IF;
-            
-            IF order_status != 'Pending' THEN
-                failed_orders := failed_orders || json_build_object(
-                    'order_id', v_order_id,
-                    'error', 'Order must be in pending status to post'
-                );
-                CONTINUE;
-            END IF;
-            
-            -- Update order status to posted
-            UPDATE orders 
-            SET status = 'Posted', 
-                posted_at = NOW(),
-                updated_at = NOW()
-            WHERE orders.order_id = v_order_id
-              AND orders.status = 'Pending';
-            
-            -- Add to successful posts
-            posted_orders := posted_orders || v_order_id;
-            
-        EXCEPTION
-            WHEN OTHERS THEN
-                failed_orders := failed_orders || json_build_object(
-                    'order_id', v_order_id,
-                    'error', SQLERRM
-                );
-        END;
-    END LOOP;
-    
-    -- Return results
-    RETURN json_build_object(
-        'success', true,
-        'posted', posted_orders,
-        'failed', failed_orders,
-        'posted_count', array_length(posted_orders, 1),
-        'failed_count', array_length(failed_orders, 1)
-    );
-    
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN json_build_object(
-            'success', false,
-            'error', SQLERRM,
-            'posted', posted_orders,
-            'failed', failed_orders
-        );
-END;
-$$;
-
--- Function to batch update order lines with optimized queries
 CREATE OR REPLACE FUNCTION update_order_lines_batch(
     p_order_id INTEGER,
     p_lines JSON,
@@ -92,7 +12,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     line_data JSON;
-    total_amount DECIMAL := 0;
+    v_total_amount DECIMAL := 0;
     new_lines JSON[] := '{}';
     item_record RECORD;
     price_record RECORD;
@@ -140,7 +60,7 @@ BEGIN
         
         -- Calculate line amount
         line_amount := price_record.price * (line_data->>'qty')::INTEGER;
-        total_amount := total_amount + line_amount;
+        v_total_amount := v_total_amount + line_amount;
         
         -- Build new line data
         new_lines := new_lines || json_build_object(
@@ -167,14 +87,14 @@ BEGIN
         (line->>'amount')::DECIMAL
     FROM unnest(new_lines) AS line;
     
-    -- Update order total
+    -- Update order total using variable (disambiguated)
     UPDATE orders 
-    SET total_amount = total_amount 
+    SET total_amount = v_total_amount 
     WHERE order_id = p_order_id;
     
     RETURN json_build_object(
         'success', true,
-        'total_amount', total_amount,
+        'total_amount', v_total_amount,
         'lines_count', array_length(new_lines, 1)
     );
     
@@ -187,6 +107,5 @@ EXCEPTION
 END;
 $$;
 
--- Grant execute permissions
-GRANT EXECUTE ON FUNCTION post_orders_bulk(INTEGER[], TEXT) TO authenticated;
+-- Ensure execute permissions remain
 GRANT EXECUTE ON FUNCTION update_order_lines_batch(INTEGER, JSON, INTEGER) TO authenticated;
