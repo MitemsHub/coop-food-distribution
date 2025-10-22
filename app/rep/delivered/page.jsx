@@ -22,7 +22,9 @@ function RepDeliveredPageContent() {
     }
   }
 
+  // Load departments only when authorized as rep
   useEffect(() => {
+    if (user?.type !== 'rep' || !user?.authenticated) return
     ;(async () => {
       try {
         const res = await fetch('/api/departments/list', { cache: 'no-store' })
@@ -30,9 +32,13 @@ function RepDeliveredPageContent() {
         if (j?.ok) setDepartments(j.departments || [])
       } catch {}
     })()
-  }, [])
+  }, [user])
 
-  useEffect(() => { fetchOrders(true) }, [dept]) // reload when dept changes
+  // Reload orders when dept changes, only for rep
+  useEffect(() => {
+    if (user?.type !== 'rep' || !user?.authenticated) return
+    fetchOrders(true)
+  }, [dept, user])
 
   const fetchOrders = async (reset = true) => {
     setLoading(true); setMsg(null)
@@ -128,16 +134,14 @@ function RepDeliveredPageContent() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4 items-start">
         <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
           <option value="">All departments</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <div className="grid grid-cols-3 gap-2">
-          <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
-          <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportPDF}>Export PDF</button>
-          <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
-        </div>
+        <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
+        <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
+        <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='error'?'text-red-700':'text-green-700'}`}>{msg.text}</div>}

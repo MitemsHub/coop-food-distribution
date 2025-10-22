@@ -48,13 +48,13 @@ function DepartmentInventorySection() {
 
   const loadBranches = async () => {
     try {
-      const response = await fetch('/api/admin/inventory/status')
-      const result = await safeJson(response, '/api/admin/inventory/status')
-      if (result.ok && result.rows) {
-        const uniqueBranches = [...new Set(result.rows.map(item => item.branch_code))]
+      // Align with Branch section: load from /api/branches/list
+      const res = await fetch('/api/branches/list', { cache: 'no-store' })
+      const json = await res.json()
+      if (json.ok) {
+        // Use branch names for dropdown values (consistent with Branch section)
+        const uniqueBranches = [...new Set((json.branches || []).map(b => b.name))]
         setBranches(uniqueBranches)
-      } else {
-        console.error('Failed to load branches:', result.error)
       }
     } catch (error) {
       console.error('Error loading branches:', error)

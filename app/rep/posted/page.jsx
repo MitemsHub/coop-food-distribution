@@ -26,6 +26,7 @@ function RepPostedPageContent() {
   }
 
   useEffect(() => {
+    if (user?.type !== 'rep' || !user?.authenticated) return
     ;(async () => {
       try {
         const res = await fetch('/api/departments/list', { cache: 'no-store' })
@@ -33,9 +34,12 @@ function RepPostedPageContent() {
         if (j?.ok) setDepartments(j.departments || [])
       } catch {}
     })()
-  }, [])
+  }, [user])
 
-  useEffect(() => { fetchOrders(true) }, [dept])
+  useEffect(() => { 
+    if (user?.type !== 'rep' || !user?.authenticated) return
+    fetchOrders(true) 
+  }, [dept, user])
 
   const fetchOrders = async (reset = true) => {
     setLoading(true); setMsg(null)
@@ -165,16 +169,14 @@ function RepPostedPageContent() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4 items-start">
         <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
           <option value="">All departments</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <div className="grid grid-cols-3 gap-2">
-          <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
-          <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportPDF}>Export PDF</button>
-          <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
-        </div>
+        <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
+        <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
+        <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='error'?'text-red-700':'text-green-700'}`}>{msg.text}</div>}
@@ -182,7 +184,7 @@ function RepPostedPageContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {orders.length === 0 && <div className="col-span-full p-4 text-gray-600 text-center">No Posted orders.</div>}
         {orders.map(o => (
-          <div key={o.order_id} className="border rounded-lg p-3 sm:p-4 bg-white shadow-sm">
+          <div key={o.order_id} className="border rounded-lg p-4 bg-white shadow-sm">
             <div className="grid grid-cols-1 gap-2 mb-3">
               <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
               <div className="text-xs sm:text-sm">{new Date(o.posted_at || o.created_at).toLocaleString()}</div>
@@ -217,25 +219,25 @@ function RepPostedPageContent() {
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm border">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left p-1 sm:p-2 border">SKU</th>
-                    <th className="text-left p-1 sm:p-2 border">Item</th>
-                    <th className="text-right p-1 sm:p-2 border">Qty</th>
-                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
-                    <th className="text-right p-1 sm:p-2 border">Amount</th>
+            <div className="">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-1">SKU</th>
+                    <th className="text-left py-2 px-1">Item</th>
+                    <th className="text-right py-2 px-1">Qty</th>
+                    <th className="text-right py-2 px-1">Unit Price</th>
+                    <th className="text-right py-2 px-1">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(o.order_lines || []).map(l => (
-                    <tr key={l.id}>
-                      <td className="p-1 sm:p-2 border">{l.items?.sku}</td>
-                      <td className="p-1 sm:p-2 border">{l.items?.name}</td>
-                      <td className="p-1 sm:p-2 border text-right">{l.qty}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.unit_price).toLocaleString()}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.amount).toLocaleString()}</td>
+                    <tr key={l.id} className="border-b border-gray-100">
+                      <td className="py-2 px-1">{l.items?.sku}</td>
+                      <td className="py-2 px-1">{l.items?.name}</td>
+                      <td className="py-2 px-1 text-right">{l.qty}</td>
+                      <td className="py-2 px-1 text-right">₦{Number(l.unit_price).toLocaleString()}</td>
+                      <td className="py-2 px-1 text-right">₦{Number(l.amount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

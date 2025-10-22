@@ -207,7 +207,7 @@ function ShopPageContent() {
               total_demand: row.total_demand || 0,
               pending_demand: row.pending_demand || 0,
               confirmed_demand: row.confirmed_demand || 0,
-              delivered_demand: row.delivered_demand || 0
+              delivered_demand: (row.delivered_demand ?? row.delivered_qty ?? 0)
             }
           } else {
             // Fallback branch_item_prices format - pure demand tracking
@@ -832,7 +832,7 @@ function ShopPageContent() {
                      <div>
                        <h3 className="text-sm font-semibold text-orange-800 mb-2">Loan Payment Information</h3>
                        <p className="text-sm text-orange-700">
-                         Interest Rate: A 14% interest will be charged on all items purchased using the loan payment option.
+                         Interest Rate: A 13% interest will be charged on all items purchased using the loan payment option.
                        </p>
                      </div>
                    </div>

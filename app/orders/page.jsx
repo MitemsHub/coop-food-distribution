@@ -253,7 +253,7 @@ function OrdersPageContent() {
                             {order.order_lines.map((line, index) => (
                               <div key={`${order.order_id}-${line.sku || line.item_id || index}`} className="flex justify-between items-center text-sm">
                                 <div>
-                                  <span className="font-medium">{line.items?.name || line.sku}</span>
+                                  <span className="font-medium">{line.items?.name || 'Unknown Item'}</span>
                                   <span className="text-gray-600 ml-2">x{line.qty}</span>
                                 </div>
                                 <div className="font-medium">₦{Number(line.amount || 0).toLocaleString()}</div>

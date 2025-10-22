@@ -32,7 +32,8 @@ export async function POST(req) {
     // Use optimized batch RPC function
     const { data, error } = await supabase.rpc('update_order_lines_batch', {
       p_order_id: orderId,
-      p_lines: JSON.stringify(validatedLines),
+      // Pass JSON array directly; Postgres expects a JSON array for json_array_elements
+      p_lines: validatedLines,
       p_delivery_branch_id: order.delivery_branch_id
     })
 

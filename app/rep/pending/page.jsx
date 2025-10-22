@@ -28,6 +28,7 @@ function RepPendingPageContent() {
 
   useEffect(() => {
     // Load department list once
+    if (user?.type !== 'rep' || !user?.authenticated) return
     ;(async () => {
       try {
         const res = await fetch('/api/departments/list', { cache: 'no-store' })
@@ -35,12 +36,13 @@ function RepPendingPageContent() {
         if (j?.ok) setDepartments(j.departments || [])
       } catch {}
     })()
-  }, [])
+  }, [user])
 
   useEffect(() => {
+    if (user?.type !== 'rep' || !user?.authenticated) return
     fetchOrders(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dept])
+  }, [dept, user])
 
   const fetchOrders = async (reset = true) => {
     setLoading(true); setMsg(null)
@@ -240,7 +242,7 @@ function RepPendingPageContent() {
   }
 
   return (
-      <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-6 max-w-7xl mx-auto">
 
         
         <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-4">Rep — Pending Orders</h1>
@@ -274,27 +276,33 @@ function RepPendingPageContent() {
 
       <div className="mb-4">
         <div className="mb-3">
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
-            <option value="">All departments</option>
-            {departments.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4 items-start">
+            <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
+              <option value="">All departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
+            <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
+            <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportCSV}>Export CSV</button>
-          <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={exportPDF}>Export PDF</button>
-          <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
-        </div>
+        {/* Controls unified above */}
+        {/* Controls unified above into a single 4-column grid on large screens */}
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='error'?'text-red-700':'text-green-700'}`}>{msg.text}</div>}
 
-      <div className="border rounded divide-y">
-        {orders.length === 0 && <div className="p-4 text-gray-600">No Pending orders.</div>}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {orders.length === 0 && (
+          <div className="col-span-full p-4 text-gray-600 text-center">No Pending orders.</div>
+        )}
         {orders.map(o => (
-          <div key={o.order_id} className="p-3 sm:p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3">
-              <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
-              <div className="text-xs sm:text-sm">{new Date(o.created_at).toLocaleString()}</div>
+          <div key={o.order_id} className="border rounded-lg p-4 bg-white shadow-sm">
+            <div className="grid grid-cols-1 gap-2 mb-3">
+              <div className="flex items-center justify-between">
+                <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
+                <div className="text-xs sm:text-sm">{new Date(o.created_at).toLocaleString()}</div>
+              </div>
               <div className="text-xs sm:text-sm">{o.member_id} — {o.member_name_snapshot}</div>
               <div className="text-xs sm:text-sm">Member: {o.member_branch?.name || '-'}</div>
               <div className="text-xs sm:text-sm">Delivery: {o.delivery?.name || '-'}</div>
@@ -302,14 +310,12 @@ function RepPendingPageContent() {
               <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
               <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
             </div>
-            <div className="grid grid-cols-1 gap-2">
-              {/* Edit and Delete buttons disabled for reps - only admin can perform these actions */}
-              {/* <button className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => startEdit(o)}>Edit</button> */}
-              {/* <button className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs sm:text-sm whitespace-nowrap" onClick={() => deleteOne(o.order_id)}>Delete</button> */}
-              <button 
+
+            <div className="flex justify-end mb-3">
+              <button
                 className={`px-3 py-1 rounded text-xs sm:text-sm whitespace-nowrap transition-all duration-200 ${
-                  postingOrder === o.order_id 
-                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                  postingOrder === o.order_id
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
                     : 'bg-green-600 text-white hover:bg-green-700'
                 }`}
                 onClick={() => postOne(o.order_id)}
@@ -329,25 +335,25 @@ function RepPendingPageContent() {
               </button>
             </div>
 
-            <div className="overflow-x-auto mt-2">
-              <table className="w-full text-xs sm:text-sm border">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left p-1 sm:p-2 border">SKU</th>
-                    <th className="text-left p-1 sm:p-2 border">Item</th>
-                    <th className="text-right p-1 sm:p-2 border">Qty</th>
-                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
-                    <th className="text-right p-1 sm:p-2 border">Amount</th>
+            <div className="">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-1">SKU</th>
+                    <th className="text-left py-2 px-1">Item</th>
+                    <th className="text-right py-2 px-1">Qty</th>
+                    <th className="text-right py-2 px-1">Unit Price</th>
+                    <th className="text-right py-2 px-1">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(o.order_lines || []).map(l => (
-                    <tr key={l.id}>
-                      <td className="p-1 sm:p-2 border">{l.items?.sku}</td>
-                      <td className="p-1 sm:p-2 border">{l.items?.name}</td>
-                      <td className="p-1 sm:p-2 border text-right">{l.qty}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.unit_price).toLocaleString()}</td>
-                      <td className="p-1 sm:p-2 border text-right">₦{Number(l.amount).toLocaleString()}</td>
+                    <tr key={l.id} className="border-b border-gray-100">
+                      <td className="py-2 px-1">{l.items?.sku}</td>
+                      <td className="py-2 px-1">{l.items?.name}</td>
+                      <td className="py-2 px-1 text-right">{l.qty}</td>
+                      <td className="py-2 px-1 text-right">₦{Number(l.unit_price).toLocaleString()}</td>
+                      <td className="py-2 px-1 text-right">₦{Number(l.amount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -451,9 +457,20 @@ function RepPendingPageContent() {
                     handleDeleteSubmit()
                   }
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className={`px-4 py-2 rounded text-white ${showModal.type === 'post' ? (postingOrder === showModal.orderId ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700') : (showModal.type === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700')}`}
+                disabled={showModal.type === 'post' && postingOrder === showModal.orderId}
               >
-                {showModal.type === 'post' ? 'Post Order' : showModal.type === 'delete' ? 'Delete Order' : 'Confirm'}
+                {showModal.type === 'post' && postingOrder === showModal.orderId ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Posting…
+                  </div>
+                ) : (
+                  showModal.type === 'post' ? 'Post Order' : showModal.type === 'delete' ? 'Delete Order' : 'Confirm'
+                )}
               </button>
             </div>
           </div>

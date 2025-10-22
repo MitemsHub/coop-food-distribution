@@ -38,7 +38,7 @@ export async function GET(request) {
       sessionMemberId = sessionResult.claims.member_id
       branch_id = sessionResult.claims.branch_id
 
-      // Reps can view orders from their branch
+      // Reps can view orders from their DELIVERY branch
       // Admins can view all orders
       if (role === 'member' && sessionMemberId !== memberId) {
         return NextResponse.json({ ok: false, error: 'Access denied' }, { status: 403 })
@@ -74,9 +74,9 @@ export async function GET(request) {
       .eq('member_id', memberId)
       .order('created_at', { ascending: false })
 
-    // If user is a rep, filter by their branch
+    // If user is a rep, filter by their DELIVERY branch
     if (role === 'rep' && branch_id) {
-      query = query.eq('branch_id', branch_id)
+      query = query.eq('delivery_branch_id', branch_id)
     }
 
     const { data: orders, error } = await query
@@ -96,13 +96,6 @@ export async function GET(request) {
     return response
   } catch (error) {
     console.error('Member orders API error:', error)
-    const errorResponse = NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
-    
-    // Add headers for error responses too
-    errorResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
-    errorResponse.headers.set('Pragma', 'no-cache')
-    errorResponse.headers.set('Expires', '0')
-    
-    return errorResponse
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
   }
 }

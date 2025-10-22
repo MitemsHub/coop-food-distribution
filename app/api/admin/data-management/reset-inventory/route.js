@@ -25,22 +25,16 @@ export async function POST(request) {
       })
     }
 
-    // Reset initial_stock in branch_item_prices table (this is what the inventory display shows)
-    const { data, error } = await supabase
-      .from('branch_item_prices')
-      .update({ initial_stock: 0 })
-      .gt('id', 0)
+    // Reset inventory by clearing all inventory movements (stock is derived from movements)
+    const { error: movementsError } = await supabase
+      .from('inventory_movements')
+      .delete()
+      .neq('id', 0)
 
-    if (error) {
-      console.error('Error resetting inventory:', error)
-      return Response.json({ ok: false, error: error.message }, { status: 500 })
+    if (movementsError) {
+      console.error('Error clearing inventory movements:', movementsError)
+      return Response.json({ ok: false, error: movementsError.message }, { status: 500 })
     }
-
-    // Also reset qty_on_hand in items table for consistency
-    await supabase
-      .from('items')
-      .update({ qty_on_hand: 0 })
-      .gt('item_id', 0)
 
     return Response.json({ 
       ok: true, 

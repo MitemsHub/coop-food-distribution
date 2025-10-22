@@ -79,8 +79,8 @@ function SuccessContent() {
       doc.setFontSize(11)
       doc.text('Items', 10, y); y += 6
       doc.setFontSize(10)
-      doc.text('SKU', 10, y)
-      doc.text('Item', 35, y)
+      // Removed SKU column for member-facing receipt
+      doc.text('Item', 10, y)
       doc.text('Qty', 120, y)
       doc.text('Unit', 140, y)
       doc.text('Amount', 165, y)
@@ -88,8 +88,8 @@ function SuccessContent() {
       doc.line(10, y, 200, y); y += 4
 
       ;(order.order_lines || []).forEach((l) => {
-        doc.text(l.items?.sku || '', 10, y)
-        doc.text(l.items?.name || '', 35, y)
+        // No SKU shown
+        doc.text(l.items?.name || '', 10, y)
         doc.text(String(l.qty), 125, y, { align: 'right' })
         doc.text(currency(l.unit_price), 140, y)
         doc.text(currency(l.amount), 165, y)
@@ -117,6 +117,7 @@ function SuccessContent() {
       const xlsxMod = await import('xlsx')
       const XLSX = xlsxMod?.default ?? xlsxMod
 
+      // Removed SKU column for member-facing export
       const rows = (order.order_lines || []).map((l) => ({
         OrderID: order.order_id,
         CreatedAt: order.created_at,
@@ -128,7 +129,6 @@ function SuccessContent() {
         Delivery: order.delivery?.name || '',
         Department: order.departments?.name || '',
         Payment: order.payment_option,
-        SKU: l.items?.sku || '',
         Item: l.items?.name || '',
         Qty: l.qty,
         UnitPrice: Number(l.unit_price || 0),
@@ -145,7 +145,6 @@ function SuccessContent() {
         Delivery: '',
         Department: '',
         Payment: '',
-        SKU: '',
         Item: 'TOTAL',
         Qty: '',
         UnitPrice: '',
@@ -184,7 +183,7 @@ function SuccessContent() {
       <table className="w-full text-sm border mb-3">
         <thead className="bg-gray-50">
           <tr>
-            <th className="p-2 border text-left">SKU</th>
+            {/* Removed SKU column for member-facing view */}
             <th className="p-2 border text-left">Item</th>
             <th className="p-2 border text-right">Qty</th>
             <th className="p-2 border text-right">Unit Price</th>
@@ -194,7 +193,7 @@ function SuccessContent() {
         <tbody>
           {(order.order_lines || []).map((l, idx) => (
             <tr key={idx}>
-              <td className="p-2 border">{l.items?.sku}</td>
+              {/* Removed SKU cell */}
               <td className="p-2 border">{l.items?.name}</td>
               <td className="p-2 border text-right">{l.qty}</td>
               <td className="p-2 border text-right">{currency(l.unit_price)}</td>

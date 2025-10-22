@@ -28,11 +28,12 @@ export async function POST(request) {
 
     const orderIds = deliveredOrders.map(order => order.order_id)
 
-    // First, delete inventory movements for delivered orders
+    // First, delete inventory movements related to these orders
     const { error: movementsError } = await supabase
       .from('inventory_movements')
       .delete()
-      .in('order_id', orderIds)
+      .in('reference_id', orderIds)
+      .eq('reference_type', 'order')
 
     if (movementsError) {
       console.error('Error deleting inventory movements:', movementsError)

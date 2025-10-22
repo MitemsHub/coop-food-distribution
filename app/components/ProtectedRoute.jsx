@@ -1,40 +1,48 @@
 'use client'
 
 import { useAuth } from '../contexts/AuthContext'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 
 export default function ProtectedRoute({ children, allowedRoles = [] }) {
   const { user, userType, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+  const redirectRef = useRef(false)
 
   useEffect(() => {
     if (loading) return // Wait for auth to load
     
     // If no user is authenticated, redirect to home
     if (!user || !user.authenticated) {
-      router.push('/')
+      if (pathname !== '/') router.replace('/')
       return
     }
     
-    // If user type is not in allowed roles, redirect to appropriate page
+    // If user type is not in allowed roles, redirect to appropriate page (once)
     if (allowedRoles.length > 0 && !allowedRoles.includes(userType)) {
+      if (redirectRef.current) return
+      redirectRef.current = true
+
+      let dest = '/'
       switch (userType) {
         case 'member':
-          router.push(`/shop?mid=${user.id}`)
+          dest = `/shop?mid=${user.id}`
           break
         case 'rep':
-          router.push('/rep/pending')
+          dest = '/rep/pending'
           break
         case 'admin':
-          router.push('/admin/pending')
+          dest = '/admin/pending'
           break
         default:
-          router.push('/')
+          dest = '/'
       }
+
+      if (dest !== pathname) router.replace(dest)
       return
     }
-  }, [user, userType, loading, router, allowedRoles])
+  }, [user, userType, loading, router, allowedRoles, pathname])
 
   // Show loading while checking authentication
   if (loading) {
