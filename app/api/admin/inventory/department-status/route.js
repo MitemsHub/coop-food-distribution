@@ -96,21 +96,27 @@ export async function GET(request) {
     }
     
     // Transform data to include calculated fields
-    const transformedData = data.map(row => ({
-      ...row,
-      allocation_percentage: row.available_stock > 0 
-        ? Math.round((row.total_demand / row.available_stock) * 100)
-        : 0,
-      remaining_after_department: Math.max(0, (row.available_stock || 0) - (row.total_demand || 0)),
-      stock_status: (row.available_stock || 0) - (row.total_demand || 0) <= 0 
-        ? 'out_of_stock'
-        : (row.available_stock || 0) - (row.total_demand || 0) <= 20
-        ? 'low_stock'
-        : 'in_stock',
-      display_allocated: `${row.allocated_qty || 0} ${row.unit || ''}`.trim(),
-      display_delivered: `${row.delivered_qty || 0} ${row.unit || ''}`.trim(),
-      display_remaining: `${Math.max(0, (row.available_stock || 0) - (row.total_demand || 0))} ${row.unit || ''}`.trim()
-    }))
+    const transformedData = data.map(row => {
+      const computedTotal = (row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)
+      const total = computedTotal
+      const available = row.available_stock || 0
+      return {
+        ...row,
+        total_demand: total,
+        allocation_percentage: available > 0 
+          ? Math.round((total / available) * 100)
+          : 0,
+        remaining_after_department: Math.max(0, available - total),
+        stock_status: available - total <= 0 
+          ? 'out_of_stock'
+          : available - total <= 20
+          ? 'low_stock'
+          : 'in_stock',
+        display_allocated: `${row.allocated_qty || 0} ${row.unit || ''}`.trim(),
+        display_delivered: `${row.delivered_qty || 0} ${row.unit || ''}`.trim(),
+        display_remaining: `${Math.max(0, available - total)} ${row.unit || ''}`.trim()
+      }
+    })
 
     // Exclude branches with zero activity (no orders at all)
     const nonZeroData = transformedData.filter(r => (r.total_demand || 0) > 0 || (r.allocated_qty || 0) > 0 || (r.pending_delivery_qty || 0) > 0 || (r.delivered_qty || 0) > 0)

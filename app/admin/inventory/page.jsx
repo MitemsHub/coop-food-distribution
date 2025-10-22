@@ -101,7 +101,7 @@ function DepartmentInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0)
+        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
       ].map(field => `"${field}"`).join(','))
     ].join('\n')
     
@@ -140,7 +140,7 @@ function DepartmentInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0)
+        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
       ])
       
       autoTable(doc, {
@@ -271,7 +271,7 @@ function DepartmentInventorySection() {
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">{row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0}</td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-purple-600">{row.confirmed_demand ?? row.pending_delivery_qty ?? 0}</td>
                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-green-600">{row.delivered_qty ?? row.delivered_demand ?? 0}</td>
-                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">{row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">{((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0))}</td>
                   </tr>
                 ))
               )}
