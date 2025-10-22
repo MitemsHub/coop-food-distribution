@@ -90,7 +90,7 @@ function DepartmentInventorySection() {
 
   // Export functions
   const exportDepartmentCSV = () => {
-    const headers = ['Branch', 'Department', 'SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']
+    const headers = ['Branch', 'Department', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
     const csvContent = [
       headers.join(','),
       ...departmentData.map(row => [
@@ -98,10 +98,10 @@ function DepartmentInventorySection() {
         row.department_name,
         row.sku,
         row.item_name,
-        row.total_demand || 0,
-        (row.allocated_qty - row.pending_delivery_qty) || 0,
-        row.pending_delivery_qty || 0,
-        row.delivered_qty || 0
+        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
+        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
+        (row.delivered_qty ?? row.delivered_demand ?? 0),
+        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0)
       ].map(field => `"${field}"`).join(','))
     ].join('\n')
     
@@ -137,14 +137,14 @@ function DepartmentInventorySection() {
         row.department_name || '',
         row.sku || '',
         row.item_name || '',
-        row.total_demand || 0,
-        (row.allocated_qty - row.pending_delivery_qty) || 0,
-        row.pending_delivery_qty || 0,
-        row.delivered_qty || 0
+        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
+        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
+        (row.delivered_qty ?? row.delivered_demand ?? 0),
+        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0)
       ])
       
       autoTable(doc, {
-        head: [['Branch', 'Department', 'SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']],
+        head: [['Branch', 'Department', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']],
         body: tableData,
         startY: 45,
         styles: { fontSize: 8 },
@@ -239,10 +239,10 @@ function DepartmentInventorySection() {
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Department</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">SKU</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Item</th>
-                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total Demand</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Pending</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Posted</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Delivered</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total Demand</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -268,18 +268,10 @@ function DepartmentInventorySection() {
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{row.department_name}</td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-mono text-xs">{row.sku}</td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-medium">{row.item_name}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">
-                      {row.total_demand || 0}
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">
-                      {(row.allocated_qty || 0) - (row.pending_delivery_qty || 0)}
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-purple-600">
-                      {row.pending_delivery_qty || 0}
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-green-600">
-                      {row.delivered_qty || 0}
-                    </td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">{row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-purple-600">{row.confirmed_demand ?? row.pending_delivery_qty ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-green-600">{row.delivered_qty ?? row.delivered_demand ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">{row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0}</td>
                   </tr>
                 ))
               )}
@@ -363,16 +355,16 @@ function ItemsInventorySection() {
 
   // Export functions
   const exportItemsCSV = () => {
-    const headers = ['SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']
+    const headers = ['SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
     const csvContent = [
       headers.join(','),
       ...itemsData.map(row => [
         row.sku,
         row.item_name,
-        row.total_demand || 0,
-        row.pending_demand || 0,
-        row.confirmed_demand || 0,
-        row.delivered_qty || 0
+        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
+        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
+        (row.delivered_qty ?? row.delivered_demand ?? 0),
+        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0)) ?? (row.allocated_qty || 0) ?? 0)
       ].map(field => `"${field}"`).join(','))
     ].join('\n')
     
@@ -405,14 +397,14 @@ function ItemsInventorySection() {
       const tableData = itemsData.map(row => [
         row.sku || '',
         row.item_name || '',
-        row.total_demand || 0,
-        row.pending_demand || 0,
-        row.confirmed_demand || 0,
-        row.delivered_qty || 0
+        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
+        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
+        (row.delivered_qty ?? row.delivered_demand ?? 0),
+        (row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0)) ?? (row.allocated_qty || 0) ?? 0)
       ])
       
       autoTable(doc, {
-        head: [['SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']],
+        head: [['SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']],
         body: tableData,
         startY: 40,
         styles: { fontSize: 8 },
@@ -475,10 +467,10 @@ function ItemsInventorySection() {
               <tr>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">SKU</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Item</th>
-                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total Demand</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Pending</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Posted</th>
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Delivered</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total Demand</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -664,7 +656,7 @@ function InventoryPageContent() {
 
   // Export functions - simplified for demand tracking only
   const exportToCSV = () => {
-    const headers = ['Branch', 'SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']
+    const headers = ['Branch', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
     
     let dataToExport = rows
     if (selectedBranch) {
@@ -678,10 +670,10 @@ function InventoryPageContent() {
           r.branch_name || '',
           r.sku || '',
           r.item_name || '',
-          r.total_demand || 0,
-          r.pending_demand || 0,
-          r.confirmed_demand || 0,
-          r.delivered_qty || 0
+          (r.pending_demand ?? 0),
+          (r.confirmed_demand ?? 0),
+          (r.delivered_qty ?? r.delivered_demand ?? 0),
+          (r.total_demand ?? ((r.pending_demand || 0) + (r.confirmed_demand || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? ((r.allocated_qty || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? 0)
         ].join(',')
       })
     ].join('\n')
@@ -723,17 +715,17 @@ function InventoryPageContent() {
         return
       }
       
-      const headers = ['Branch', 'SKU', 'Item', 'Total Demand', 'Pending', 'Posted', 'Delivered']
+      const headers = ['Branch', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
       
       const tableData = dataToExport.map(r => {
         return [
           r.branch_name || '',
           r.sku || '',
           r.item_name || '',
-          r.total_demand || 0,
-          r.pending_demand || 0,
-          r.confirmed_demand || 0,
-          r.delivered_qty || 0
+          (r.pending_demand ?? 0),
+          (r.confirmed_demand ?? 0),
+          (r.delivered_qty ?? r.delivered_demand ?? 0),
+          (r.total_demand ?? ((r.pending_demand || 0) + (r.confirmed_demand || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? ((r.allocated_qty || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? 0)
         ]
       })
       
@@ -782,7 +774,7 @@ function InventoryPageContent() {
   return (
     <div className="p-2 lg:p-3 xl:p-4 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 lg:mb-4">
-        <h1 className="text-xl sm:text-3xl font-semibold mb-2 sm:mb-0">Admin — Inventory by Branch</h1>
+        <h1 className="text-xl sm:text-2xl font-bold mb-2 sm:mb-0">Admin — Inventory by Branch</h1>
       </div>
 
       {/* Post Adjustment section removed - only demand tracking mode */}
@@ -842,29 +834,29 @@ function InventoryPageContent() {
       {/* Data Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="w-full text-xs sm:text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Branch</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">SKU</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Item</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Total Demand</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Pending</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Posted</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Delivered</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Branch</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">SKU</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Item</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Pending</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Posted</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Delivered</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total Demand</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredAndPaginatedRows.rows.length > 0 ? (
                 filteredAndPaginatedRows.rows.map((row, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.branch_name}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.sku}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.item_name}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.total_demand || 0}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.pending_demand || 0}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.confirmed_demand || 0}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.delivered_qty || 0}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{row.branch_name}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-mono text-xs">{row.sku}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-medium">{row.item_name}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">{row.pending_demand ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-purple-600">{row.confirmed_demand ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-green-600">{row.delivered_qty ?? row.delivered_demand ?? 0}</td>
+                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">{row.total_demand ?? ((row.pending_demand || 0) + (row.confirmed_demand || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? ((row.allocated_qty || 0) + (row.delivered_qty || row.delivered_demand || 0)) ?? 0}</td>
                   </tr>
                 ))
               ) : (
