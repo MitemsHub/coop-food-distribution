@@ -29,31 +29,97 @@ export async function POST(req) {
       return { sku: l.sku, qty }
     })
 
-    // Use optimized batch RPC function
+    // Helper: manual fallback update when RPC fails
+    const manualUpdate = async () => {
+      // Resolve item IDs for SKUs
+      const skus = validatedLines.map(l => l.sku)
+      const { data: items, error: itemsErr } = await supabase
+        .from('items')
+        .select('item_id, sku')
+        .in('sku', skus)
+      if (itemsErr) throw new Error(itemsErr.message)
+      const skuToItem = new Map(items.map(i => [i.sku, i.item_id]))
+
+      // Validate all SKUs were found
+      const missing = validatedLines.filter(l => !skuToItem.get(l.sku)).map(l => l.sku)
+      if (missing.length) throw new Error('Items not found: ' + missing.join(', '))
+
+      // Fetch branch prices for these items
+      const itemIds = validatedLines.map(l => skuToItem.get(l.sku))
+      const { data: prices, error: pricesErr } = await supabase
+        .from('branch_item_prices')
+        .select('id, item_id, price')
+        .eq('branch_id', order.delivery_branch_id)
+        .in('item_id', itemIds)
+      if (pricesErr) throw new Error(pricesErr.message)
+      const itemToPrice = new Map(prices.map(p => [p.item_id, { id: p.id, price: Number(p.price) }]))
+
+      // Build order_lines payload and compute total
+      let total = 0
+      const linesPayload = validatedLines.map(l => {
+        const itemId = skuToItem.get(l.sku)
+        const pr = itemToPrice.get(itemId)
+        if (!pr) throw new Error('No price found for item: ' + l.sku)
+        const qty = Number(l.qty)
+        const amount = pr.price * qty
+        total += amount
+        return {
+          order_id: orderId,
+          item_id: itemId,
+          branch_item_price_id: pr.id,
+          unit_price: pr.price,
+          qty,
+          amount
+        }
+      })
+
+      // Replace existing lines
+      const { error: delErr } = await supabase
+        .from('order_lines')
+        .delete()
+        .eq('order_id', orderId)
+      if (delErr) throw new Error(delErr.message)
+
+      const { error: insErr } = await supabase
+        .from('order_lines')
+        .insert(linesPayload)
+      if (insErr) throw new Error(insErr.message)
+
+      // Update order total explicitly (avoid ambiguity)
+      const { error: updErr } = await supabase
+        .from('orders')
+        .update({ total_amount: total })
+        .eq('order_id', orderId)
+      if (updErr) throw new Error(updErr.message)
+
+      return { ok: true, total, lines_updated: linesPayload.length }
+    }
+
+    // Try optimized batch RPC first
     const { data, error } = await supabase.rpc('update_order_lines_batch', {
       p_order_id: orderId,
-      // Pass JSON array directly; Postgres expects a JSON array for json_array_elements
-      p_lines: validatedLines,
+      p_lines: validatedLines, // Postgres expects a JSON array
       p_delivery_branch_id: order.delivery_branch_id
     })
 
-    console.log('Update lines RPC result:', { orderId, linesCount: validatedLines.length, data, error })
-
-    if (error) {
-      console.error('Update lines RPC error:', error)
-      return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
+    // If RPC succeeded, return result
+    if (!error && data && data.success) {
+      return NextResponse.json({ 
+        ok: true, 
+        total: data.total_amount,
+        lines_updated: data.lines_count
+      })
     }
 
-    if (!data || !data.success) {
-      console.error('Update lines RPC failed:', data)
-      return NextResponse.json({ ok: false, error: data?.error || 'Update failed' }, { status: 400 })
+    // Fall back to manual implementation on any error or unsuccessful RPC
+    try {
+      const result = await manualUpdate()
+      return NextResponse.json(result)
+    } catch (fallbackErr) {
+      const msg = error?.message || data?.error || fallbackErr.message || 'Update failed'
+      console.error('Update lines fallback error:', msg)
+      return NextResponse.json({ ok: false, error: msg }, { status: 400 })
     }
-
-    return NextResponse.json({ 
-      ok: true, 
-      total: data.total_amount,
-      lines_updated: data.lines_count
-    })
   } catch (e) {
     console.error('Update lines error:', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
