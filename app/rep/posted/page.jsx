@@ -219,7 +219,7 @@ function RepPostedPageContent() {
               </button>
             </div>
 
-            <div className="">
+            <div className="overflow-x-auto">
               <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b">
