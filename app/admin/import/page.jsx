@@ -54,15 +54,10 @@ function ImportPageContent() {
     dlCSV('Members_Template.csv', [{
       member_id: 'A12345',
       full_name: 'John Doe',
-      branch_code: 'DUTSE',
-      department_name: 'Branch Operations Department',
-      category: 'A',
       grade: 'Director',
       savings: 2000000,
       loans: 0,
-      global_limit: 40000000,
-      phone: '08030000000',
-      email: 'john@example.com'
+      global_limit: 40000000
     }])
   }
 
@@ -110,7 +105,7 @@ function ImportPageContent() {
       <div className="mb-4 sm:mb-6 border rounded-lg p-3 sm:p-4">
         <h2 className="text-sm sm:text-base md:text-lg font-medium mb-2 sm:mb-3">Members.xlsx</h2>
         <p className="text-xs sm:text-sm text-gray-600 mb-3">
-          Expected columns: member_id, full_name, branch_code, department_name, category, grade, savings, loans, global_limit, phone, email
+          Expected columns: member_id, full_name, grade, savings, loans, global_limit
         </p>
         <div className="space-y-2 sm:space-y-3">
           <input 

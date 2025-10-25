@@ -52,6 +52,27 @@ function ShopPageContent() {
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
 
+  // Update member home branch
+  const updateMemberBranch = async (newCode) => {
+    try {
+      if (!memberId) {
+        setMessage({ type: 'error', text: 'Please select a member first' })
+        return
+      }
+      const res = await fetch('/api/members/update-branch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, branchCode: newCode })
+      })
+      const json = await safeJson(res, '/api/members/update-branch')
+      if (!json.ok) throw new Error(json.error || 'Failed to update member branch')
+      setMemberBranchCode(newCode)
+      setMessage({ type: 'success', text: `Member branch updated to ${json.branch?.name || newCode}` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e.message })
+    }
+  }
+
   // Save cart data to localStorage whenever quantities change
   useEffect(() => {
     if (memberId && Object.keys(qty).length > 0) {
@@ -738,11 +759,16 @@ function ShopPageContent() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-6">
                 <div>
                   <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Member Branch</label>
-                  <input 
-                    value={memberBranchCode || ''} 
-                    readOnly 
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 md:px-4 md:py-3 bg-gray-50 text-gray-600 text-sm" 
-                  />
+                  <select
+                    value={memberBranchCode || ''}
+                    onChange={e => updateMemberBranch(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 md:px-4 md:py-3 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 text-sm"
+                  >
+                    <option key="select-member-branch" value="">Select member branch</option>
+                    {branches.map(b => (
+                      <option key={b.code} value={b.code}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Delivery Location</label>
