@@ -32,6 +32,15 @@ export async function POST(req) {
 
     if (!rows.length) return NextResponse.json({ ok: false, error: 'No rows found' }, { status: 400 })
 
+    // Load grade-based default limits once
+    const { data: gradeRows, error: glErr } = await supabase
+      .from('grade_limits')
+      .select('grade, global_limit')
+    if (glErr) return NextResponse.json({ ok: false, error: glErr.message }, { status: 500 })
+    const gradeLimitByName = new Map(
+      (gradeRows || []).map(g => [String(g.grade || '').trim().toLowerCase(), Number(g.global_limit || 0)])
+    )
+
     // Build upsert rows from simplified template.
     // IMPORTANT: Do not overwrite branch_id/department_id/phone/email when not provided.
     const upsertRows = rows.map(r => {
@@ -40,7 +49,14 @@ export async function POST(req) {
       const grade = String(r.grade || '').trim()
       const savings = Number(String(r.savings || '0').replace(/[, ]/g, '')) || 0
       const loans = Number(String(r.loans || '0').replace(/[, ]/g, '')) || 0
-      const global_limit = Number(String(r.global_limit || '0').replace(/[, ]/g, '')) || 0
+      let global_limit = Number(String(r.global_limit || '0').replace(/[, ]/g, '')) || 0
+
+      // If global_limit not provided, default from grade_limits table
+      if (!global_limit && grade) {
+        const key = grade.toLowerCase().replace(/\s+/g, ' ').trim()
+        const defaultLimit = gradeLimitByName.get(key)
+        if (typeof defaultLimit === 'number') global_limit = defaultLimit
+      }
 
       // Derive category from first character of member_id if available; default 'A'
       const category = (member_id ? member_id[0].toUpperCase() : 'A')

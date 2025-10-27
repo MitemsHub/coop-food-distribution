@@ -3,6 +3,9 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request) {
   try {
     const formData = await request.formData()
@@ -40,8 +43,15 @@ export async function POST(request) {
       await mkdir(uploadDir, { recursive: true })
     }
 
-    // Get file extension
-    const fileExtension = file.name.split('.').pop().toLowerCase()
+    const typeToExt = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+    }
+    const namePart = (file.name || '')
+    const nameExt = namePart.includes('.') ? namePart.split('.').pop()?.toLowerCase() : ''
+    const fileExtension = nameExt || typeToExt[file.type] || 'jpg'
     
     // Create filename using SKU
     const filename = `${sku}.${fileExtension}`
