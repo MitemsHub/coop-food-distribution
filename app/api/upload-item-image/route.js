@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { createClient } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -37,12 +38,6 @@ export async function POST(request) {
       )
     }
 
-    // Create directory if it doesn't exist
-    const uploadDir = join(process.cwd(), 'public', 'images', 'items')
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true })
-    }
-
     const typeToExt = {
       'image/jpeg': 'jpg',
       'image/jpg': 'jpg',
@@ -55,21 +50,50 @@ export async function POST(request) {
     
     // Create filename using SKU
     const filename = `${sku}.${fileExtension}`
-    const filepath = join(uploadDir, filename)
 
-    // Convert file to buffer and save
+    // Convert file to buffer
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    await writeFile(filepath, buffer)
 
-    // Return the relative URL for the database
+    // Try Supabase Storage first (serverless-friendly). Fallback to local filesystem in dev.
+    try {
+      const supabase = createClient()
+      const bucket = process.env.ITEM_IMAGES_BUCKET || 'item-images'
+      const path = `items/${filename}`
+
+      // Ensure bucket exists and is public
+      const { data: bucketInfo, error: bucketInfoErr } = await supabase.storage.getBucket(bucket)
+      if (bucketInfoErr || !bucketInfo) {
+        await supabase.storage.createBucket(bucket, { public: true })
+      }
+
+      const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
+        contentType: file.type,
+        upsert: true,
+      })
+      if (!upErr) {
+        const { data: pub } = await supabase.storage.from(bucket).getPublicUrl(path)
+        const publicUrl = pub?.publicUrl || ''
+        if (publicUrl) {
+          return NextResponse.json({ success: true, imageUrl: publicUrl, message: 'Image uploaded successfully' })
+        }
+      }
+      // If upload failed, fall through to local filesystem
+      console.warn('Supabase Storage upload failed or no public URL; falling back to local filesystem:', upErr?.message)
+    } catch (e) {
+      console.warn('Supabase Storage not available; falling back to local filesystem:', e?.message)
+    }
+
+    // Local filesystem fallback (works in dev, not in Vercel serverless)
+    const uploadDir = join(process.cwd(), 'public', 'images', 'items')
+    if (!existsSync(uploadDir)) {
+      await mkdir(uploadDir, { recursive: true })
+    }
+    const filepath = join(uploadDir, filename)
+    await writeFile(filepath, buffer)
     const imageUrl = `/images/items/${filename}`
 
-    return NextResponse.json({
-      success: true,
-      imageUrl,
-      message: 'Image uploaded successfully'
-    })
+    return NextResponse.json({ success: true, imageUrl, message: 'Image uploaded successfully' })
 
   } catch (error) {
     console.error('Upload error:', error)
