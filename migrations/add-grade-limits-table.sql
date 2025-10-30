@@ -10,7 +10,7 @@ INSERT INTO grade_limits (grade, global_limit) VALUES
   ('Deputy Governor', 0),
   ('Director', 40000000),
   ('Deputy Director', 35000000),
-  ('Assitant Director', 32000000), -- Note: original spelling preserved
+  ('Assistant Director', 32000000), -- Note: original spelling preserved
   ('Principal Manager', 28000000),
   ('Senior Manager', 25000000),
   ('Manager', 22000000),

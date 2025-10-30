@@ -35,8 +35,17 @@ function CartPageContent() {
 
   // Helper function for safe JSON parsing
   const safeJson = async (res, endpoint) => {
-    if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`)
-    return await res.json()
+    if (!res.ok) {
+      // Try to read text for better error diagnostics
+      const text = await res.text().catch(() => '')
+      throw new Error(`${endpoint} returned ${res.status}: ${text.slice(0, 300)}`)
+    }
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      return await res.json()
+    }
+    const text = await res.text()
+    throw new Error(`Non-JSON response from ${endpoint} (${res.status}): ${text.slice(0, 300)}`)
   }
 
   // Load member eligibility
@@ -181,8 +190,10 @@ function CartPageContent() {
   const loadItems = async () => {
     if (!deliveryBranch) return
     try {
-      const res = await fetch(`/api/items/prices?branch=${encodeURIComponent(deliveryBranch)}`)
-      const data = await res.json()
+      const res = await fetch(`/api/items/prices?branch=${encodeURIComponent(deliveryBranch)}`, {
+        headers: { 'Accept': 'application/json' },
+      })
+      const data = await safeJson(res, '/api/items/prices')
       if (data.ok) {
         setItems(data.items || [])
       }
@@ -252,9 +263,14 @@ function CartPageContent() {
   const savingsEligible = Number(eligibility.savingsEligible || 0)
   const loanEligible = Number(eligibility.loanEligible || 0)
   
+  // Loan interest calculation (13% applied to cart total when payment=Loan)
+  const LOAN_INTEREST_RATE = 0.13
+  const loanInterest = paymentOption === 'Loan' ? Math.round(cartTotal * LOAN_INTEREST_RATE) : 0
+  const totalWithInterest = paymentOption === 'Loan' ? cartTotal + loanInterest : cartTotal
+  
   const currentLimit = paymentOption === 'Savings' ? savingsEligible : 
                       paymentOption === 'Loan' ? loanEligible : Infinity
-  const overLimit = paymentOption !== 'Cash' && cartTotal > currentLimit
+  const overLimit = paymentOption !== 'Cash' && totalWithInterest > currentLimit
   const canSubmit = cartItems.length > 0 && !overLimit && deliveryBranch && department
 
   const submitOrder = async () => {
@@ -278,11 +294,14 @@ function CartPageContent() {
       
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: JSON.stringify(orderData)
       })
       
-      const data = await res.json()
+      const data = await safeJson(res, '/api/orders')
       
       if (data.ok) {
         // Clear cart from localStorage
@@ -559,7 +578,7 @@ function CartPageContent() {
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-sm sm:text-base md:text-base font-semibold text-gray-800 mb-2 lg:mb-3">Order Summary</h3>
               
-              <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-2 lg:mb-3">
+              <div className={`grid gap-2 sm:gap-3 md:gap-4 mb-2 lg:mb-3 ${paymentOption === 'Loan' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 <div className="text-center bg-blue-50 rounded-lg p-2 sm:p-3">
                   <div className="text-xs sm:text-sm md:text-sm font-bold text-blue-800">{cartItems.length}</div>
                   <div className="text-xs text-blue-600">Items in Cart</div>
@@ -568,11 +587,36 @@ function CartPageContent() {
                   <div className="text-xs sm:text-sm md:text-sm font-bold text-green-800">₦{cartTotal.toLocaleString()}</div>
                   <div className="text-xs text-green-600">Cart Total</div>
                 </div>
+                {paymentOption === 'Loan' && (
+                  <div className="text-center bg-orange-50 rounded-lg p-2 sm:p-3">
+                    <div className="text-xs sm:text-sm md:text-sm font-bold text-orange-800">₦{loanInterest.toLocaleString()}</div>
+                    <div className="text-xs text-orange-600">Interest (13%)</div>
+                  </div>
+                )}
                 <div className="text-center bg-purple-50 rounded-lg p-2 sm:p-3">
                   <div className="text-xs sm:text-sm md:text-sm font-bold text-purple-800">₦{currentLimit === Number.POSITIVE_INFINITY ? '∞' : currentLimit.toLocaleString()}</div>
                   <div className="text-xs text-purple-600">Limit ({paymentOption})</div>
                 </div>
               </div>
+              
+              {paymentOption === 'Loan' && (
+                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-start">
+                    <svg className="w-4 h-4 text-orange-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <h4 className="text-sm font-semibold text-orange-800 mb-1">Loan Payment Information</h4>
+                      <p className="text-xs text-orange-700">
+                        <strong>Total with Interest:</strong> ₦{totalWithInterest.toLocaleString()} (13% interest applied)
+                      </p>
+                      <p className="text-xs text-orange-700 mt-1">
+                        Your loan limit applies to the total amount including interest.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {overLimit && (
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">

@@ -1,7 +1,7 @@
 // app/rep/pending/page.jsx
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../contexts/AuthContext'
 import ProtectedRoute from '../../components/ProtectedRoute'
@@ -17,6 +17,28 @@ function RepPendingPageContent() {
   const [editing, setEditing] = useState(null)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
+  // Modal drag state
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
+  const dragStartRef = useRef(null)
+
+  const handleModalDragStart = (e) => {
+    e.preventDefault()
+    dragStartRef.current = { x: e.clientX, y: e.clientY, ox: modalOffset.x, oy: modalOffset.y }
+    window.addEventListener('mousemove', handleModalDragMove)
+    window.addEventListener('mouseup', handleModalDragEnd)
+  }
+  const handleModalDragMove = (e) => {
+    const s = dragStartRef.current
+    if (!s) return
+    setModalOffset({ x: s.ox + (e.clientX - s.x), y: s.oy + (e.clientY - s.y) })
+  }
+  const handleModalDragEnd = () => {
+    dragStartRef.current = null
+    window.removeEventListener('mousemove', handleModalDragMove)
+    window.removeEventListener('mouseup', handleModalDragEnd)
+  }
+
+  useEffect(() => { if (showModal) setModalOffset({ x: 0, y: 0 }) }, [showModal])
   const { user, logout } = useAuth()
   const router = useRouter()
 
@@ -46,18 +68,21 @@ function RepPendingPageContent() {
 
   const fetchOrders = async (reset = true) => {
     setLoading(true); setMsg(null)
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 5000)
     try {
       const qs = new URLSearchParams({ status:'Pending', limit:'50' })
       if (dept) qs.set('dept', dept)
       if (!reset && nextCursor) { qs.set('cursor', nextCursor); qs.set('dir', 'next') }
-      const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache:'no-store' })
-      const json = await res.json()
+      const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache:'no-store', headers:{ 'Accept':'application/json' }, signal: ctl.signal })
+      const json = await safeJson(res, '/api/rep/orders/list')
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
       setOrders(reset ? (json.orders || []) : [...orders, ...(json.orders || [])])
       setNextCursor(json.nextCursor || null)
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name !== 'AbortError') setMsg({ type:'error', text:e.message })
     } finally {
+      clearTimeout(timer)
       setLoading(false)
     }
   }
@@ -71,23 +96,34 @@ function RepPendingPageContent() {
     const { orderId } = showModal
     setPostingOrder(orderId)
     try {
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), 8000)
       const res = await fetch('/api/rep/orders/post', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId, note: modalInput || '' })
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ orderId, note: modalInput || '' }),
+        signal: ctl.signal
       })
-      const j = await res.json()
+      const j = await safeJson(res, '/api/rep/orders/post')
       if (!res.ok || !j.ok) throw new Error(j.error || 'Failed')
-      
-      // Refresh data from server instead of just filtering local state
-      fetchOrders()
+
+      // Optimistic UI: remove order locally for instant feedback
+      setOrders(prev => prev.filter(o => o.order_id !== orderId))
       setMsg({ type:'success', text:`Order ${orderId} posted successfully` })
-      setShowModal(null)
       setModalInput('')
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        setMsg({ type:'error', text:'Post request timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
+      // ensure timer cleared
+      try { clearTimeout(timer) } catch {}
       setPostingOrder(null)
+      // Always close the modal after finishing (success or error)
+      setShowModal(null)
     }
   }
 
@@ -421,9 +457,12 @@ function RepPendingPageContent() {
       
       {/* Modal for input prompts */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+        <div className="fixed inset-0 bg-white/10 backdrop-blur-sm flex items-center justify-center z-50">
+          <div
+            className="bg-gradient-to-b from-white to-gray-50 p-6 rounded-xl shadow-xl ring-1 ring-black/5 max-w-md w-full mx-4 relative select-none"
+            style={{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }}
+          >
+            <h3 className="text-lg font-semibold mb-4 cursor-move" onMouseDown={handleModalDragStart}>{showModal.title}</h3>
             <p className="text-gray-600 mb-4">
               {showModal.message || (
                 showModal.type === 'post' 

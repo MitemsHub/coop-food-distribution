@@ -12,6 +12,13 @@ function DeliveredPageContent() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
+  const safeJson = async (res, label) => {
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) return await res.json()
+    const text = await res.text()
+    throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
+  }
+
   const fetchOrders = async () => {
     const qs = new URLSearchParams({
       status: 'Delivered',
@@ -20,13 +27,22 @@ function DeliveredPageContent() {
       ...(payment ? { payment } : {}),
       ...(branch ? { branch } : {}),
     })
-    const res = await fetch(`/api/admin/orders/list?${qs}`)
-    const json = await res.json()
-    if (json.ok) {
-      let rows = json.orders || []
-      if (from) rows = rows.filter(r => new Date(r.posted_at || r.created_at) >= new Date(from))
-      if (to) rows = rows.filter(r => new Date(r.posted_at || r.created_at) <= new Date(to + 'T23:59:59'))
-      setOrders(rows)
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 8000)
+    try {
+      const res = await fetch(`/api/admin/orders/list?${qs}`, { headers:{ 'Accept':'application/json' }, cache:'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/admin/orders/list (delivered)')
+      if (json.ok) {
+        let rows = json.orders || []
+        if (from) rows = rows.filter(r => new Date(r.posted_at || r.created_at) >= new Date(from))
+        if (to) rows = rows.filter(r => new Date(r.posted_at || r.created_at) <= new Date(to + 'T23:59:59'))
+        setOrders(rows)
+      }
+    } catch (e) {
+      setOrders([])
+      console.warn('Delivered list fetch error:', e)
+    } finally {
+      try { clearTimeout(timer) } catch {}
     }
   }
 

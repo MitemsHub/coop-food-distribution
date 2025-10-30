@@ -19,6 +19,13 @@ function RepPostedPageContent() {
   const { user, logout } = useAuth()
   const router = useRouter()
 
+  const safeJson = async (res, label) => {
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) return await res.json()
+    const text = await res.text()
+    throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
+  }
+
   const changeBranch = () => {
     if (confirm('Are you sure you want to change your branch? You will be logged out and redirected to the login page.')) {
       logout()
@@ -43,18 +50,21 @@ function RepPostedPageContent() {
 
   const fetchOrders = async (reset = true) => {
     setLoading(true); setMsg(null)
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 5000)
     try {
       const qs = new URLSearchParams({ status: 'Posted', limit: '50' })
       if (dept) qs.set('dept', dept)
       if (!reset && nextCursor) { qs.set('cursor', nextCursor); qs.set('dir', 'next') }
-      const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache: 'no-store' })
-      const json = await res.json()
+      const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache: 'no-store', headers:{ 'Accept':'application/json' }, signal: ctl.signal })
+      const json = await safeJson(res, '/api/rep/orders/list')
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
       setOrders(reset ? (json.orders || []) : [...orders, ...(json.orders || [])])
       setNextCursor(json.nextCursor || null)
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name !== 'AbortError') setMsg({ type:'error', text:e.message })
     } finally {
+      clearTimeout(timer)
       setLoading(false)
     }
   }
@@ -75,21 +85,31 @@ function RepPostedPageContent() {
     const deliveredBy = modalInput.trim() || 'rep'
     setDeliveringOrder(orderId)
     try {
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), 8000)
       const res = await fetch('/api/rep/orders/deliver', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId, deliveredBy })
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ orderId, deliveredBy }),
+        signal: ctl.signal
       })
-      const j = await res.json()
+      const j = await safeJson(res, '/api/rep/orders/deliver')
       if (!res.ok || !j.ok) throw new Error(j.error || 'Deliver failed')
       setOrders(orders.filter(o => o.order_id !== orderId))
       setMsg({ type:'success', text:`Order ${orderId} delivered successfully` })
-      setShowModal(null)
       setModalInput('')
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        setMsg({ type:'error', text:'Delivery request timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
+      try { clearTimeout(timer) } catch {}
       setDeliveringOrder(null)
+      // Always close the modal after finishing (success or error)
+      setShowModal(null)
     }
   }
 
@@ -257,7 +277,7 @@ function RepPostedPageContent() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
             <p className="text-gray-600 mb-4">{showModal.message}</p>

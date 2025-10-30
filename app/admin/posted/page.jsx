@@ -1,7 +1,7 @@
 // app/admin/posted/page.jsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
 
 function PostedAdminPageContent() {
@@ -18,6 +18,26 @@ function PostedAdminPageContent() {
   const [deliveringBulk, setDeliveringBulk] = useState(false) // Track bulk delivery
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
+  // Modal drag state
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
+  const dragStartRef = useRef(null)
+  const handleModalDragStart = (e) => {
+    e.preventDefault()
+    dragStartRef.current = { x: e.clientX, y: e.clientY, ox: modalOffset.x, oy: modalOffset.y }
+    window.addEventListener('mousemove', handleModalDragMove)
+    window.addEventListener('mouseup', handleModalDragEnd)
+  }
+  const handleModalDragMove = (e) => {
+    const s = dragStartRef.current
+    if (!s) return
+    setModalOffset({ x: s.ox + (e.clientX - s.x), y: s.oy + (e.clientY - s.y) })
+  }
+  const handleModalDragEnd = () => {
+    dragStartRef.current = null
+    window.removeEventListener('mousemove', handleModalDragMove)
+    window.removeEventListener('mouseup', handleModalDragEnd)
+  }
+  useEffect(() => { if (showModal) setModalOffset({ x: 0, y: 0 }) }, [showModal])
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -98,13 +118,17 @@ function PostedAdminPageContent() {
         // Handle multiple deliveries
         const { selectedIds } = showModal
         for (const id of selectedIds) {
+          const ctl = new AbortController()
+          const timer = setTimeout(() => ctl.abort(), 8000)
           const res = await fetch('/api/admin/orders/deliver', {
             method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ orderId:id, adminId:'admin@coop', deliveredBy })
+            headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+            body: JSON.stringify({ orderId:id, adminId:'admin@coop', deliveredBy }),
+            signal: ctl.signal
           })
           const json = await safeJson(res, '/api/admin/orders/deliver')
           if (!json.ok) throw new Error(json.error || 'Deliver failed')
+          try { clearTimeout(timer) } catch {}
         }
         setMsg({ type:'success', text:`Delivered ${selectedIds.length} order(s)` })
         fetchOrders()
@@ -113,10 +137,13 @@ function PostedAdminPageContent() {
         setDeliveringOrder(showModal.orderId)
         // Handle single delivery
         const { orderId } = showModal
+        const ctl = new AbortController()
+        const timer = setTimeout(() => ctl.abort(), 8000)
         const res = await fetch('/api/admin/orders/deliver', {
           method:'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy })
+          headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+          body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy }),
+          signal: ctl.signal
         })
         const json = await safeJson(res, '/api/admin/orders/deliver')
         if (!json.ok) throw new Error(json.error || 'Deliver failed')
@@ -127,10 +154,16 @@ function PostedAdminPageContent() {
       setShowModal(null)
       setModalInput('')
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        setMsg({ type:'error', text:'Delivery request timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
       setDeliveringOrder(null)
       setDeliveringBulk(false)
+      // Ensure modal closes even on error
+      setShowModal(null)
     }
   }
 
@@ -302,9 +335,12 @@ function PostedAdminPageContent() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
+        <div className="fixed inset-0 bg-white/10 backdrop-blur-sm flex items-center justify-center z-50">
+          <div
+            className="bg-gradient-to-b from-white to-gray-50 p-6 rounded-xl shadow-xl ring-1 ring-black/5 max-w-md w-full mx-4 relative select-none"
+            style={{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }}
+          >
+            <h3 className="text-lg font-semibold mb-4 cursor-move" onMouseDown={handleModalDragStart}>{showModal.title}</h3>
             <p className="text-gray-600 mb-4">{showModal.message}</p>
             <input
               type="text"

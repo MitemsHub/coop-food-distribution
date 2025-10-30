@@ -15,6 +15,8 @@ function SuccessContent() {
   const [downloading, setDownloading] = useState(false)
 
   const currency = (n) => `₦${Number(n || 0).toLocaleString()}`
+  // Use ASCII-only currency for PDF to avoid Unicode glyph issues
+  const currencyPDF = (n) => `NGN ${Number(n || 0).toLocaleString()}`
 
   // Safe JSON helper
   const safeJson = async (res, label) => {
@@ -91,8 +93,9 @@ function SuccessContent() {
         // No SKU shown
         doc.text(l.items?.name || '', 10, y)
         doc.text(String(l.qty), 125, y, { align: 'right' })
-        doc.text(currency(l.unit_price), 140, y)
-        doc.text(currency(l.amount), 165, y)
+        // Avoid ₦ in PDF (may scramble in some viewers)
+        doc.text(currencyPDF(l.unit_price), 140, y)
+        doc.text(currencyPDF(l.amount), 165, y)
         y += 6
         if (y > 270) { doc.addPage(); y = 20 }
       })
@@ -100,7 +103,8 @@ function SuccessContent() {
       y += 4
       doc.line(120, y, 200, y); y += 6
       doc.setFontSize(12)
-      doc.text(`Total: ${currency(order.total_amount)}`, 165, y, { align: 'right' })
+      // Avoid ₦ in PDF footer
+      doc.text(`Total: ${currencyPDF(order.total_amount)}`, 165, y, { align: 'right' })
 
       doc.save(`Order_${order.order_id}.pdf`)
     } catch (e) {

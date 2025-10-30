@@ -2,6 +2,7 @@
 'use client'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import DraggableModal from '../../components/DraggableModal'
 
 function PendingAdminPageContent() {
   const [orders, setOrders] = useState([])
@@ -19,6 +20,7 @@ function PendingAdminPageContent() {
   const [modalInput, setModalInput] = useState('')
   const [deletingOrder, setDeletingOrder] = useState(false) // Track delete action loading
   const fetchCtl = useRef(null)
+  // Draggable modal now handled by reusable component
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -94,21 +96,29 @@ function PendingAdminPageContent() {
     const { orderId } = showModal
     setPostingOrder(orderId)
     try {
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), 8000)
       const res = await fetch('/api/admin/orders/post', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId, adminId:'admin@coop', adminNote: modalInput || '' })
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ orderId, adminId:'admin@coop', adminNote: modalInput || '' }),
+        signal: ctl.signal
       })
       const json = await safeJson(res, '/api/admin/orders/post')
       if (!json.ok) throw new Error(json.error || 'Post failed')
       setMsg({ type:'success', text:`Order ${orderId} posted` })
       fetchOrders(); setSelected(new Set())
-      setShowModal(null)
       setModalInput('')
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        setMsg({ type:'error', text:'Post timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
+      try { clearTimeout(timer) } catch {}
       setPostingOrder(null)
+      setShowModal(null)
     }
   }
 
@@ -123,10 +133,13 @@ function PendingAdminPageContent() {
     setPostingBulk(true)
     try {
       // Use optimized bulk post API
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), 8000)
       const res = await fetch('/api/admin/orders/post-bulk', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderIds, adminId:'admin@coop' })
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ orderIds, adminId:'admin@coop' }),
+        signal: ctl.signal
       })
       const json = await safeJson(res, '/api/admin/orders/post-bulk')
       if (!json.ok) throw new Error(json.error || 'Bulk post failed')
@@ -137,7 +150,7 @@ function PendingAdminPageContent() {
         const notePromises = json.posted.map(id =>
           fetch('/api/admin/orders/post', {
             method:'POST',
-            headers:{'Content-Type':'application/json'},
+            headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
             body: JSON.stringify({ orderId:id, adminId:'admin@coop', adminNote: modalInput })
           })
         )
@@ -153,12 +166,17 @@ function PendingAdminPageContent() {
 
       setMsg({ type:'success', text: message })
       fetchOrders(); setSelected(new Set())
-      setShowModal(null)
       setModalInput('')
     } catch (e) {
-      setMsg({ type:'error', text:e.message })
+      if (e.name === 'AbortError') {
+        setMsg({ type:'error', text:'Bulk post timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type:'error', text:e.message })
+      }
     } finally {
+      try { clearTimeout(timer) } catch {}
       setPostingBulk(false)
+      setShowModal(null)
     }
   }
 
@@ -434,87 +452,88 @@ function PendingAdminPageContent() {
       
       {/* Modal for input prompts */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
-            <p className="text-gray-600 mb-4">
-              {showModal.type === 'delete'
-                ? showModal.message
-                : showModal.type === 'post'
-                ? `Post order ${showModal.orderId}?`
-                : `Post ${showModal.orderIds?.length || 0} order(s)?`
-              }
-            </p>
-            <input
-              type="text"
-              value={modalInput}
-              onChange={(e) => setModalInput(e.target.value)}
-              placeholder={showModal.placeholder}
-              className="w-full p-2 border rounded mb-4"
-              autoFocus
-            />
+        <DraggableModal
+          open={!!showModal}
+          title={showModal.title}
+          onClose={() => { setShowModal(null); setModalInput('') }}
+          overlayClassName="bg-white/10 backdrop-blur-sm"
+          footer={(
             <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    setShowModal(null)
-                    setModalInput('')
-                  }}
-                  className="px-4 py-2 border rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={showModal.type === 'post' ? handlePostSubmit : showModal.type === 'delete' ? handleDeleteSubmit : handleBulkPostSubmit}
-                  className={`px-4 py-2 rounded text-white ${
-                    showModal.type === 'post'
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : showModal.type === 'delete'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                  disabled={
-                    showModal.type === 'post'
-                      ? postingOrder === showModal.orderId
-                      : showModal.type === 'delete'
-                      ? deletingOrder
-                      : postingBulk
-                  }
-                >
-                  {showModal.type === 'post' ? (
-                    postingOrder === showModal.orderId ? (
-                      <div className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Posting...
-                      </div>
-                    ) : 'Post Order'
-                  ) : showModal.type === 'delete' ? (
-                    deletingOrder ? (
-                      <div className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Deleting...
-                      </div>
-                    ) : 'Delete Order'
-                  ) : (
-                    postingBulk ? (
-                      <div className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Posting...
-                      </div>
-                    ) : 'Post Orders'
-                  )}
-                </button>
-              </div>
-          </div>
-        </div>
+              <button
+                onClick={() => { setShowModal(null); setModalInput('') }}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={showModal.type === 'post' ? handlePostSubmit : showModal.type === 'delete' ? handleDeleteSubmit : handleBulkPostSubmit}
+                className={`px-4 py-2 rounded text-white ${
+                  showModal.type === 'post'
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : showModal.type === 'delete'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+                disabled={
+                  showModal.type === 'post'
+                    ? postingOrder === showModal.orderId
+                    : showModal.type === 'delete'
+                    ? deletingOrder
+                    : postingBulk
+                }
+              >
+                {showModal.type === 'post' ? (
+                  postingOrder === showModal.orderId ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Posting...
+                    </div>
+                  ) : 'Post Order'
+                ) : showModal.type === 'delete' ? (
+                  deletingOrder ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                      Deleting...
+                    </div>
+                  ) : 'Delete Order'
+                ) : (
+                  postingBulk ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Posting...
+                    </div>
+                  ) : 'Post Orders'
+                )}
+              </button>
+            </div>
+          )}
+        >
+          <p className="text-gray-600 mb-4">
+            {showModal.type === 'delete'
+              ? showModal.message
+              : showModal.type === 'post'
+              ? `Post order ${showModal.orderId}?`
+              : `Post ${showModal.orderIds?.length || 0} order(s)?`
+            }
+          </p>
+          <input
+            type="text"
+            value={modalInput}
+            onChange={(e) => setModalInput(e.target.value)}
+            placeholder={showModal.placeholder}
+            className="w-full p-2 border rounded"
+            autoFocus
+          />
+        </DraggableModal>
       )}
       </div>
     </ProtectedRoute>

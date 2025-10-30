@@ -8,10 +8,20 @@ const nextConfig = {
   
   // Optimize images
   images: {
-    domains: [],
+    // Allow Supabase storage domain dynamically
+    domains: (() => {
+      try {
+        const host = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host : null
+        return host ? [host] : []
+      } catch {
+        return []
+      }
+    })(),
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-    unoptimized: true
+    // Enable Next.js image optimization for remote images
+    unoptimized: false,
+    formats: ['image/avif', 'image/webp']
   },
   
   // Security headers

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
 import ImageUpload from './ImageUpload'
 
@@ -120,21 +121,25 @@ export default function ItemManagement() {
           <div key={item.item_id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
             {/* Item Image */}
             <div className="mb-3">
-              <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+              <div className="relative w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
                 {item.image_url ? (
-                  <img
-                    src={`${item.image_url}?t=${Date.now()}&r=${refreshKey}`}
+                  <Image
+                    key={refreshKey}
+                    src={item.image_url}
                     alt={item.name}
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => {
-                      e.target.src = '/images/items/placeholder.svg'
-                    }}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, (max-width: 1536px) 20vw, 16vw"
+                    loading="lazy"
+                    className="object-contain"
                   />
                 ) : (
-                  <img
+                  <Image
                     src="/images/items/placeholder.svg"
                     alt="No image"
-                    className="max-w-full max-h-full object-contain opacity-50"
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, (max-width: 1536px) 20vw, 16vw"
+                    loading="lazy"
+                    className="object-contain opacity-50"
                   />
                 )}
               </div>
@@ -215,7 +220,7 @@ export default function ItemManagement() {
 
       {/* Image Upload Modal */}
       {showImageUpload && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-transparent flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">

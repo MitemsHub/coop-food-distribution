@@ -2,6 +2,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState, useCallback, Suspense } from 'react'
+import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -382,18 +383,37 @@ function ShopPageContent() {
 
   const cartTotal = useMemo(() => cartLines.reduce((s, l) => s + l.amount, 0), [cartLines])
 
+  // Loan interest computation (13% applied to cart total when payment=Loan)
+  const LOAN_INTEREST_RATE = 0.13
+  const loanInterest = useMemo(() => (
+    paymentOption === 'Loan' ? Math.round(cartTotal * LOAN_INTEREST_RATE) : 0
+  ), [paymentOption, cartTotal])
+  const totalWithInterest = useMemo(() => (
+    paymentOption === 'Loan' ? cartTotal + loanInterest : cartTotal
+  ), [paymentOption, cartTotal, loanInterest])
+
   const currentLimit = paymentOption === 'Savings'
     ? savingsEligible
     : paymentOption === 'Loan'
     ? loanEligible
     : Number.POSITIVE_INFINITY
 
-  // Calculate remaining limit after current cart total
-  const remainingLimit = paymentOption === 'Cash' 
-    ? Number.POSITIVE_INFINITY 
-    : Math.max(0, currentLimit - cartTotal)
+  // Remaining limit should respect selected payment option.
+  // For Loan, factor 13% interest into the remaining limit calculation;
+  // For Savings, use principal cart total;
+  // For Cash, there is no limit.
+  const remainingLimit = useMemo(() => {
+    if (paymentOption === 'Cash') return Number.POSITIVE_INFINITY
+    if (paymentOption === 'Loan') {
+      return Math.max(0, loanEligible - totalWithInterest)
+    }
+    // Savings
+    return Math.max(0, savingsEligible - cartTotal)
+  }, [paymentOption, loanEligible, savingsEligible, cartTotal, totalWithInterest])
 
-  const overLimit = cartTotal > currentLimit && paymentOption !== 'Cash'
+  const overLimit = paymentOption !== 'Cash' && (
+    paymentOption === 'Loan' ? totalWithInterest > currentLimit : cartTotal > currentLimit
+  )
   const canSubmit = !!member && !!deliveryBranchCode && !!departmentName && cartLines.length > 0 && !overLimit && !submitting
 
   const setQtySafe = useCallback(async (sku, val) => {
@@ -934,13 +954,16 @@ function ShopPageContent() {
                   <div key={it.sku} className="shop-item-card bg-gradient-to-br from-white to-gray-50 border-2 border-gray-100 rounded-lg xl:rounded-xl p-2 lg:p-3 xl:p-4 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300">
                     {/* Item Image */}
                     <div className="mb-2 lg:mb-3">
-                      <div className="w-full h-28 lg:h-32 xl:h-36 bg-gray-100 rounded-lg overflow-hidden mb-2 lg:mb-3 flex items-center justify-center">
-                        <img
+                      <div className="relative w-full h-28 lg:h-32 xl:h-36 bg-gray-100 rounded-lg overflow-hidden mb-2 lg:mb-3 flex items-center justify-center">
+                        <Image
                           src={it.image_url || '/images/items/placeholder.svg'}
                           alt={it.name}
-                          className="max-w-full max-h-full object-contain"
+                          fill
+                          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 15vw"
+                          className="object-contain"
+                          loading="lazy"
                           onError={(e) => {
-                            e.target.src = '/images/items/placeholder.svg'
+                            e.currentTarget.src = '/images/items/placeholder.svg'
                           }}
                         />
                       </div>
@@ -1001,7 +1024,7 @@ function ShopPageContent() {
                  </h3>
                </div>
                
-               <div className="grid grid-cols-4 gap-1 sm:gap-2 md:gap-3 mb-2 lg:mb-3">
+               <div className={`${paymentOption === 'Loan' ? 'grid grid-cols-5' : 'grid grid-cols-4'} gap-1 sm:gap-2 md:gap-3 mb-2 lg:mb-3`}>
                  <div className="bg-blue-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
                    <div className="text-xs text-blue-600 mb-0.5 lg:mb-1">Items in Cart</div>
                    <div className="text-xs sm:text-xs md:text-sm font-bold text-blue-700">{cartLines.length}</div>
@@ -1010,6 +1033,12 @@ function ShopPageContent() {
                    <div className="text-xs text-green-600 mb-0.5 lg:mb-1">Cart Total</div>
                    <div className="text-xs sm:text-xs md:text-sm font-bold text-green-700">₦{cartTotal.toLocaleString()}</div>
                  </div>
+                 {paymentOption === 'Loan' && (
+                   <div className="bg-orange-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
+                     <div className="text-xs text-orange-600 mb-0.5 lg:mb-1">Interest (13%)</div>
+                     <div className="text-xs sm:text-xs md:text-sm font-bold text-orange-700">₦{loanInterest.toLocaleString()}</div>
+                   </div>
+                 )}
                  <div className={`rounded-lg p-1.5 sm:p-2 md:p-3 text-center ${
                    overLimit ? 'bg-red-50' : 'bg-purple-50'
                  }`}>
@@ -1054,6 +1083,7 @@ function ShopPageContent() {
                    </button>
                  </div>
                </div>
+
                </div>
         {overLimit && (
           <div className="text-red-600 text-sm mt-2">
