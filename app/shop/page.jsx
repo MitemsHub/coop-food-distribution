@@ -901,6 +901,9 @@ function ShopPageContent() {
                        <p className="text-sm text-orange-700">
                          Interest Rate: A 13% interest will be charged on all items purchased using the loan payment option.
                        </p>
+                       <p className="text-sm text-orange-700 mt-2">
+                         Kindly note that all members have access to an additional N300,000 shopping loan facility. The total shopping loan amount available to eligible member when using the loan option is capped at N1,000,000.
+                       </p>
                      </div>
                    </div>
                  </div>
