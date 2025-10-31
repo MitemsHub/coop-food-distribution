@@ -22,11 +22,21 @@ function DepartmentInventorySection() {
     const text = await res.text()
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
+  // CSV escape helper to properly handle quotes and commas
+  const csvEscape = (val) => {
+    const s = String(val ?? '')
+    const escaped = s.replace(/"/g, '""')
+    return `"${escaped}"`
+  }
 
   // Load departments and branches
   useEffect(() => {
-    loadDepartments()
-    loadBranches()
+    const ac = new AbortController()
+    loadDepartments(ac.signal)
+    loadBranches(ac.signal)
+    return () => {
+      ac.abort()
+    }
   }, [])
 
   // Load department inventory data when filters change
@@ -34,29 +44,34 @@ function DepartmentInventorySection() {
     loadDepartmentInventory()
   }, [selectedBranch, selectedDepartment])
 
-  const loadDepartments = async () => {
+  const loadDepartments = async (signal) => {
     try {
       const response = await fetch('/api/admin/inventory/department-status', {
-        method: 'OPTIONS'
+        method: 'OPTIONS',
+        signal
       })
       const data = await safeJson(response, '/api/admin/inventory/department-status (OPTIONS)')
       setDepartments(data.departments || [])
     } catch (error) {
+      if (error?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(error?.message || '')) {
+        return
+      }
       console.error('Error loading departments:', error)
     }
   }
 
-  const loadBranches = async () => {
+  const loadBranches = async (signal) => {
     try {
       // Align with Branch section: load from /api/branches/list
-      const res = await fetch('/api/branches/list', { cache: 'no-store' })
+      const res = await fetch('/api/branches/list', { cache: 'no-store', signal })
       const json = await res.json()
       if (json.ok) {
-        // Use branch names for dropdown values (consistent with Branch section)
-        const uniqueBranches = [...new Set((json.branches || []).map(b => b.name))]
-        setBranches(uniqueBranches)
+        setBranches(json.branches || [])
       }
     } catch (error) {
+      if (error?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(error?.message || '')) {
+        return
+      }
       console.error('Error loading branches:', error)
     }
   }
@@ -68,10 +83,16 @@ function DepartmentInventorySection() {
       if (selectedBranch !== 'All Branches') params.append('branch', selectedBranch)
       if (selectedDepartment !== 'All Departments') params.append('department', selectedDepartment)
       
-      const response = await fetch(`/api/admin/inventory/department-status?${params}`)
+      const response = await fetch(`/api/admin/inventory/department-status?${params}`, { cache: 'no-store' })
       const result = await safeJson(response, '/api/admin/inventory/department-status')
       setDepartmentData(result.data || [])
     } catch (error) {
+      if (error?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(error?.message || '')) {
+        // navigation or duplicate renders can abort fetches in dev; ignore
+        setDepartmentData([])
+        setLoading(false)
+        return
+      }
       console.error('Error loading department inventory:', error)
       setDepartmentData([])
     } finally {
@@ -80,8 +101,8 @@ function DepartmentInventorySection() {
   }
 
   // Pagination logic
+  const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
     return departmentData.slice(startIndex, startIndex + itemsPerPage)
   }, [departmentData, currentPage, itemsPerPage])
 
@@ -101,8 +122,8 @@ function DepartmentInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
-      ].map(field => `"${field}"`).join(','))
+        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
+      ].map(csvEscape).join(','))
     ].join('\n')
     
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -140,7 +161,7 @@ function DepartmentInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
+        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
       ])
       
       autoTable(doc, {
@@ -187,7 +208,7 @@ function DepartmentInventorySection() {
         >
           <option value="All Branches">All Branches</option>
           {branches.map(branch => (
-            <option key={branch} value={branch}>{branch}</option>
+            <option key={branch.code} value={branch.name}>{branch.name}</option>
           ))}
         </select>
         
@@ -225,7 +246,7 @@ function DepartmentInventorySection() {
       {/* Data Summary */}
       {departmentData.length > 0 && (
         <div className="text-xs sm:text-sm text-gray-600 mb-3 p-2 sm:p-0">
-          Showing {departmentData.length} items across departments
+          Showing {Math.min(startIndex + 1, departmentData.length)} to {Math.min(startIndex + (paginatedData?.length || 0), departmentData.length)} of {departmentData.length} items
         </div>
       )}
       
@@ -326,7 +347,7 @@ function ItemsInventorySection() {
   const loadItemsInventory = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/inventory/items')
+      const response = await fetch('/api/admin/inventory/items', { cache: 'no-store' })
       const result = await response.json()
       if (result.ok) {
         setItemsData(result.data || [])
@@ -335,6 +356,12 @@ function ItemsInventorySection() {
         setItemsData([])
       }
     } catch (error) {
+      if (error?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(error?.message || '')) {
+        // Ignore aborts from navigation or duplicate dev renders
+        setItemsData([])
+        setLoading(false)
+        return
+      }
       console.error('Error loading items inventory:', error)
       setItemsData([])
     } finally {
@@ -343,7 +370,27 @@ function ItemsInventorySection() {
   }
 
   useEffect(() => {
-    loadItemsInventory()
+    const ac = new AbortController()
+    const run = async () => {
+      try {
+        const response = await fetch('/api/admin/inventory/items', { cache: 'no-store', signal: ac.signal })
+        const result = await response.json()
+        if (result.ok) {
+          setItemsData(result.data || [])
+        } else {
+          console.error('Failed to load items inventory:', result.error)
+          setItemsData([])
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(error?.message || '')) {
+          return
+        }
+        console.error('Error loading items inventory:', error)
+        setItemsData([])
+      }
+    }
+    run()
+    return () => ac.abort()
   }, [])
 
   // Pagination logic
@@ -364,8 +411,8 @@ function ItemsInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
-      ].map(field => `"${field}"`).join(','))
+        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
+      ].map(field => `"${String(field ?? '').replace(/\"/g,'""')}"`).join(','))
     ].join('\n')
     
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -400,7 +447,7 @@ function ItemsInventorySection() {
         (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
         (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
         (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
+        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
       ])
       
       autoTable(doc, {
@@ -488,7 +535,7 @@ function ItemsInventorySection() {
                 </tr>
               ) : (
                 paginatedData.map((row, index) => (
-                  <tr key={row.sku} className="hover:bg-gray-50">
+                  <tr key={`${row.item_id ?? row.sku ?? index}-${row.branch_code ?? row.branch_name ?? 'all'}`} className="hover:bg-gray-50">
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-mono text-xs">{row.sku}</td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900 font-medium">{row.item_name}</td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">
@@ -501,7 +548,7 @@ function ItemsInventorySection() {
                       {row.delivered_qty ?? row.delivered_demand ?? 0}
                     </td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">
-                      {( (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0) )}
+                      {row.total_demand ?? ( (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0) )}
                     </td>
                   </tr>
                 ))
@@ -542,6 +589,204 @@ function ItemsInventorySection() {
   )
 }
 
+// Delivery vs Branch Inventory Section (Applications counts)
+function DeliveryMemberInventorySection() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [deliveryBranch, setDeliveryBranch] = useState('')
+  const [memberBranch, setMemberBranch] = useState('')
+  const [branches, setBranches] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  useEffect(() => {
+    const ac = new AbortController()
+    const loadBranches = async () => {
+      try {
+        const res = await fetch('/api/branches/list', { cache: 'no-store', signal: ac.signal })
+        const json = await res.json()
+        if (json.ok) setBranches(json.branches || [])
+      } catch (_) {}
+    }
+    loadBranches()
+    return () => ac.abort()
+  }, [])
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (deliveryBranch) params.append('delivery', deliveryBranch)
+      if (memberBranch) params.append('member', memberBranch)
+      const res = await fetch(`/api/admin/inventory/delivery-branch-member?${params.toString()}`, { cache: 'no-store' })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to load')
+      setRows(json.data || [])
+    } catch (e) {
+      console.error('Load delivery vs branch failed:', e)
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const ac = new AbortController()
+    const run = async () => {
+      try {
+        const params = new URLSearchParams()
+        if (deliveryBranch) params.append('delivery', deliveryBranch)
+        if (memberBranch) params.append('member', memberBranch)
+        const res = await fetch(`/api/admin/inventory/delivery-branch-member?${params.toString()}`, { cache: 'no-store', signal: ac.signal })
+        const json = await res.json()
+        if (json.ok) setRows(json.data || [])
+      } catch (_) {}
+    }
+    run()
+    return () => ac.abort()
+  }, [deliveryBranch, memberBranch])
+
+  // Pagination
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const paginated = rows.slice(startIndex, startIndex + itemsPerPage)
+  const totalPages = Math.ceil(rows.length / itemsPerPage)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [deliveryBranch, memberBranch])
+
+  // Export CSV
+  const exportCSV = () => {
+    const headers = ['Delivery Branch', 'Member Branch', 'Pending', 'Posted', 'Delivered', 'Total']
+    const csv = [
+      headers.join(','),
+      ...rows.map(r => [
+        r.delivery_branch_name,
+        r.branch_name,
+        r.pending || 0,
+        r.posted || 0,
+        r.delivered || 0,
+        r.total || 0
+      ].map(v => `"${String(v ?? '').replace(/\"/g,'""')}"`).join(','))
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const d = deliveryBranch ? deliveryBranch.replace(/\s+/g,'_') : 'all_delivery'
+    const m = memberBranch ? memberBranch.replace(/\s+/g,'_') : 'all_member'
+    a.download = `delivery_vs_branch_${d}_${m}_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Export PDF
+  const exportPDF = async () => {
+    try {
+      if (!rows || rows.length === 0) return
+      const { jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF('l', 'mm', 'a4')
+      doc.setFontSize(16)
+      doc.text('Inventory — Delivery Branch & Branch', 14, 15)
+      doc.setFontSize(10)
+      doc.text(`Filters: Delivery=${deliveryBranch || 'All'} | Member=${memberBranch || 'All'}`, 14, 25)
+      autoTable(doc, {
+        head: [['Delivery Branch','Member Branch','Pending','Posted','Delivered','Total']],
+        body: rows.map(r => [
+          r.delivery_branch_name || '',
+          r.branch_name || '',
+          r.pending || 0,
+          r.posted || 0,
+          r.delivered || 0,
+          r.total || 0
+        ]),
+        startY: 32,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 }
+      })
+      const d = deliveryBranch ? deliveryBranch.replace(/\s+/g,'_') : 'all_delivery'
+      const m = memberBranch ? memberBranch.replace(/\s+/g,'_') : 'all_member'
+      doc.save(`delivery_vs_branch_${d}_${m}_${new Date().toISOString().split('T')[0]}.pdf`)
+    } catch (e) {
+      console.error('PDF export error:', e)
+    }
+  }
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">Admin — Inventory by Delivery Branch & Branch</h2>
+
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <button onClick={load} disabled={loading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+        <select value={deliveryBranch} onChange={e=>setDeliveryBranch(e.target.value)} className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Delivery Branches</option>
+          {branches.map(b => (<option key={`del-${b.code}`} value={b.name}>{b.name}</option>))}
+        </select>
+        <select value={memberBranch} onChange={e=>setMemberBranch(e.target.value)} className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Member Branches</option>
+          {branches.map(b => (<option key={`mem-${b.code}`} value={b.name}>{b.name}</option>))}
+        </select>
+        <button onClick={exportCSV} disabled={rows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">Export CSV</button>
+        <button onClick={exportPDF} disabled={rows.length === 0} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">Export PDF</button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Delivery Branch</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-gray-900">Member Branch</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Pending</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Posted</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Delivered</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {loading ? (
+                <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">Loading data...</td></tr>
+              ) : paginated.length === 0 ? (
+                <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">No data found.</td></tr>
+              ) : (
+                paginated.map((r, idx) => (
+                  <tr key={`${r.delivery_branch_name}-${r.branch_name}-${idx}`} className="hover:bg-gray-50">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{r.delivery_branch_name}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{r.branch_name}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-yellow-600">{r.pending || 0}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-purple-600">{r.posted || 0}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-green-600">{r.delivered || 0}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-blue-600 font-medium">{r.total || 0}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center space-x-2">
+              <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+              <span className="text-sm text-gray-700">Page {currentPage} of {totalPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+            </div>
+            <div className="text-sm text-gray-500">Showing {Math.min(startIndex + 1, rows.length)} to {Math.min(startIndex + paginated.length, rows.length)} of {rows.length} items</div>
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs sm:text-sm text-gray-600 mt-2 sm:mt-3 p-2 sm:p-0">
+        This view groups applications by delivery branch (where items will be picked up) and member branch.
+      </div>
+    </div>
+  )
+}
+
 function InventoryPageContent() {
   const [rows, setRows] = useState([])
   const [msg, setMsg] = useState(null)
@@ -568,14 +813,19 @@ function InventoryPageContent() {
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
 
-  const load = async () => {
+  const load = async (signal) => {
     setLoading(true); setMsg(null)
     try {
-      const res = await fetch('/api/admin/inventory/status', { cache: 'no-store' })
+      const res = await fetch('/api/admin/inventory/status', { cache: 'no-store', signal })
       const json = await safeJson(res, '/api/admin/inventory/status')
       if (!json.ok) throw new Error(json.error)
       setRows(json.rows || [])
     } catch (e) {
+      if (e?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(e?.message || '')) {
+        setRows([])
+        setLoading(false)
+        return
+      }
       setMsg({ type: 'error', text: e.message })
       setRows([])
     } finally {
@@ -583,14 +833,17 @@ function InventoryPageContent() {
     }
   }
 
-  const loadBranches = async () => {
+  const loadBranches = async (signal) => {
     try {
-      const res = await fetch('/api/branches/list', { cache: 'no-store' })
+      const res = await fetch('/api/branches/list', { cache: 'no-store', signal })
       const json = await res.json()
       if (json.ok) {
         setBranches(json.branches || [])
       }
     } catch (e) {
+      if (e?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(e?.message || '')) {
+        return
+      }
       console.error('Error loading branches:', e)
     }
   }
@@ -598,8 +851,10 @@ function InventoryPageContent() {
 
 
   useEffect(() => {
-    load()
-    loadBranches()
+    const ac = new AbortController()
+    load(ac.signal)
+    loadBranches(ac.signal)
+    return () => ac.abort()
   }, [])
 
   // Remove the checkDemandTrackingMode function since we're always in demand tracking mode
@@ -908,6 +1163,9 @@ function InventoryPageContent() {
       
       {/* Items-Level Inventory Section */}
       <ItemsInventorySection />
+
+      {/* Delivery vs Branch Inventory Section */}
+      <DeliveryMemberInventorySection />
     </div>
   )
 }

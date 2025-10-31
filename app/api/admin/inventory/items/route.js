@@ -11,6 +11,7 @@ export async function GET(request) {
     const itemFilter = (searchParams.get('item') || '').trim()
     const pageParam = Number(searchParams.get('page') || 1)
     const pageSizeParam = Number(searchParams.get('pageSize') || 25)
+    const hasPaging = searchParams.has('pageSize') || searchParams.has('page')
 
     // Try primary view first
     const { data: viewRows, error: viewError } = await supabase
@@ -31,8 +32,8 @@ export async function GET(request) {
         return NextResponse.json({ ok: false, error: msg, data: [] }, { status: 200 })
       }
 
-      const orderStatusMap = new Map(ordersRes.data.map(o => [o.order_id, o.status]))
-      const itemMeta = new Map(itemsRes.data.map(i => [i.item_id, i]))
+      const orderStatusMap = new Map((ordersRes.data || []).map(o => [o.order_id, o.status]))
+      const itemMeta = new Map((itemsRes.data || []).map(i => [i.item_id, i]))
 
       const aggByItem = new Map()
       for (const line of (linesRes.data || [])) {
@@ -53,37 +54,106 @@ export async function GET(request) {
           item_id: r.item_id,
           item_name: meta.name || meta.sku || `Item ${r.item_id}`,
           sku: meta.sku || null,
-          total_demand: allocated,
+          pending_demand: r.pending_qty || 0,
+          confirmed_demand: r.posted_qty || 0,
+          delivered_qty: r.delivered_qty || 0,
+          total_demand: allocated + (r.delivered_qty || 0),
           allocated_qty: allocated,
           pending_delivery_qty: r.posted_qty || 0,
-          delivered_qty: r.delivered_qty || 0,
         }
       })
+
+      // Include zero-demand items for completeness
+      for (const [id, meta] of itemMeta.entries()) {
+        if (!aggByItem.has(id)) {
+          rows.push({
+            item_id: id,
+            item_name: meta.name || meta.sku || `Item ${id}`,
+            sku: meta.sku || null,
+            pending_demand: 0,
+            confirmed_demand: 0,
+            delivered_qty: 0,
+            total_demand: 0,
+            allocated_qty: 0,
+            pending_delivery_qty: 0,
+          })
+        }
+      }
 
       if (itemFilter) {
         const q = itemFilter.toLowerCase()
         rows = rows.filter(r => (r.item_name || '').toLowerCase().includes(q) || (r.sku || '').toLowerCase().includes(q))
       }
 
-      const start = (pageParam - 1) * pageSizeParam
-      const end = start + pageSizeParam
-      const paged = rows.slice(start, end)
-
-      return NextResponse.json({ ok: true, data: paged, total: rows.length })
+      // Only paginate if explicitly requested
+      if (hasPaging) {
+        const start = (pageParam - 1) * pageSizeParam
+        const end = start + pageSizeParam
+        const paged = rows.slice(start, end)
+        return NextResponse.json({ ok: true, data: paged, total: rows.length })
+      }
+      return NextResponse.json({ ok: true, data: rows, total: rows.length })
     }
 
     // View returned rows
     let rows = viewRows
+    // Aggregate by item across branches
+    const agg = new Map()
+    for (const r of rows) {
+      const id = r.item_id ?? null
+      if (!id) continue
+      const entry = agg.get(id) || { item_id: id, item_name: r.item_name || r.sku || `Item ${id}`, sku: r.sku || null, pending: 0, posted: 0, delivered: 0 }
+      const pending = Number(r.pending_demand ?? ((r.allocated_qty || 0) - (r.pending_delivery_qty || 0)) ?? 0)
+      const posted = Number(r.confirmed_demand ?? r.pending_delivery_qty ?? 0)
+      const delivered = Number(r.delivered_qty ?? r.delivered_demand ?? 0)
+      entry.pending += pending
+      entry.posted += posted
+      entry.delivered += delivered
+      agg.set(id, entry)
+    }
+    rows = Array.from(agg.values()).map(e => ({
+      item_id: e.item_id,
+      item_name: e.item_name,
+      sku: e.sku,
+      pending_demand: e.pending,
+      confirmed_demand: e.posted,
+      delivered_qty: e.delivered,
+      total_demand: e.pending + e.posted + e.delivered,
+      allocated_qty: e.pending + e.posted,
+      pending_delivery_qty: e.posted,
+    }))
+
+    // Include zero-demand items missing from the view
+    const { data: itemsAll } = await supabase.from('items').select('item_id, sku, name')
+    const present = new Set(rows.map(r => r.item_id))
+    for (const meta of (itemsAll || [])) {
+      if (!present.has(meta.item_id)) {
+        rows.push({
+          item_id: meta.item_id,
+          item_name: meta.name || meta.sku || `Item ${meta.item_id}`,
+          sku: meta.sku || null,
+          pending_demand: 0,
+          confirmed_demand: 0,
+          delivered_qty: 0,
+          total_demand: 0,
+          allocated_qty: 0,
+          pending_delivery_qty: 0,
+        })
+      }
+    }
     if (itemFilter) {
       const q = itemFilter.toLowerCase()
       rows = rows.filter(r => (r.item_name || '').toLowerCase().includes(q) || (r.sku || '').toLowerCase().includes(q))
     }
 
-    const start = (pageParam - 1) * pageSizeParam
-    const end = start + pageSizeParam
-    const paged = rows.slice(start, end)
-
-    return NextResponse.json({ ok: true, data: paged, total: rows.length })
+    // Only paginate if explicitly requested
+    if (hasPaging) {
+      const start = (pageParam - 1) * pageSizeParam
+      const end = start + pageSizeParam
+      const paged = rows.slice(start, end)
+      return NextResponse.json({ ok: true, data: paged, total: rows.length })
+    }
+    return NextResponse.json({ ok: true, data: rows, total: rows.length })
   } catch (error) {
     console.error('API error (items inventory):', error)
     return NextResponse.json({ ok: false, error: error.message || 'Internal server error', data: [] })

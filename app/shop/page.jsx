@@ -74,6 +74,27 @@ function ShopPageContent() {
     }
   }
 
+  // Update member department
+  const updateMemberDepartment = async (newName) => {
+    try {
+      if (!memberId) {
+        setMessage({ type: 'error', text: 'Please select a member first' })
+        return
+      }
+      const res = await fetch('/api/members/update-department', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, departmentName: newName })
+      })
+      const json = await safeJson(res, '/api/members/update-department')
+      if (!json.ok) throw new Error(json.error || 'Failed to update member department')
+      setDepartmentName(newName)
+      setMessage({ type: 'success', text: `Member department updated to ${json.department?.name || newName}` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e.message })
+    }
+  }
+
   // Save cart data to localStorage whenever quantities change
   useEffect(() => {
     if (memberId && Object.keys(qty).length > 0) {
@@ -807,7 +828,7 @@ function ShopPageContent() {
                   <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Department</label>
                   <select
                     value={departmentName}
-                    onChange={e => setDepartmentName(e.target.value)}
+                    onChange={e => updateMemberDepartment(e.target.value)}
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 md:px-4 md:py-3 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 text-sm"
                   >
                     <option key="select-department" value="">Select department</option>
@@ -897,6 +918,12 @@ function ShopPageContent() {
                        <p className="text-sm text-blue-700 mb-3">
                          After placing your order, kindly send your payment receipt to the Cooperative for verification.
                        </p>
+                       <div className="mb-3 p-3 bg-white border border-blue-200 rounded-lg">
+                         <div className="text-xs font-semibold text-gray-700 mb-1">Bank Transfer Details</div>
+                         <div className="text-sm text-gray-800">Fidelity Bank</div>
+                         <div className="text-sm text-gray-800">Account Number: 5080056982</div>
+                         <div className="text-sm text-gray-800">Account Name: CBN Staff Multipurpose Coop. Soc. Ltd.</div>
+                       </div>
                        <a 
                          href="https://wa.me/+2349061388502" 
                          target="_blank" 

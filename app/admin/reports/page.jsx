@@ -18,11 +18,13 @@ function ReportsPageContent() {
   // Pagination states for the first two tables
   const [branchCurrentPage, setBranchCurrentPage] = useState(1)
   const [branchDeptCurrentPage, setBranchDeptCurrentPage] = useState(1)
+  const [deliveryMemberCurrentPage, setDeliveryMemberCurrentPage] = useState(1)
   const itemsPerPage = 10
 
   // Filter states for branch filtering
   const [selectedBranchForBranchTable, setSelectedBranchForBranchTable] = useState('all')
   const [selectedBranchForDepartmentTable, setSelectedBranchForDepartmentTable] = useState('all')
+  const [selectedDeliveryBranchForDMTable, setSelectedDeliveryBranchForDMTable] = useState('all')
 
   // Load branches for dropdown
   useEffect(() => {
@@ -65,6 +67,13 @@ function ReportsPageContent() {
     return Array.from(branchNames).sort()
   }, [data])
 
+  const uniqueDeliveryBranches = useMemo(() => {
+    if (!data) return []
+    const names = new Set()
+    data.byDeliveryMember?.forEach(item => names.add(item.delivery_branch_name))
+    return Array.from(names).sort()
+  }, [data])
+
   // Filtered data based on branch selection
   const filteredBranchData = useMemo(() => {
     if (!data?.byBranch) return []
@@ -78,6 +87,12 @@ function ReportsPageContent() {
     return data.byBranchDept.filter(item => item.branch_name === selectedBranchForDepartmentTable)
   }, [data?.byBranchDept, selectedBranchForDepartmentTable])
 
+  const filteredDeliveryMemberData = useMemo(() => {
+    if (!data?.byDeliveryMember) return []
+    if (selectedDeliveryBranchForDMTable === 'all') return data.byDeliveryMember
+    return data.byDeliveryMember.filter(item => item.delivery_branch_name === selectedDeliveryBranchForDMTable)
+  }, [data?.byDeliveryMember, selectedDeliveryBranchForDMTable])
+
   // Pagination logic for Applications by Branch
   const paginatedBranchData = useMemo(() => {
     const startIndex = (branchCurrentPage - 1) * itemsPerPage
@@ -90,8 +105,14 @@ function ReportsPageContent() {
     return filteredBranchDeptData.slice(startIndex, startIndex + itemsPerPage)
   }, [filteredBranchDeptData, branchDeptCurrentPage])
 
+  const paginatedDeliveryMemberData = useMemo(() => {
+    const startIndex = (deliveryMemberCurrentPage - 1) * itemsPerPage
+    return filteredDeliveryMemberData.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredDeliveryMemberData, deliveryMemberCurrentPage])
+
   const branchTotalPages = Math.ceil(filteredBranchData.length / itemsPerPage)
   const branchDeptTotalPages = Math.ceil(filteredBranchDeptData.length / itemsPerPage)
+  const deliveryMemberTotalPages = Math.ceil(filteredDeliveryMemberData.length / itemsPerPage)
 
   const exportCSV = (rows, name) => {
     if (!rows?.length) return
@@ -158,7 +179,7 @@ function ReportsPageContent() {
   )
   if (!data) return <div className="p-6">No data</div>
 
-  const { totals, byBranch, byBranchDept, byCategory, amounts } = data
+  const { totals, byBranch, byBranchDept, byDeliveryMember, byCategory, amounts } = data
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
@@ -294,6 +315,37 @@ function ReportsPageContent() {
             }}
             label="Filter by Branch"
             branches={uniqueBranches}
+          />
+        }
+      />
+
+      {/* Applications by Delivery Branch & Branch */}
+      <PaginatedSection 
+        title="Applications by Delivery Branch & Branch" 
+        data={paginatedDeliveryMemberData}
+        allData={filteredDeliveryMemberData}
+        cols={[
+          ['delivery_branch_name', 'Delivery Branch'],
+          ['branch_name', 'Branch'], 
+          ['pending', 'Pending'],
+          ['posted', 'Posted'],
+          ['delivered', 'Delivered']
+        ]}
+        currentPage={deliveryMemberCurrentPage}
+        setCurrentPage={setDeliveryMemberCurrentPage}
+        totalPages={deliveryMemberTotalPages}
+        itemsPerPage={itemsPerPage}
+        onExportCSV={() => exportCSV(filteredDeliveryMemberData, 'applications_by_delivery_branch_and_branch.csv')}
+        onExportPDF={() => exportPDF(filteredDeliveryMemberData, 'Applications by Delivery Branch & Branch')}
+        filter={
+          <BranchFilter
+            value={selectedDeliveryBranchForDMTable}
+            onChange={(value) => {
+              setSelectedDeliveryBranchForDMTable(value)
+              setDeliveryMemberCurrentPage(1)
+            }}
+            label="Filter by Delivery Branch"
+            branches={uniqueDeliveryBranches}
           />
         }
       />
