@@ -74,6 +74,67 @@ function ReportsPageContent() {
     return Array.from(names).sort()
   }, [data])
 
+  // Branch Item Prices Matrix
+  const [pmData, setPmData] = useState({ branches: [], items: [], prices: [] })
+  const [pmLoading, setPmLoading] = useState(true)
+  const [pmErr, setPmErr] = useState(null)
+  const [selectedPriceBranch, setSelectedPriceBranch] = useState('all')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+
+  const loadBranchPricesMatrix = async () => {
+    try {
+      setPmLoading(true)
+      setPmErr(null)
+      const res = await fetch('/api/admin/reports/branch-prices-matrix', { cache: 'no-store' })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to load branch prices matrix')
+      setPmData({
+        branches: json.branches || [],
+        items: json.items || [],
+        prices: json.prices || []
+      })
+    } catch (e) {
+      setPmErr(e.message)
+      setPmData({ branches: [], items: [], prices: [] })
+    } finally {
+      setPmLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBranchPricesMatrix()
+  }, [])
+
+  const priceBranchNames = useMemo(() => (pmData.branches || []).map(b => b.name).sort(), [pmData.branches])
+  const categories = useMemo(() => {
+    const set = new Set((pmData.items || []).map(i => i.category).filter(Boolean))
+    return Array.from(set).sort()
+  }, [pmData.items])
+
+  const filteredBranches = useMemo(() => {
+    if (selectedPriceBranch === 'all') return pmData.branches
+    return pmData.branches.filter(b => b.name === selectedPriceBranch)
+  }, [pmData.branches, selectedPriceBranch])
+
+  const filteredItems = useMemo(() => {
+    if (selectedCategory === 'all') return pmData.items
+    return pmData.items.filter(i => i.category === selectedCategory)
+  }, [pmData.items, selectedCategory])
+
+  const pricesMatrix = useMemo(() => {
+    const rows = (filteredBranches || []).map((b, idx) => {
+      const row = { sn: idx + 1, branch_name: b.name }
+      for (const it of (filteredItems || [])) {
+        const found = (pmData.prices || []).find(p => p.branch_code === b.code && p.item_id === it.item_id)
+        const val = Number(found?.price ?? 0)
+        row[it.sku] = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      }
+      return row
+    })
+    const cols = [['sn', 'SN'], ['branch_name', 'Branch'], ...((filteredItems || []).map(it => [it.sku, it.name]))]
+    return { rows, cols }
+  }, [pmData.prices, filteredBranches, filteredItems])
+
   // Filtered data based on branch selection
   const filteredBranchData = useMemo(() => {
     if (!data?.byBranch) return []
@@ -235,22 +296,39 @@ function ReportsPageContent() {
           <button
             className="px-3 py-2 bg-emerald-600 text-white text-sm sm:text-base rounded w-full sm:w-auto"
             onClick={async () => {
-              const qs = new URLSearchParams()
-              if (branchCode) qs.set('branch', branchCode)
-              if (from) qs.set('from', from)
-              if (to) qs.set('to', to)
-              const res = await fetch(`/api/admin/reports/branch-pack?${qs.toString()}`)
-              if (!res.ok) {
-                const t = await res.text()
-                return alert(`Download failed: ${t}`)
+              try {
+                const qs = new URLSearchParams()
+                if (branchCode) qs.set('branch', branchCode)
+                if (from) qs.set('from', from)
+                if (to) qs.set('to', to)
+                
+                const res = await fetch(`/api/admin/reports/branch-pack?${qs.toString()}`)
+                const json = await res.json()
+                
+                if (!json.ok) {
+                  return alert(`Download failed: ${json.error || 'Unknown error'}`)
+                }
+                
+                // Convert base64 to blob
+                const byteCharacters = atob(json.data)
+                const byteNumbers = new Array(byteCharacters.length)
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i)
+                }
+                const byteArray = new Uint8Array(byteNumbers)
+                const blob = new Blob([byteArray], { type: json.type })
+                
+                // Create download link
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = json.filename || `Branch_Pack_${branchCode || 'ALL'}.xlsx`
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (error) {
+                console.error('Download error:', error)
+                alert(`Download failed: ${error.message || 'Network error'}`)
               }
-              const blob = await res.blob()
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `Branch_Pack_${branchCode || 'ALL'}.xlsx`
-              a.click()
-              URL.revokeObjectURL(url)
             }}
           >
             Download Branch Pack
@@ -362,6 +440,49 @@ function ReportsPageContent() {
           ['posted', 'Posted'],
           ['delivered', 'Delivered']
         ]} />
+      </Section>
+
+      {/* Branch Item Prices Matrix */}
+      <Section 
+        title="Branch Item Prices Matrix" 
+        onExportCSV={() => exportCSV(pricesMatrix.rows, 'branch_item_prices_matrix.csv')}
+        onExportPDF={() => exportPDF(pricesMatrix.rows, 'Branch Item Prices Matrix')}
+      >
+        {pmLoading && <div className="p-4 text-gray-600 text-sm">Loading branch prices…</div>}
+        {pmErr && (
+          <div className="p-4">
+            <div className="text-red-700 mb-3">Error: {pmErr}</div>
+            <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={loadBranchPricesMatrix}>Retry</button>
+          </div>
+        )}
+        {!pmLoading && !pmErr && (
+          <div className="p-4">
+            <div className="flex gap-4 mb-4">
+              <div>
+                <BranchFilter
+                  value={selectedPriceBranch}
+                  onChange={(value) => setSelectedPriceBranch(value)}
+                  label="Filter by Branch"
+                  branches={priceBranchNames}
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Category</label>
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <Table rows={pricesMatrix.rows} cols={pricesMatrix.cols} />
+          </div>
+        )}
       </Section>
     </div>
   )

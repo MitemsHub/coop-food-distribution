@@ -1,4 +1,5 @@
 // app/api/admin/reports/branch-pack/route.js
+import { NextResponse } from 'next/server'
 import { createClient } from '../../../../../lib/supabaseServer'
 import * as XLSX from 'xlsx/xlsx.mjs' // ESM namespace import
 
@@ -68,23 +69,19 @@ export async function GET(req) {
     XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Loan')), 'Loan')
     XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Cash')), 'Cash')
 
-    // Use ArrayBuffer output (very robust)
-    const ab = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    // Use base64 encoding for better compatibility with fetch API
+    const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' })
     const filename = `Branch_Pack_${branch || 'ALL'}.xlsx`
 
-    return new Response(ab, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-store'
-      }
+    // Return JSON with the base64 data
+    return NextResponse.json({
+      ok: true,
+      filename,
+      data: b64,
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
   } catch (e) {
     console.error('branch-pack error:', e)
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }
 }
