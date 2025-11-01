@@ -89,7 +89,7 @@ async function calculateEligibility(memberId) {
 
     if (loanResult.error) {
       console.error('Shopping exposure query failed:', loanResult.error)
-        return { error: 'Failed to calculate shopping exposure', code: 'DATABASE_ERROR' }
+      return { error: 'Failed to calculate shopping exposure', code: 'DATABASE_ERROR' }
     }
 
     if (savingsResult.error) {
@@ -109,8 +109,12 @@ async function calculateEligibility(memberId) {
     const loanExposure = sumAmt(loanResult.data)
     const savingsExposure = sumAmt(savingsResult.data)
 
+    // Include interest deduction in remaining loan calculation
+    const INTEREST_RATE = 0.13
+    const loanExposureWithInterest = loanExposure * (1 + INTEREST_RATE)
+
     // Calculate eligibility with bounds checking
-    const outstandingLoansTotal = memberLoans + loanExposure
+    const outstandingLoansTotal = memberLoans + loanExposureWithInterest
     const savingsBase = memberSavings * 0.5
     const additionalFacility = 300000 // N300,000 additional facility
     
@@ -129,7 +133,7 @@ async function calculateEligibility(memberId) {
     // Add additional facility and cap at N1,000,000
     const LOAN_CAP = 1000000 // N1,000,000 cap
     // Compute how much of the additional facility remains unused
-    const remainingFacility = Math.max(0, additionalFacility - loanExposure)
+    const remainingFacility = Math.max(0, additionalFacility - loanExposureWithInterest)
 
     // New loan eligible calculation
     const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
@@ -151,9 +155,10 @@ async function calculateEligibility(memberId) {
         global_limit: globalLimit
       },
       exposure: {
-        loan_exposure: loanExposure,
+        loan_exposure: loanExposureWithInterest,
         savings_exposure: savingsExposure,
-        outstanding_loans_total: outstandingLoansTotal
+        outstanding_loans_total: outstandingLoansTotal,
+        interest_rate: INTEREST_RATE
       },
       eligibility: {
         savings_eligible: finalSavingsEligible,

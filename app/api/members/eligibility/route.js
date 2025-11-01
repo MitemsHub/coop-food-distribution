@@ -55,7 +55,11 @@ export async function GET(req) {
     const loans = Number(m.loans || 0)
     const globalLimit = Number(m.global_limit || 0)
 
-    const outstandingLoansTotal = loans + loanExposure
+    // Include interest deduction in remaining loan calculation
+    const INTEREST_RATE = 0.13
+    const loanExposureWithInterest = loanExposure * (1 + INTEREST_RATE)
+
+    const outstandingLoansTotal = loans + loanExposureWithInterest
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
@@ -67,7 +71,7 @@ export async function GET(req) {
     const LOAN_CAP = 1000000 // N1,000,000 cap
     const additionalFacility = 300000 // N300,000 additional facility
     // Compute how much of the additional facility remains unused
-    const remainingFacility = Math.max(0, additionalFacility - loanExposure)
+    const remainingFacility = Math.max(0, additionalFacility - loanExposureWithInterest)
 
     // New loan eligible calculation
     const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
@@ -79,7 +83,8 @@ export async function GET(req) {
         loanEligible,
         outstandingLoansTotal,
         savingsExposure,
-        loanExposure,
+        loanExposure: loanExposureWithInterest,
+        interestRate: INTEREST_RATE
       },
       memberSnapshot: {
         savings,
