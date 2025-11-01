@@ -56,12 +56,22 @@ export async function GET(req) {
     const globalLimit = Number(m.global_limit || 0)
 
     const outstandingLoansTotal = loans + loanExposure
+    
+    // Add N300,000 shopping loan facility to savings eligibility
     const savingsBase = 0.5 * savings
-    const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
-
+    const additionalFacility = 300000 // N300,000 additional facility
+    const savingsEligible = outstandingLoansTotal > 0 
+      ? additionalFacility // Even with outstanding loans, provide N300,000
+      : Math.max(0, savingsBase - savingsExposure) + additionalFacility
+    
+    // Add N300,000 shopping loan facility to loan eligibility
     const rawLoanLimit = savings * 5
     const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
-    const loanEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
+    const baseEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
+    
+    // Add additional facility and cap at N1,000,000
+    const LOAN_CAP = 1000000 // N1,000,000 cap
+    const loanEligible = Math.min(baseEligible + additionalFacility, LOAN_CAP)
 
     return NextResponse.json({
       ok: true,
