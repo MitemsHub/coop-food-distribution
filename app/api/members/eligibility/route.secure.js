@@ -114,10 +114,10 @@ async function calculateEligibility(memberId) {
     const savingsBase = memberSavings * 0.5
     const additionalFacility = 300000 // N300,000 additional facility
     
-    // Savings eligibility: add N300,000 facility even with outstanding loans
+    // Savings eligibility: only if no outstanding loans
     const savingsEligible = outstandingLoansTotal > 0 
-      ? additionalFacility // Even with outstanding loans, provide N300,000
-      : Math.max(0, savingsBase - savingsExposure) + additionalFacility
+      ? 0 
+      : Math.max(0, savingsBase - savingsExposure)
     
     // Loan eligibility calculation with additional facility
     const rawLoanLimit = (memberSavings * 5) - outstandingLoansTotal
