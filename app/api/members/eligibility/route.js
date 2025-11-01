@@ -66,7 +66,11 @@ export async function GET(req) {
     // Add additional facility and cap at N1,000,000
     const LOAN_CAP = 1000000 // N1,000,000 cap
     const additionalFacility = 300000 // N300,000 additional facility
-    const loanEligible = Math.min(baseEligible + additionalFacility, LOAN_CAP)
+    // Compute how much of the additional facility remains unused
+    const remainingFacility = Math.max(0, additionalFacility - loanExposure)
+
+    // New loan eligible calculation
+    const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
 
     return NextResponse.json({
       ok: true,
