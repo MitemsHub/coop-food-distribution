@@ -1,5 +1,6 @@
 // app/api/members/eligibility/route.secure.js
 // Secure version of member eligibility API with proper validation and error handling
+
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { 
@@ -50,7 +51,7 @@ function safeNumber(value, defaultValue = 0, min = 0, max = Number.MAX_SAFE_INTE
 // Calculate member eligibility with proper error handling
 async function calculateEligibility(memberId) {
   try {
-    // Fetch member data with timeout
+    // 1) Fetch member data with timeout
     const { data: member, error: memberError } = await supabase
       .from('members')
       .select('member_id, full_name, savings, loans, global_limit, category, branch_id')
@@ -62,12 +63,12 @@ async function calculateEligibility(memberId) {
       return { error: 'Member not found', code: 'MEMBER_NOT_FOUND' }
     }
 
-    // Validate member data
+    // 2) Validate member data
     const memberSavings = safeNumber(member.savings, 0, 0, 10000000)
     const memberLoans = safeNumber(member.loans, 0, 0, 10000000)
     const globalLimit = safeNumber(member.global_limit, 0, 0, 10000000)
 
-    // Calculate exposure with proper error handling
+    // 3) Calculate exposure with proper error handling
     const statuses = ['Pending', 'Posted', 'Delivered']
     
     const [loanResult, savingsResult] = await Promise.all([
@@ -97,7 +98,8 @@ async function calculateEligibility(memberId) {
       return { error: 'Failed to calculate savings exposure', code: 'DATABASE_ERROR' }
     }
 
-    // Safe calculation of exposures
+    // 4) Safe calculation of exposures
+    const INTEREST_RATE = 0.13 // 13% interest rate
     const sumAmt = (rows) => {
       if (!Array.isArray(rows)) return 0
       return rows.reduce((sum, row) => {
@@ -106,14 +108,12 @@ async function calculateEligibility(memberId) {
       }, 0)
     }
 
-    const loanExposure = sumAmt(loanResult.data)
+    // Apply 13% interest to total loan exposure
+    const loanExposurePrincipal = sumAmt(loanResult.data)
+    const loanExposureWithInterest = loanExposurePrincipal * (1 + INTEREST_RATE)
     const savingsExposure = sumAmt(savingsResult.data)
 
-    // Include interest deduction in remaining loan calculation
-    const INTEREST_RATE = 0.13
-    const loanExposureWithInterest = loanExposure * (1 + INTEREST_RATE)
-
-    // Calculate eligibility with bounds checking
+    // 5) Calculate eligibility with bounds checking
     const outstandingLoansTotal = memberLoans + loanExposureWithInterest
     const savingsBase = memberSavings * 0.5
     const additionalFacility = 300000 // N300,000 additional facility
@@ -132,16 +132,16 @@ async function calculateEligibility(memberId) {
     
     // Add additional facility and cap at N1,000,000
     const LOAN_CAP = 1000000 // N1,000,000 cap
-    // Compute how much of the additional facility remains unused
     const remainingFacility = Math.max(0, additionalFacility - loanExposureWithInterest)
 
     // New loan eligible calculation
     const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
 
-    // Validate calculated values
+    // 6) Validate calculated values
     const finalSavingsEligible = safeNumber(savingsEligible, 0, 0, 10000000)
     const finalLoanEligible = safeNumber(loanEligible, 0, 0, 10000000)
 
+    // 7) Return structured response
     return {
       member: {
         member_id: member.member_id,
@@ -155,7 +155,8 @@ async function calculateEligibility(memberId) {
         global_limit: globalLimit
       },
       exposure: {
-        loan_exposure: loanExposureWithInterest,
+        loan_exposure_principal: loanExposurePrincipal,
+        loan_exposure_with_interest: loanExposureWithInterest,
         savings_exposure: savingsExposure,
         outstanding_loans_total: outstandingLoansTotal,
         interest_rate: INTEREST_RATE
@@ -172,25 +173,22 @@ async function calculateEligibility(memberId) {
   }
 }
 
+// 8) GET request handler
 export async function GET(req) {
   try {
-    // Rate limiting
     const clientIP = getClientIP(req)
     if (!checkRateLimit(`eligibility:${clientIP}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW)) {
       return errorResponse('Too many requests. Please try again later.', 429, 'RATE_LIMIT_EXCEEDED')
     }
 
-    // Extract member ID from URL parameters
     const { searchParams } = new URL(req.url)
     const memberId = searchParams.get('member_id')
 
-    // Validate member ID
     const memberValidation = validateMemberId(memberId)
     if (!memberValidation.isValid) {
       return errorResponse(`Invalid member ID: ${memberValidation.error}`, 400, 'INVALID_MEMBER_ID')
     }
 
-    // Calculate eligibility
     const result = await calculateEligibility(memberValidation.sanitized)
     
     if (result.error) {
@@ -206,15 +204,14 @@ export async function GET(req) {
   }
 }
 
+// 9) POST request handler
 export async function POST(req) {
   try {
-    // Rate limiting
     const clientIP = getClientIP(req)
     if (!checkRateLimit(`eligibility:${clientIP}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW)) {
       return errorResponse('Too many requests. Please try again later.', 429, 'RATE_LIMIT_EXCEEDED')
     }
 
-    // Parse and validate request body
     let body
     try {
       body = await req.json()
@@ -223,14 +220,11 @@ export async function POST(req) {
     }
 
     const { member_id } = body || {}
-
-    // Validate member ID
     const memberValidation = validateMemberId(member_id)
     if (!memberValidation.isValid) {
       return errorResponse(`Invalid member ID: ${memberValidation.error}`, 400, 'INVALID_MEMBER_ID')
     }
 
-    // Calculate eligibility
     const result = await calculateEligibility(memberValidation.sanitized)
     
     if (result.error) {
