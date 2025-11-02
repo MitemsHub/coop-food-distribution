@@ -80,12 +80,14 @@ export async function POST(req) {
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure);
 
     // Loan eligibility: base eligibility plus N300,000 facility, capped against remaining of N1,000,000
-    const ADDITIONAL_FACILITY = 300000; // ₦300,000
-    const LOAN_CAP = 1000000;           // ₦1,000,000 total cap
+    const ADDITIONAL_FACILITY = 300000; // ₦300,000 facility (total pool)
+    const LOAN_CAP = 1000000;           // ₦1,000,000 overall cap
     const rawLoanLimit = memberSavings * 5 - outstandingLoansTotal;
     const baseEligible = Math.min(Math.max(rawLoanLimit, 0), globalLimit);
     const capRemaining = Math.max(0, LOAN_CAP - loanExposureWithInterest);
-    const loanEligible = Math.min(baseEligible + ADDITIONAL_FACILITY, capRemaining);
+    // Facility behaves like its own pool and reduces with current exposure
+    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposureWithInterest);
+    const loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining);
 
     // Price lines from DELIVERY branch
     let total = 0

@@ -108,16 +108,16 @@ async function calculateEligibility(memberId) {
       }, 0)
     }
 
-    // Calculate interest on loan exposure for better remaining loan calculation
-    const loanExposurePrincipal = sumAmt(loanResult.data)
-    const loanInterest = Math.round(loanExposurePrincipal * INTEREST_RATE)
-    const loanExposureWithInterest = loanExposurePrincipal + loanInterest
+    // Loan orders' total_amount already includes 13% interest
+    const loanExposureWithInterest = sumAmt(loanResult.data)
+    const loanInterest = 0
+    const loanExposurePrincipal = loanExposureWithInterest
     const savingsExposure = sumAmt(savingsResult.data)
 
     // 5) Calculate eligibility with bounds checking
     const outstandingLoansTotal = memberLoans + loanExposureWithInterest
     const savingsBase = memberSavings * 0.5
-    const additionalFacility = 300000 // N300,000 additional facility
+    const ADDITIONAL_FACILITY = 300000 // ₦300,000 facility (total pool)
     
     // Savings eligibility: only if no outstanding loans
     const savingsEligible = outstandingLoansTotal > 0 
@@ -131,10 +131,11 @@ async function calculateEligibility(memberId) {
       globalLimit
     )
     
-    // Add additional facility and apply cap against current exposure
-    const LOAN_CAP = 1000000 // N1,000,000 cap (total cap)
+    // Facility behaves like its own pool and reduces with current exposure; apply overall cap
+    const LOAN_CAP = 1000000 // ₦1,000,000 overall cap
     const capRemaining = Math.max(0, LOAN_CAP - loanExposureWithInterest)
-    const loanEligible = Math.min(baseEligible + additionalFacility, capRemaining)
+    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposureWithInterest)
+    const loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
 
     // 6) Validate calculated values
     const finalSavingsEligible = safeNumber(savingsEligible, 0, 0, 10000000)

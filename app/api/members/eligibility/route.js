@@ -47,7 +47,8 @@ export async function GET(req) {
     if (savExp.error) return NextResponse.json({ ok: false, error: savExp.error.message }, { status: 500 })
 
     const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
-    const loanExposurePrincipal = sumAmt(loanExp.data)
+    // Loan orders' total_amount already includes 13% interest; treat this as total exposure
+    const loanExposure = sumAmt(loanExp.data)
     const savingsExposure = sumAmt(savExp.data)
 
     // 3) Compute limits (exposure-aware)
@@ -55,25 +56,23 @@ export async function GET(req) {
     const loans = Number(m.loans || 0)
     const globalLimit = Number(m.global_limit || 0)
 
-    // Calculate interest on loan exposure for better remaining loan calculation
     const INTEREST_RATE = 0.13
-    const loanInterest = Math.round(loanExposurePrincipal * INTEREST_RATE)
-    const loanExposure = loanExposurePrincipal + loanInterest // Total exposure including interest
-
     const outstandingLoansTotal = loans + loanExposure
     
     // Savings follows original rule (50% of savings) and does NOT include facility
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
-    // Loan eligibility: base eligibility plus N300,000 facility, capped at N1,000,000
-    const additionalFacility = 300000 // N300,000 facility
-    const LOAN_CAP = 1000000 // N1,000,000 cap (total cap)
+    // Loan eligibility: base eligibility plus N300,000 facility (only if base > 0), capped at N1,000,000
+    const ADDITIONAL_FACILITY = 300000 // ₦300,000 facility (total pool)
+    const LOAN_CAP = 1000000 // ₦1,000,000 overall cap
     const rawLoanLimit = savings * 5
     const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
     const baseEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
     const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
-    const loanEligible = Math.min(baseEligible + additionalFacility, capRemaining)
+    // Facility behaves like its own pool: remaining facility reduces by existing exposure
+    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
+    const loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
 
     return NextResponse.json({
       ok: true,
@@ -82,9 +81,7 @@ export async function GET(req) {
         loanEligible,
         outstandingLoansTotal,
         savingsExposure,
-        loanExposure, // Total exposure including interest
-        loanExposurePrincipal, // Principal amount only
-        loanInterest // Interest amount
+        loanExposure
       },
       memberSnapshot: {
         savings,
