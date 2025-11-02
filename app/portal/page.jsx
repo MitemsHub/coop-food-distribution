@@ -35,7 +35,7 @@ export default function Landing() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">Members</h2>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">Members Portal</h2>
                 </div>
                 <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
                   Welcome to your shopping portal! Enter your Member ID to browse and order from our cooperative food distribution system.
@@ -54,7 +54,7 @@ export default function Landing() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   </div>
-                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Branch Representatives</h2>
+                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Reps Portal</h2>
                 </div>
                 <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
                   Manage pending and delivered orders for your delivery branch. Access order processing and delivery coordination tools.
@@ -79,7 +79,7 @@ export default function Landing() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Administration</h2>
+                  <h2 className="text-lg md:text-2xl font-bold text-gray-800">Admin Portal</h2>
                 </div>
                 <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
                   Complete system control including inventory management, order approvals, reporting, and data imports.

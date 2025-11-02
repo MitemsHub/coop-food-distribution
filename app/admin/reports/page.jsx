@@ -81,6 +81,15 @@ function ReportsPageContent() {
   const [selectedPriceBranch, setSelectedPriceBranch] = useState('all')
   const [selectedCategory, setSelectedCategory] = useState('all')
 
+  // New: Items Demand by Delivery Location & Department
+  const [departments, setDepartments] = useState([])
+  const [selectedDeliveryCode, setSelectedDeliveryCode] = useState('all')
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('all')
+  const [demandRows, setDemandRows] = useState([])
+  const [demandLoading, setDemandLoading] = useState(false)
+  const [demandErr, setDemandErr] = useState(null)
+  const [demandCurrentPage, setDemandCurrentPage] = useState(1)
+
   const loadBranchPricesMatrix = async () => {
     try {
       setPmLoading(true)
@@ -104,6 +113,40 @@ function ReportsPageContent() {
   useEffect(() => {
     loadBranchPricesMatrix()
   }, [])
+
+  // Load departments for filter
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch('/api/admin/reports/departments', { cache: 'no-store' })
+        const json = await res.json()
+        if (json.ok) setDepartments(json.departments || [])
+      } catch (_) {}
+    })()
+  }, [])
+
+  // Load demand rows whenever filters change
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setDemandLoading(true)
+        setDemandErr(null)
+        const qs = new URLSearchParams()
+        if (selectedDeliveryCode !== 'all') qs.set('branch', selectedDeliveryCode)
+        if (selectedDepartmentId !== 'all') qs.set('department_id', String(selectedDepartmentId))
+        const res = await fetch(`/api/admin/reports/delivery-dept-items?${qs.toString()}`, { cache: 'no-store' })
+        const json = await res.json()
+        if (!json.ok) throw new Error(json.error || 'Failed to load demand data')
+        setDemandRows(json.rows || [])
+        setDemandCurrentPage(1)
+      } catch (e) {
+        setDemandErr(e.message)
+        setDemandRows([])
+      } finally {
+        setDemandLoading(false)
+      }
+    })()
+  }, [selectedDeliveryCode, selectedDepartmentId])
 
   const priceBranchNames = useMemo(() => (pmData.branches || []).map(b => b.name).sort(), [pmData.branches])
   const categories = useMemo(() => {
@@ -134,6 +177,23 @@ function ReportsPageContent() {
     const cols = [['sn', 'SN'], ['branch_name', 'Branch'], ...((filteredItems || []).map(it => [it.sku, it.name]))]
     return { rows, cols }
   }, [pmData.prices, filteredBranches, filteredItems])
+
+  // Format demand rows for display
+  const formattedDemandRows = useMemo(() => {
+    return (demandRows || []).map((r, idx) => ({
+      sn: idx + 1,
+      items: r.items,
+      price: `₦${Number(r.price || 0).toLocaleString()}`,
+      quantity: Number(r.quantity || 0).toLocaleString(),
+      amount: `₦${Number(r.amount || 0).toLocaleString()}`
+    }))
+  }, [demandRows])
+
+  const demandTotalPages = Math.ceil(formattedDemandRows.length / itemsPerPage)
+  const paginatedDemandRows = useMemo(() => {
+    const startIndex = (demandCurrentPage - 1) * itemsPerPage
+    return formattedDemandRows.slice(startIndex, startIndex + itemsPerPage)
+  }, [formattedDemandRows, demandCurrentPage])
 
   // Filtered data based on branch selection
   const filteredBranchData = useMemo(() => {
@@ -175,12 +235,44 @@ function ReportsPageContent() {
   const branchDeptTotalPages = Math.ceil(filteredBranchDeptData.length / itemsPerPage)
   const deliveryMemberTotalPages = Math.ceil(filteredDeliveryMemberData.length / itemsPerPage)
 
-  const exportCSV = (rows, name) => {
+  const exportCSV = (rows, name, options = {}) => {
     if (!rows?.length) return
-    const headers = Object.keys(rows[0])
+    let exportRows = rows
+    // Optional totals row
+    if (options.totals && Array.isArray(options.totals.sumKeys)) {
+      const headers = Object.keys(rows[0])
+      const totalsRow = {}
+      const rawRows = Array.isArray(options.totals.rawRows) ? options.totals.rawRows : rows
+      headers.forEach(h => {
+        if (options.totals.sumKeys.includes(h)) {
+          const sum = rawRows.reduce((acc, r) => acc + Number(r[h] || 0), 0)
+          if (h.toLowerCase() === 'amount' || h.toLowerCase() === 'price') {
+            totalsRow[h] = `NGN ${Number(sum).toLocaleString()}`
+          } else {
+            totalsRow[h] = Number(sum).toLocaleString()
+          }
+        } else if (h === options.totals.labelKey) {
+          totalsRow[h] = options.totals.label || 'TOTAL'
+        } else if (h.toLowerCase() === 'sn') {
+          totalsRow[h] = ''
+        } else {
+          totalsRow[h] = ''
+        }
+      })
+      exportRows = [...rows, totalsRow]
+    }
+
+    const headers = Object.keys(exportRows[0])
     const csv = [
       headers.join(','),
-      ...rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))
+      ...exportRows.map(r => headers
+        .map(h => {
+          const raw = String(r[h] ?? '')
+          const sanitized = raw.replace(/\u20A6|₦/g, 'NGN ')
+          return `"${sanitized.replace(/"/g, '""')}"`
+        })
+        .join(',')
+      )
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -191,7 +283,7 @@ function ReportsPageContent() {
     URL.revokeObjectURL(url)
   }
 
-  const exportPDF = async (rows, title) => {
+  const exportPDF = async (rows, title, options = {}) => {
     if (!rows?.length) return
     
     try {
@@ -209,15 +301,48 @@ function ReportsPageContent() {
       doc.setFontSize(10)
       doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 32)
       
+      // Optional: include filter info
+      if (options.filters) {
+        const filterEntries = Object.entries(options.filters)
+          .filter(([_, v]) => v != null && v !== '')
+          .map(([k, v]) => `${k}: ${v}`)
+        if (filterEntries.length) {
+          doc.text(`Filters: ${filterEntries.join('  |  ')}`, 14, 38)
+        }
+      }
+      
       // Prepare table data
       const headers = Object.keys(rows[0])
-      const tableData = rows.map(row => headers.map(header => String(row[header] ?? '')))
+      let tableData = rows.map(row => headers.map(header => {
+        const raw = String(row[header] ?? '')
+        // Sanitize currency symbols (e.g., ₦) for PDF standard fonts
+        const sanitized = raw.replace(/\u20A6|₦/g, 'NGN ')
+        return sanitized
+      }))
+
+      // Optional totals row for PDF
+      if (options.totals && Array.isArray(options.totals.sumKeys)) {
+        const rawRows = Array.isArray(options.totals.rawRows) ? options.totals.rawRows : rows
+        const totalsRow = headers.map(h => {
+          if (options.totals.sumKeys.includes(h)) {
+            const sum = rawRows.reduce((acc, r) => acc + Number(r[h] || 0), 0)
+            if (h.toLowerCase() === 'amount' || h.toLowerCase() === 'price') {
+              return `NGN ${Number(sum).toLocaleString()}`
+            }
+            return Number(sum).toLocaleString()
+          }
+          if (h === options.totals.labelKey) return options.totals.label || 'TOTAL'
+          if (h.toLowerCase() === 'sn') return ''
+          return ''
+        })
+        tableData = [...tableData, totalsRow]
+      }
       
       // Add table
       autoTable(doc, {
         head: [headers],
         body: tableData,
-        startY: 40,
+        startY: options.filters ? 44 : 40,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [75, 85, 99] },
         alternateRowStyles: { fillColor: [249, 250, 251] }
@@ -261,7 +386,8 @@ function ReportsPageContent() {
 
       {/* Amount Totals */}
       <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Card title="Loans" value={amounts?.loans ?? 0} currency />
+        <Card title="Loan Amount" value={amounts?.loansPrincipal ?? amounts?.loans ?? 0} currency />
+        <Card title="Loan Interest" value={amounts?.loansInterest ?? 0} currency />
         <Card title="Savings" value={amounts?.savings ?? 0} currency />
         <Card title="Cash" value={amounts?.cash ?? 0} currency />
         <Card title="Total Amount" value={amounts?.totalAll ?? 0} currency />
@@ -441,6 +567,72 @@ function ReportsPageContent() {
           ['delivered', 'Delivered']
         ]} />
       </Section>
+
+      {/* Items Demand by Delivery Location & Department */}
+      <PaginatedSection 
+        title="Items Demand by Delivery Location & Department" 
+        data={paginatedDemandRows}
+        allData={formattedDemandRows}
+        cols={[
+          ['sn', 'SN'],
+          ['items', 'Items'],
+          ['price', 'Price'],
+          ['quantity', 'Quantity'],
+          ['amount', 'Amount']
+        ]}
+        currentPage={demandCurrentPage}
+        setCurrentPage={setDemandCurrentPage}
+        totalPages={demandTotalPages}
+        itemsPerPage={itemsPerPage}
+        onExportCSV={() => exportCSV(
+          formattedDemandRows,
+          'items_demand_by_delivery_and_department.csv',
+          { totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRows } }
+        )}
+        onExportPDF={() => {
+          const branchName = selectedDeliveryCode === 'all'
+            ? 'All Delivery Locations'
+            : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
+          const departmentName = selectedDepartmentId === 'all'
+            ? 'All Departments'
+            : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+          exportPDF(
+            formattedDemandRows,
+            'Items Demand by Delivery & Department',
+            { filters: { 'Delivery Location': branchName, 'Department': departmentName }, totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRows } }
+          )
+        }}
+        filter={(
+          <div className="flex gap-6 mb-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Delivery Location</label>
+              <select
+                value={selectedDeliveryCode}
+                onChange={e => setSelectedDeliveryCode(e.target.value)}
+                className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="all">All Delivery Locations</option>
+                {branches.map(b => (
+                  <option key={b.code} value={b.code}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Department</label>
+              <select
+                value={selectedDepartmentId}
+                onChange={e => setSelectedDepartmentId(e.target.value)}
+                className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="all">All Departments</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      />
 
       {/* Branch Item Prices Matrix */}
       <Section 

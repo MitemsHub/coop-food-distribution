@@ -382,72 +382,71 @@ function PendingAdminPageContent() {
         ))}
       </div>
 
-      {/* Edit modal */}
+      {/* Edit modal (consistent draggable style) */}
       {editing && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-2xl rounded p-3 sm:p-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base sm:text-lg font-semibold">Edit Order #{editing.order_id}</h3>
-              <button onClick={() => setEditing(null)} className="px-2 text-lg">✕</button>
+        <DraggableModal
+          open={!!editing}
+          title={`Edit Order #${editing.order_id}`}
+          onClose={() => setEditing(null)}
+          overlayClassName="bg-white/10 backdrop-blur-sm"
+          widthClass="max-w-2xl w-full mx-4"
+          footer={(
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEditing(null)}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                className={`px-4 py-2 rounded text-white ${savingEdit ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                onClick={saveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? (
+                  <div className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </div>
+                ) : 'Save'}
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm border mb-3">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left p-1 sm:p-2 border">SKU</th>
-                    <th className="text-left p-1 sm:p-2 border">Item</th>
-                    <th className="text-right p-1 sm:p-2 border">Qty</th>
-                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
-                    <th className="text-right p-1 sm:p-2 border">Amount</th>
+          )}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm border mb-3">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-1 sm:p-2 border">SKU</th>
+                  <th className="text-left p-1 sm:p-2 border">Item</th>
+                  <th className="text-right p-1 sm:p-2 border">Qty</th>
+                  <th className="text-right p-1 sm:p-2 border">Unit Price</th>
+                  <th className="text-right p-1 sm:p-2 border">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editing.lines.map((l, idx) => (
+                  <tr key={l.sku}>
+                    <td className="p-1 sm:p-2 border text-xs">{l.sku}</td>
+                    <td className="p-1 sm:p-2 border text-xs break-words">{l.name}</td>
+                    <td className="p-1 sm:p-2 border text-right">
+                      <input type="number" min={0} value={l.qty} onChange={e=>setEditQty(idx, e.target.value)} className="border rounded px-1 py-1 w-16 sm:w-20 text-right text-xs" />
+                    </td>
+                    <td className="p-1 sm:p-2 border text-right text-xs">₦{l.price.toLocaleString()}</td>
+                    <td className="p-1 sm:p-2 border text-right text-xs">₦{(Number(l.qty) * l.price).toLocaleString()}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {editing.lines.map((l, idx) => (
-                    <tr key={l.sku}>
-                      <td className="p-1 sm:p-2 border text-xs">{l.sku}</td>
-                      <td className="p-1 sm:p-2 border text-xs break-words">{l.name}</td>
-                      <td className="p-1 sm:p-2 border text-right">
-                        <input type="number" min={0} value={l.qty} onChange={e=>setEditQty(idx, e.target.value)} className="border rounded px-1 py-1 w-16 sm:w-20 text-right text-xs" />
-                      </td>
-                      <td className="p-1 sm:p-2 border text-right text-xs">₦{l.price.toLocaleString()}</td>
-                      <td className="p-1 sm:p-2 border text-right text-xs">₦{(Number(l.qty) * l.price).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div className="sm:ml-auto text-center sm:text-right">
-                <div className="text-xs sm:text-sm text-gray-600">New Total</div>
-                <div className="text-lg sm:text-xl font-semibold">₦{editedTotal.toLocaleString()}</div>
-              </div>
-              <div className="flex gap-2 w-full sm:w-auto">
-                <button className="flex-1 sm:flex-none px-3 py-2 border rounded text-sm" onClick={() => setEditing(null)}>Cancel</button>
-                <button 
-                  className={`flex-1 sm:flex-none px-3 py-2 rounded text-sm transition-all duration-200 ${
-                    savingEdit 
-                      ? 'bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                  onClick={saveEdit}
-                  disabled={savingEdit}
-                >
-                  {savingEdit ? (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Saving...
-                    </div>
-                  ) : (
-                    'Save'
-                  )}
-                </button>
-              </div>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+          <div className="flex items-center justify-end gap-2">
+            <div className="text-xs sm:text-sm text-gray-600">New Total</div>
+            <div className="text-lg sm:text-xl font-semibold">₦{editedTotal.toLocaleString()}</div>
+          </div>
+        </DraggableModal>
       )}
       
       {/* Modal for input prompts */}

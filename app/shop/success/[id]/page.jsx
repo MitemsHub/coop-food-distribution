@@ -103,8 +103,21 @@ function SuccessContent() {
       y += 4
       doc.line(120, y, 200, y); y += 6
       doc.setFontSize(12)
+      // Payment breakdown for Loan option
+      const principal = Number((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
+      const interest = order.payment_option === 'Loan' ? Math.round(principal * 0.13) : 0
+      const totalWithInterest = order.payment_option === 'Loan' ? principal + interest : principal
+
       // Avoid ₦ in PDF footer
-      doc.text(`Total: ${currencyPDF(order.total_amount)}`, 165, y, { align: 'right' })
+      if (order.payment_option === 'Loan') {
+        doc.text(`Principal: ${currencyPDF(principal)}`, 165, y, { align: 'right' })
+        y += 6
+        doc.text(`Interest (13%): ${currencyPDF(interest)}`, 165, y, { align: 'right' })
+        y += 6
+        doc.text(`Total (incl. Interest): ${currencyPDF(totalWithInterest)}`, 165, y, { align: 'right' })
+      } else {
+        doc.text(`Total: ${currencyPDF(order.total_amount)}`, 165, y, { align: 'right' })
+      }
 
       doc.save(`Order_${order.order_id}.pdf`)
     } catch (e) {
@@ -138,6 +151,11 @@ function SuccessContent() {
         UnitPrice: Number(l.unit_price || 0),
         Amount: Number(l.amount || 0),
       }))
+      const principal = Number((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
+      const interest = order.payment_option === 'Loan' ? Math.round(principal * 0.13) : 0
+      const totalWithInterest = order.payment_option === 'Loan' ? principal + interest : principal
+
+      // Footer rows with breakdown (for Loan payments)
       rows.push({
         OrderID: order.order_id,
         CreatedAt: '',
@@ -149,11 +167,62 @@ function SuccessContent() {
         Delivery: '',
         Department: '',
         Payment: '',
-        Item: 'TOTAL',
+        Item: 'PRINCIPAL',
         Qty: '',
         UnitPrice: '',
-        Amount: Number(order.total_amount || 0),
+        Amount: principal,
       })
+      if (order.payment_option === 'Loan') {
+        rows.push({
+          OrderID: order.order_id,
+          CreatedAt: '',
+          PostedAt: '',
+          Status: '',
+          MemberID: '',
+          MemberName: '',
+          MemberBranch: '',
+          Delivery: '',
+          Department: '',
+          Payment: '',
+          Item: 'INTEREST (13%)',
+          Qty: '',
+          UnitPrice: '',
+          Amount: interest,
+        })
+        rows.push({
+          OrderID: order.order_id,
+          CreatedAt: '',
+          PostedAt: '',
+          Status: '',
+          MemberID: '',
+          MemberName: '',
+          MemberBranch: '',
+          Delivery: '',
+          Department: '',
+          Payment: '',
+          Item: 'TOTAL (incl. Interest)',
+          Qty: '',
+          UnitPrice: '',
+          Amount: totalWithInterest,
+        })
+      } else {
+        rows.push({
+          OrderID: order.order_id,
+          CreatedAt: '',
+          PostedAt: '',
+          Status: '',
+          MemberID: '',
+          MemberName: '',
+          MemberBranch: '',
+          Delivery: '',
+          Department: '',
+          Payment: '',
+          Item: 'TOTAL',
+          Qty: '',
+          UnitPrice: '',
+          Amount: Number(order.total_amount || 0),
+        })
+      }
 
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
@@ -206,10 +275,29 @@ function SuccessContent() {
           ))}
         </tbody>
       </table>
-
-      <div className="text-right text-lg font-semibold mb-6">
-        Total: {currency(order.total_amount)}
-      </div>
+      {/* Payment breakdown for Loan option */}
+      {order.payment_option === 'Loan' ? (
+        <div className="mb-6">
+          <div className="max-w-md ml-auto bg-blue-50 border border-blue-200 rounded p-3">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-700">Principal Amount:</span>
+              <span className="font-medium">{currency((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))}</span>
+            </div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-700">Interest (13%):</span>
+              <span className="font-medium text-orange-700">{currency(Math.round(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) * 0.13))}</span>
+            </div>
+            <div className="border-t pt-2 mt-2 flex justify-between text-sm font-semibold">
+              <span>Total (incl. Interest):</span>
+              <span>{currency(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) * 0.13))}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-right text-lg font-semibold mb-6">
+          Total: {currency(order.total_amount)}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <a href={`/shop${mid ? `?mid=${encodeURIComponent(mid)}` : ''}`} className="px-4 py-2 border rounded">Back to Shop</a>
