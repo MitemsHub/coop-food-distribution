@@ -919,7 +919,7 @@ function ShopPageContent() {
                      <div>
                        <h3 className="text-sm font-semibold text-blue-800 mb-2">Cash Payment Instructions</h3>
                        <p className="text-sm text-blue-700 mb-3">
-                         After placing your order, kindly send your payment receipt to the Cooperative (+2349061388502) for verification.
+                         After placing your order, kindly send your payment receipt to the Cooperative (09061388502) for verification.
                        </p>
                        <div className="mb-3 p-3 bg-white border border-blue-200 rounded-lg">
                          <div className="text-xs font-semibold text-gray-700 mb-1">Bank Transfer Details</div>
