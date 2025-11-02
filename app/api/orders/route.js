@@ -65,7 +65,8 @@ export async function POST(req) {
       .in('status', statuses);
     if (se) return NextResponse.json({ ok:false, error: se.message }, { status:500 });
 
-    const loanExposure = sumAmt(loanRows);
+    // Exposure totals from existing orders (these totals already include interest for Loan orders)
+    const loanExposureWithInterest = sumAmt(loanRows);
     const savingsExposure = sumAmt(savRows);
 
     const memberLoans = Number(member.loans || 0);       // core loans
@@ -73,13 +74,18 @@ export async function POST(req) {
     const globalLimit = Number(member.global_limit || 0);
 
     // Any outstanding loan (core + exposure) blocks Savings
-    const outstandingLoansTotal = memberLoans + loanExposure;
+    const outstandingLoansTotal = memberLoans + loanExposureWithInterest;
 
     const savingsBase = 0.5 * memberSavings;
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure);
 
+    // Loan eligibility: base eligibility plus N300,000 facility, capped against remaining of N1,000,000
+    const ADDITIONAL_FACILITY = 300000; // ₦300,000
+    const LOAN_CAP = 1000000;           // ₦1,000,000 total cap
     const rawLoanLimit = memberSavings * 5 - outstandingLoansTotal;
-    const loanEligible = Math.min(Math.max(rawLoanLimit, 0), globalLimit);
+    const baseEligible = Math.min(Math.max(rawLoanLimit, 0), globalLimit);
+    const capRemaining = Math.max(0, LOAN_CAP - loanExposureWithInterest);
+    const loanEligible = Math.min(baseEligible + ADDITIONAL_FACILITY, capRemaining);
 
     // Price lines from DELIVERY branch
     let total = 0
