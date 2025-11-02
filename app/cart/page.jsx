@@ -34,18 +34,19 @@ function CartPageContent() {
   const { user } = useAuth()
 
   // Helper function for safe JSON parsing
+  // Do not throw on non-2xx; return parsed payload so callers can show
+  // meaningful error messages instead of a generic network failure.
   const safeJson = async (res, endpoint) => {
-    if (!res.ok) {
-      // Try to read text for better error diagnostics
-      const text = await res.text().catch(() => '')
-      throw new Error(`${endpoint} returned ${res.status}: ${text.slice(0, 300)}`)
-    }
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) {
-      return await res.json()
+      try {
+        return await res.json()
+      } catch (e) {
+        // Fall back to text if JSON parsing fails
+      }
     }
-    const text = await res.text()
-    throw new Error(`Non-JSON response from ${endpoint} (${res.status}): ${text.slice(0, 300)}`)
+    const text = await res.text().catch(() => '')
+    return { ok: res.ok, error: text ? `${endpoint} (${res.status}): ${text.slice(0, 300)}` : `${endpoint} (${res.status})` }
   }
 
   // Load member eligibility
@@ -313,7 +314,8 @@ function CartPageContent() {
         setMessage({ type: 'error', text: data.error || 'Failed to submit order' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+      // Show the actual error to aid troubleshooting
+      setMessage({ type: 'error', text: error?.message || 'Network error. Please try again.' })
     } finally {
       setSubmitting(false)
     }
