@@ -132,10 +132,9 @@ async function calculateEligibility(memberId) {
     
     // Add additional facility and cap at N1,000,000
     const LOAN_CAP = 1000000 // N1,000,000 cap
-    const remainingFacility = Math.max(0, additionalFacility - loanExposureWithInterest)
-
-    // New loan eligible calculation
-    const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
+    const loanEligible = baseEligible > 0
+      ? Math.min(baseEligible + additionalFacility, LOAN_CAP)
+      : additionalFacility
 
     // 6) Validate calculated values
     const finalSavingsEligible = safeNumber(savingsEligible, 0, 0, 10000000)

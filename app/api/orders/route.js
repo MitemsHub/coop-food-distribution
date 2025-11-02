@@ -106,12 +106,17 @@ export async function POST(req) {
       pricedLines.push({ item_id: item.item_id, branch_item_price_id: bip.id, unit_price, qty, amount })
     }
 
+    // Calculate interest for Loan option
+    const INTEREST_RATE = 0.13
+    const loanInterest = paymentOption === 'Loan' ? Math.round(total * INTEREST_RATE) : 0
+    const totalWithInterest = total + loanInterest
+
     // Enforce limits
     if (paymentOption === 'Savings') {
       if (outstandingLoansTotal > 0) return NextResponse.json({ ok:false, error:'Savings not allowed while loans outstanding (incl. pending/posted loan apps)' }, { status:400 })
       if (total > savingsEligible)   return NextResponse.json({ ok:false, error:`Total ₦${total.toLocaleString()} exceeds Savings available ₦${savingsEligible.toLocaleString()}` }, { status:400 })
     } else if (paymentOption === 'Loan') {
-      if (total > loanEligible)      return NextResponse.json({ ok:false, error:`Total ₦${total.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}` }, { status:400 })
+      if (totalWithInterest > loanEligible)      return NextResponse.json({ ok:false, error:`Total (incl. 13% interest) ₦${totalWithInterest.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}` }, { status:400 })
     } else if (paymentOption !== 'Cash') {
       return NextResponse.json({ ok:false, error:'Invalid payment option' }, { status:400 })
     }
@@ -127,7 +132,7 @@ export async function POST(req) {
         delivery_branch_id: deliveryBranch.id,       // delivery location
         department_id: deptRow.id,
         payment_option: paymentOption,
-        total_amount: total,
+        total_amount: paymentOption === 'Loan' ? totalWithInterest : total,
         status: 'Pending'
       })
       .select('order_id')
@@ -138,7 +143,7 @@ export async function POST(req) {
     const { error: lErr } = await supabase.from('order_lines').insert(rows)
     if (lErr) return NextResponse.json({ ok:false, error:lErr.message }, { status:500 })
 
-    return NextResponse.json({ ok:true, order_id: order.order_id, total, paymentOption, eligibility: { savingsEligible, loanEligible } })
+    return NextResponse.json({ ok:true, order_id: order.order_id, total: paymentOption === 'Loan' ? totalWithInterest : total, paymentOption, eligibility: { savingsEligible, loanEligible }, interest: loanInterest })
   } catch (e) {
     return NextResponse.json({ ok:false, error:e.message || 'Unknown error' }, { status:500 })
   }

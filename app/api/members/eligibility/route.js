@@ -59,22 +59,21 @@ export async function GET(req) {
     const INTEREST_RATE = 0.13
     const loanExposureWithInterest = loanExposure * (1 + INTEREST_RATE)
 
-    const outstandingLoansTotal = loans + loanExposureWithInterest
+    const outstandingLoansTotal = loans + loanExposure
+    
+    // Savings follows original rule (50% of savings) and does NOT include facility
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
+    // Loan eligibility: base eligibility plus N300,000 facility, capped at N1,000,000
+    const additionalFacility = 300000 // N300,000 facility
+    const LOAN_CAP = 1000000 // N1,000,000 cap
     const rawLoanLimit = savings * 5
     const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
     const baseEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
-    
-    // Add additional facility and cap at N1,000,000
-    const LOAN_CAP = 1000000 // N1,000,000 cap
-    const additionalFacility = 300000 // N300,000 additional facility
-    // Compute how much of the additional facility remains unused
-    const remainingFacility = Math.max(0, additionalFacility - loanExposureWithInterest)
-
-    // New loan eligible calculation
-    const loanEligible = Math.min(baseEligible + remainingFacility, LOAN_CAP)
+    const loanEligible = baseEligible > 0
+      ? Math.min(baseEligible + additionalFacility, LOAN_CAP)
+      : additionalFacility
 
     return NextResponse.json({
       ok: true,
@@ -83,8 +82,7 @@ export async function GET(req) {
         loanEligible,
         outstandingLoansTotal,
         savingsExposure,
-        loanExposure: loanExposureWithInterest,
-        interestRate: INTEREST_RATE
+        loanExposure
       },
       memberSnapshot: {
         savings,
