@@ -108,9 +108,10 @@ async function calculateEligibility(memberId) {
       }, 0)
     }
 
-    // Apply 13% interest to total loan exposure
+    // Calculate interest on loan exposure for better remaining loan calculation
     const loanExposurePrincipal = sumAmt(loanResult.data)
-    const loanExposureWithInterest = loanExposurePrincipal * (1 + INTEREST_RATE)
+    const loanInterest = Math.round(loanExposurePrincipal * INTEREST_RATE)
+    const loanExposureWithInterest = loanExposurePrincipal + loanInterest
     const savingsExposure = sumAmt(savingsResult.data)
 
     // 5) Calculate eligibility with bounds checking
@@ -130,11 +131,10 @@ async function calculateEligibility(memberId) {
       globalLimit
     )
     
-    // Add additional facility and cap at N1,000,000
-    const LOAN_CAP = 1000000 // N1,000,000 cap
-    const loanEligible = baseEligible > 0
-      ? Math.min(baseEligible + additionalFacility, LOAN_CAP)
-      : additionalFacility
+    // Add additional facility and apply cap against current exposure
+    const LOAN_CAP = 1000000 // N1,000,000 cap (total cap)
+    const capRemaining = Math.max(0, LOAN_CAP - loanExposureWithInterest)
+    const loanEligible = Math.min(baseEligible + additionalFacility, capRemaining)
 
     // 6) Validate calculated values
     const finalSavingsEligible = safeNumber(savingsEligible, 0, 0, 10000000)
@@ -156,6 +156,7 @@ async function calculateEligibility(memberId) {
       exposure: {
         loan_exposure_principal: loanExposurePrincipal,
         loan_exposure_with_interest: loanExposureWithInterest,
+        loan_interest: loanInterest,
         savings_exposure: savingsExposure,
         outstanding_loans_total: outstandingLoansTotal,
         interest_rate: INTEREST_RATE

@@ -47,7 +47,7 @@ export async function GET(req) {
     if (savExp.error) return NextResponse.json({ ok: false, error: savExp.error.message }, { status: 500 })
 
     const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
-    const loanExposure = sumAmt(loanExp.data)
+    const loanExposurePrincipal = sumAmt(loanExp.data)
     const savingsExposure = sumAmt(savExp.data)
 
     // 3) Compute limits (exposure-aware)
@@ -55,9 +55,10 @@ export async function GET(req) {
     const loans = Number(m.loans || 0)
     const globalLimit = Number(m.global_limit || 0)
 
-    // Include interest deduction in remaining loan calculation
+    // Calculate interest on loan exposure for better remaining loan calculation
     const INTEREST_RATE = 0.13
-    const loanExposureWithInterest = loanExposure * (1 + INTEREST_RATE)
+    const loanInterest = Math.round(loanExposurePrincipal * INTEREST_RATE)
+    const loanExposure = loanExposurePrincipal + loanInterest // Total exposure including interest
 
     const outstandingLoansTotal = loans + loanExposure
     
@@ -67,13 +68,12 @@ export async function GET(req) {
 
     // Loan eligibility: base eligibility plus N300,000 facility, capped at N1,000,000
     const additionalFacility = 300000 // N300,000 facility
-    const LOAN_CAP = 1000000 // N1,000,000 cap
+    const LOAN_CAP = 1000000 // N1,000,000 cap (total cap)
     const rawLoanLimit = savings * 5
     const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
     const baseEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
-    const loanEligible = baseEligible > 0
-      ? Math.min(baseEligible + additionalFacility, LOAN_CAP)
-      : additionalFacility
+    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
+    const loanEligible = Math.min(baseEligible + additionalFacility, capRemaining)
 
     return NextResponse.json({
       ok: true,
@@ -82,7 +82,9 @@ export async function GET(req) {
         loanEligible,
         outstandingLoansTotal,
         savingsExposure,
-        loanExposure
+        loanExposure, // Total exposure including interest
+        loanExposurePrincipal, // Principal amount only
+        loanInterest // Interest amount
       },
       memberSnapshot: {
         savings,

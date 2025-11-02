@@ -264,6 +264,33 @@ function OrdersPageContent() {
                       </div>
                     )}
                     
+                    {/* Payment Breakdown for Loan Orders */}
+                    {order.payment_option === 'Loan' && (
+                      <div className="mb-2 lg:mb-3">
+                        <div className="text-sm font-medium text-gray-700 mb-2">Payment Breakdown:</div>
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <div className="space-y-1">
+                            {/* Principal is the sum of line amounts */}
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">Principal Amount:</span>
+                              <span className="font-medium">₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))).toLocaleString()}</span>
+                            </div>
+                            {/* Interest is 13% of principal */}
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">Interest (13%):</span>
+                              <span className="font-medium text-orange-600">₦{Number(Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}</span>
+                            </div>
+                            <div className="border-t pt-1 mt-1">
+                              <div className="flex justify-between items-center text-sm font-semibold">
+                                <span>Total (incl. Interest):</span>
+                                <span>₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         {order.posted_at && (
