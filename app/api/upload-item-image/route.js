@@ -75,7 +75,9 @@ export async function POST(request) {
         const { data: pub } = await supabase.storage.from(bucket).getPublicUrl(path)
         const publicUrl = pub?.publicUrl || ''
         if (publicUrl) {
-          return NextResponse.json({ success: true, imageUrl: publicUrl, message: 'Image uploaded successfully' })
+          // Add cache-busting query param so clients don’t reuse old cached image
+          const versionedUrl = `${publicUrl}?v=${Date.now()}`
+          return NextResponse.json({ success: true, imageUrl: versionedUrl, message: 'Image uploaded successfully' })
         }
       }
       // If upload failed, fall through to local filesystem
@@ -92,8 +94,10 @@ export async function POST(request) {
     const filepath = join(uploadDir, filename)
     await writeFile(filepath, buffer)
     const imageUrl = `/images/items/${filename}`
+    // Add cache-busting query param for local filesystem as well
+    const versionedUrl = `${imageUrl}?v=${Date.now()}`
 
-    return NextResponse.json({ success: true, imageUrl, message: 'Image uploaded successfully' })
+    return NextResponse.json({ success: true, imageUrl: versionedUrl, message: 'Image uploaded successfully' })
 
   } catch (error) {
     console.error('Upload error:', error)
