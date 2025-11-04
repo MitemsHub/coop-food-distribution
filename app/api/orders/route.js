@@ -107,7 +107,18 @@ export async function POST(req) {
         .single()
       if (pErr || !bip) return NextResponse.json({ ok:false, error:`No price for ${sku} in this branch` }, { status:400 })
 
-      const unit_price = Number(bip.price)
+      // Add branch-specific markup if configured
+      let markupAmount = 0
+      const { data: mk, error: mkErr } = await supabase
+        .from('branch_item_markups')
+        .select('amount, active')
+        .eq('branch_id', deliveryBranch.id)
+        .eq('item_id', item.item_id)
+        .single()
+      if (!mkErr && mk && mk.active) {
+        markupAmount = Number(mk.amount || 0)
+      }
+      const unit_price = Number(bip.price) + markupAmount
       const amount = unit_price * qty
       total += amount
 

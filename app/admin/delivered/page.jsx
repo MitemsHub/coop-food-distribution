@@ -72,6 +72,37 @@ function DeliveredPageContent() {
     a.href = url; a.download = 'delivered_orders.csv'; a.click(); URL.revokeObjectURL(url)
   }
 
+  const exportPDF = async () => {
+    if (!orders.length) { alert('No rows to export') ; return }
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF()
+    let y = 12
+    doc.setFontSize(14); doc.text('Delivered Orders Manifest (Admin)', 10, y); y += 6
+    doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 10, y); y += 6
+    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty','Unit Price','Amount']
+    doc.text(header.join(' | '), 10, y); y += 4
+    doc.line(10, y, 200, y); y += 4
+    orders.forEach(o => {
+      (o.order_lines || []).forEach(l => {
+        const line = [
+          String(o.order_id),
+          String(o.member_name_snapshot || ''),
+          String(o.departments?.name || ''),
+          String(o.payment_option || ''),
+          String(l.items?.sku || ''),
+          String(l.items?.name || ''),
+          String(l.qty || 0),
+          `₦${Number(l.unit_price || 0).toLocaleString()}`,
+          `₦${Number(l.amount || 0).toLocaleString()}`,
+        ].join(' | ')
+        doc.text(line, 10, y)
+        y += 5
+        if (y > 280) { doc.addPage(); y = 12 }
+      })
+    })
+    doc.save('admin_delivered_manifest.pdf')
+  }
+
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
@@ -105,12 +136,15 @@ function DeliveredPageContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-4">
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>
           Refresh
         </button>
         <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>
           Export CSV
+        </button>
+        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>
+          Export PDF
         </button>
       </div>
 
@@ -126,7 +160,9 @@ function DeliveredPageContent() {
               <div className="text-xs sm:text-sm">Delivery: {o.delivery?.name || '-'}</div>
               <div className="text-xs sm:text-sm">{o.departments?.name || '-'}</div>
               <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
-              <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+              <div className="text-xs sm:text-sm font-medium">
+                {o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'} ₦{Number(o.total_amount || 0).toLocaleString()}
+              </div>
             </div>
 
             <div className="overflow-x-auto">

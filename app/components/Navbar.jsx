@@ -235,6 +235,19 @@ export default function Navbar() {
                 )}
               </Link>
               <Link
+                href="/admin/markups"
+                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/admin/markups') 
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.343-4 3s1.79 3 4 3 4-1.343 4-3-1.79-3-4-3zm0-5v5m0 6v5" />
+                </svg>
+                Markups
+              </Link>
+              <Link
                 href="/admin/reports"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   isActive('/admin/reports') 
@@ -445,6 +458,17 @@ export default function Navbar() {
                       {lowCount}
                     </span>
                   )}
+                </Link>
+                <Link
+                  href="/admin/markups"
+                  onClick={closeMobileMenu}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    isActive('/admin/markups') 
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
+                      : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
+                  }`}
+                >
+                  Markups
                 </Link>
                 <Link
                   href="/admin/reports"

@@ -184,6 +184,7 @@ function ShopPageContent() {
           .from('v_inventory_status')
           .select(`
             sku,
+            item_id,
             item_name,
             unit,
             category,
@@ -201,6 +202,18 @@ function ShopPageContent() {
         
 
         
+        // Load per-branch markups to adjust displayed prices
+        let markupByItemId = new Map()
+        try {
+          const { data: markups } = await supabase
+            .from('branch_item_markups')
+            .select('item_id, amount, active')
+            .eq('branch_id', br.id)
+          markupByItemId = new Map((markups || []).filter(m => m.active).map(m => [m.item_id, Number(m.amount || 0)]))
+        } catch (mkErr) {
+          console.warn('Markups fetch warn:', mkErr?.message)
+        }
+
         // Fallback to original query if view doesn't exist
         if (error && error.message.includes('does not exist')) {
 
@@ -234,17 +247,19 @@ function ShopPageContent() {
           return
         }
         
-        // Process items for demand tracking mode
+        // Process items for demand tracking mode (apply branch markups)
         const itemsWithDemand = (rows || []).map(row => {
           // Handle both v_inventory_status view format and fallback format
           if (row.item_name) {
             // v_inventory_status view format
+            const base = Number(row.price || 0)
+            const mk = markupByItemId.get(row.item_id) || 0
             return {
               sku: row.sku,
               name: row.item_name,
               unit: row.unit,
               category: row.category,
-              price: Number(row.price),
+              price: base + mk,
               image_url: row.image_url,
               demand_tracking_mode: row.demand_tracking_mode,
               total_demand: row.total_demand || 0,
@@ -254,12 +269,14 @@ function ShopPageContent() {
             }
           } else {
             // Fallback branch_item_prices format - pure demand tracking
+            const base = Number(row.price || 0)
+            const mk = markupByItemId.get(row.items?.item_id) || 0
             return {
               sku: row.items.sku,
               name: row.items.name,
               unit: row.items.unit,
               category: row.items.category,
-              price: Number(row.price),
+              price: base + mk,
               image_url: row.items.image_url,
               demand_tracking_mode: true, // Always use demand tracking
               total_demand: 0,

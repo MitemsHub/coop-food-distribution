@@ -302,7 +302,9 @@ function PostedAdminPageContent() {
               <div className="text-xs">Delivery: {o.delivery?.name || '-'}</div>
               <div className="text-xs">{o.departments?.name || '-'}</div>
               <div className="text-xs">Payment: <b>{o.payment_option}</b></div>
-              <div className="text-xs font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+              <div className="text-xs font-medium">
+                {o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'} ₦{Number(o.total_amount || 0).toLocaleString()}
+              </div>
             </div>
 
             <div className="mt-3 overflow-x-auto">

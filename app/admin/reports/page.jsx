@@ -14,6 +14,7 @@ function ReportsPageContent() {
   const [branchCode, setBranchCode] = useState('') // '' = All branches
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [branchPackLoading, setBranchPackLoading] = useState(false)
 
   // Pagination states for the first two tables
   const [branchCurrentPage, setBranchCurrentPage] = useState(1)
@@ -180,13 +181,31 @@ function ReportsPageContent() {
 
   // Format demand rows for display
   const formattedDemandRows = useMemo(() => {
-    return (demandRows || []).map((r, idx) => ({
-      sn: idx + 1,
-      items: r.items,
-      price: `₦${Number(r.price || 0).toLocaleString()}`,
-      quantity: Number(r.quantity || 0).toLocaleString(),
-      amount: `₦${Number(r.amount || 0).toLocaleString()}`
-    }))
+    return (demandRows || []).map((r, idx) => {
+      const original = Number(r.original_price || 0)
+      const markup = Number(r.markup || 0)
+      const qty = Number(r.quantity || 0)
+      const amt = (original + markup) * qty
+      return {
+        sn: idx + 1,
+        items: r.items,
+        original_price: `₦${original.toLocaleString()}`,
+        markup: `₦${markup.toLocaleString()}`,
+        quantity: qty.toLocaleString(),
+        amount: `₦${amt.toLocaleString()}`
+      }
+    })
+  }, [demandRows])
+
+  // Raw rows used for totals calculations in exports (amount recomputed)
+  const demandRawForTotals = useMemo(() => {
+    return (demandRows || []).map(r => {
+      const original = Number(r.original_price || 0)
+      const markup = Number(r.markup || 0)
+      const qty = Number(r.quantity || 0)
+      const amt = (original + markup) * qty
+      return { ...r, amount: amt }
+    })
   }, [demandRows])
 
   const demandTotalPages = Math.ceil(formattedDemandRows.length / itemsPerPage)
@@ -420,21 +439,25 @@ function ReportsPageContent() {
           </div>
 
           <button
-            className="px-3 py-2 bg-emerald-600 text-white text-sm sm:text-base rounded w-full sm:w-auto"
+            className={`px-3 py-2 text-white text-sm sm:text-base rounded w-full sm:w-auto flex items-center justify-center gap-2 ${branchPackLoading ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+            disabled={branchPackLoading}
+            aria-busy={branchPackLoading}
             onClick={async () => {
+              if (branchPackLoading) return
               try {
+                setBranchPackLoading(true)
                 const qs = new URLSearchParams()
                 if (branchCode) qs.set('branch', branchCode)
                 if (from) qs.set('from', from)
                 if (to) qs.set('to', to)
-                
+
                 const res = await fetch(`/api/admin/reports/branch-pack?${qs.toString()}`)
                 const json = await res.json()
-                
+
                 if (!json.ok) {
                   return alert(`Download failed: ${json.error || 'Unknown error'}`)
                 }
-                
+
                 // Convert base64 to blob
                 const byteCharacters = atob(json.data)
                 const byteNumbers = new Array(byteCharacters.length)
@@ -443,7 +466,7 @@ function ReportsPageContent() {
                 }
                 const byteArray = new Uint8Array(byteNumbers)
                 const blob = new Blob([byteArray], { type: json.type })
-                
+
                 // Create download link
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
@@ -454,10 +477,15 @@ function ReportsPageContent() {
               } catch (error) {
                 console.error('Download error:', error)
                 alert(`Download failed: ${error.message || 'Network error'}`)
+              } finally {
+                setBranchPackLoading(false)
               }
             }}
           >
-            Download Branch Pack
+            {branchPackLoading && (
+              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+            )}
+            {branchPackLoading ? 'Preparing…' : 'Download Branch Pack'}
           </button>
         </div>
       </section>
@@ -576,7 +604,8 @@ function ReportsPageContent() {
         cols={[
           ['sn', 'SN'],
           ['items', 'Items'],
-          ['price', 'Price'],
+          ['original_price', 'Price'],
+          ['markup', 'Markup'],
           ['quantity', 'Quantity'],
           ['amount', 'Amount']
         ]}
@@ -587,7 +616,7 @@ function ReportsPageContent() {
         onExportCSV={() => exportCSV(
           formattedDemandRows,
           'items_demand_by_delivery_and_department.csv',
-          { totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRows } }
+          { totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRawForTotals } }
         )}
         onExportPDF={() => {
           const branchName = selectedDeliveryCode === 'all'
@@ -599,7 +628,7 @@ function ReportsPageContent() {
           exportPDF(
             formattedDemandRows,
             'Items Demand by Delivery & Department',
-            { filters: { 'Delivery Location': branchName, 'Department': departmentName }, totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRows } }
+            { filters: { 'Delivery Location': branchName, 'Department': departmentName }, totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRawForTotals } }
           )
         }}
         filter={(

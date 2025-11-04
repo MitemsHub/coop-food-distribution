@@ -255,7 +255,7 @@ function RepPendingPageContent() {
     doc.setFontSize(14); doc.text('Pending Orders Manifest', 10, y); y += 6
     doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 10, y); y += 6
     if (dept) { doc.text(`Department: ${dept}`, 10, y); y += 6 }
-    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty']
+    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty','Unit Price','Amount']
     doc.text(header.join(' | '), 10, y); y += 4
     doc.line(10, y, 200, y); y += 4
     orders.forEach(o => {
@@ -268,6 +268,8 @@ function RepPendingPageContent() {
           String(l.items?.sku || ''),
           String(l.items?.name || ''),
           String(l.qty || 0),
+          `₦${Number(l.unit_price || 0).toLocaleString()}`,
+          `₦${Number(l.amount || 0).toLocaleString()}`,
         ].join(' | ')
         doc.text(line, 10, y)
         y += 5
@@ -344,7 +346,9 @@ function RepPendingPageContent() {
               <div className="text-xs sm:text-sm">Delivery: {o.delivery?.name || '-'}</div>
               <div className="text-xs sm:text-sm">{o.departments?.name || '-'}</div>
               <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
-              <div className="text-xs sm:text-sm font-medium">Total: ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+            <div className="text-xs sm:text-sm font-medium">
+              {o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'} ₦{Number(o.total_amount || 0).toLocaleString()}
+            </div>
             </div>
 
             <div className="flex justify-end mb-3">

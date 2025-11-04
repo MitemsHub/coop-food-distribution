@@ -36,10 +36,12 @@ export async function GET(request) {
           i.sku,
           i.name AS item_name,
           i.category AS item_category,
-          bip.price::numeric AS price
+          bip.price::numeric AS price,
+          COALESCE(bim.amount, 0)::numeric AS markup
         FROM branches b
         JOIN branch_item_prices bip ON bip.branch_id = b.id
         JOIN items i ON i.item_id = bip.item_id
+        LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id AND bim.active = TRUE
         WHERE bip.price IS NOT NULL
         ORDER BY b.name, i.name
       `)
@@ -65,7 +67,7 @@ export async function GET(request) {
       const supabase = createClient()
       const { data: rows, error: sErr } = await supabase
         .from('branch_item_prices')
-        .select('price, branches:branch_id(code, name), items:item_id(item_id, sku, name, category)')
+        .select('price, branches:branch_id(code, name), items:item_id(item_id, sku, name, category), markups:branch_item_markups!inner(branch_id, item_id, amount, active)')
       if (sErr) return NextResponse.json({ ok: false, error: sErr.message }, { status: 500 })
 
       const normalized = (rows || []).map(r => ({
@@ -75,7 +77,8 @@ export async function GET(request) {
         sku: r.items?.sku,
         item_name: r.items?.name,
         item_category: r.items?.category,
-        price: r.price
+        price: r.price,
+        markup: Array.isArray(r.markups) ? Number((r.markups.find(m => m.active)?.amount) || 0) : 0
       }))
 
       const branchesMap = new Map()

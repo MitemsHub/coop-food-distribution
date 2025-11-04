@@ -45,7 +45,7 @@ export async function GET(req) {
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
-    const rows = (data || []).map(r => ({
+    const baseRows = (data || []).map(r => ({
       OrderID: r.order_id,
       MemberID: r.member_id,
       MemberName: r.member_name,
@@ -61,13 +61,79 @@ export async function GET(req) {
       CreatedAt: r.created_at
     }))
 
+    // Build enrichment maps for Original Price and Markup
+    const branchCodes = [...new Set(baseRows.map(r => r.DeliveryBranch ? null : null).concat((data || []).map(r => r.branch_code)))].filter(Boolean)
+    const itemNames = [...new Set(baseRows.map(r => r.Item))]
+
+    // Fetch branches map: code -> id
+    const { data: branchesData, error: branchesErr } = await supabase
+      .from('branches')
+      .select('id, code')
+      .in('code', branchCodes)
+    if (branchesErr) throw new Error(branchesErr.message)
+    const branchIdByCode = new Map(branchesData.map(b => [b.code, b.id]))
+
+    // Fetch items map: name -> item_id
+    const { data: itemsData, error: itemsErr } = await supabase
+      .from('items')
+      .select('item_id, name')
+      .in('name', itemNames)
+    if (itemsErr) throw new Error(itemsErr.message)
+    const itemIdByName = new Map(itemsData.map(i => [i.name, i.item_id]))
+
+    const branchIds = [...new Set((data || []).map(r => branchIdByCode.get(r.branch_code)).filter(Boolean))]
+    const itemIds = [...new Set(itemsData.map(i => i.item_id))]
+
+    // Fetch base prices for branch+item pairs
+    const { data: bipData, error: bipErr } = await supabase
+      .from('branch_item_prices')
+      .select('branch_id, item_id, price')
+      .in('branch_id', branchIds)
+      .in('item_id', itemIds)
+    if (bipErr) throw new Error(bipErr.message)
+    const basePriceMap = new Map(bipData.map(r => [`${r.branch_id}:${r.item_id}`, Number(r.price)]))
+
+    // Fetch markups for branch+item pairs (active only)
+    const { data: markupData, error: markupErr } = await supabase
+      .from('branch_item_markups')
+      .select('branch_id, item_id, amount, active')
+      .in('branch_id', branchIds)
+      .in('item_id', itemIds)
+    if (markupErr) throw new Error(markupErr.message)
+    const markupMap = new Map(markupData.filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount)]))
+
+    // Enrich rows with OriginalPrice, Markup, Interest
+    const rows = baseRows.map((r, idx) => {
+      const code = (data[idx] || {}).branch_code
+      const itemName = r.Item
+      const branchId = branchIdByCode.get(code)
+      const itemId = itemIdByName.get(itemName)
+      const key = branchId && itemId ? `${branchId}:${itemId}` : null
+      const markup = key ? (markupMap.get(key) || 0) : 0
+      const basePrice = key ? (basePriceMap.get(key) ?? (r.Price - markup)) : (r.Price - markup)
+      const interest = r.Payment === 'Loan' ? Math.round(r.Amount * 0.13) : 0
+      return {
+        ...r,
+        OriginalPrice: Number(basePrice),
+        Markup: Number(markup),
+        Interest: Number(interest)
+      }
+    })
+
     const wb = XLSX.utils.book_new()
     const mk = a => XLSX.utils.json_to_sheet(a)
 
+    // Sheets with enriched columns
     XLSX.utils.book_append_sheet(wb, mk(rows), 'Master')
-    XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Savings')), 'Savings')
+    XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Savings').map(r => ({
+      ...r,
+      Interest: 0
+    }))), 'Savings')
     XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Loan')), 'Loan')
-    XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Cash')), 'Cash')
+    XLSX.utils.book_append_sheet(wb, mk(rows.filter(r => r.Payment === 'Cash').map(r => ({
+      ...r,
+      Interest: 0
+    }))), 'Cash')
 
     // Use base64 encoding for better compatibility with fetch API
     const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' })

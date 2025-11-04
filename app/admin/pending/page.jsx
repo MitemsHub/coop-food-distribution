@@ -255,6 +255,63 @@ function PendingAdminPageContent() {
     }
   }
 
+  // Export CSV of pending orders with pricing
+  const exportCSV = () => {
+    const rows = orders.flatMap(o => (o.order_lines || []).map(l => ({
+      order_id: o.order_id,
+      created_at: o.created_at,
+      member_id: o.member_id,
+      member_name: o.member_name_snapshot,
+      member_branch: o.member_branch?.name || '',
+      delivery_branch: o.delivery?.name || '',
+      department: o.departments?.name || '',
+      payment: o.payment_option,
+      sku: l.items?.sku,
+      item: l.items?.name,
+      qty: l.qty,
+      unit_price: l.unit_price,
+      amount: l.amount,
+    })))
+    if (!rows.length) { alert('No rows to export') ; return }
+    const headers = Object.keys(rows[0])
+    const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))].join('\n')
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob); const a = document.createElement('a')
+    a.href = url; a.download = 'admin_pending.csv'; a.click(); URL.revokeObjectURL(url)
+  }
+
+  // Export PDF manifest including Unit Price and Amount
+  const exportPDF = async () => {
+    if (!orders.length) { alert('No rows to export') ; return }
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF()
+    let y = 12
+    doc.setFontSize(14); doc.text('Pending Orders Manifest (Admin)', 10, y); y += 6
+    doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 10, y); y += 6
+    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty','Unit Price','Amount']
+    doc.text(header.join(' | '), 10, y); y += 4
+    doc.line(10, y, 200, y); y += 4
+    orders.forEach(o => {
+      (o.order_lines || []).forEach(l => {
+        const line = [
+          String(o.order_id),
+          String(o.member_name_snapshot || ''),
+          String(o.departments?.name || ''),
+          String(o.payment_option || ''),
+          String(l.items?.sku || ''),
+          String(l.items?.name || ''),
+          String(l.qty || 0),
+          `₦${Number(l.unit_price || 0).toLocaleString()}`,
+          `₦${Number(l.amount || 0).toLocaleString()}`,
+        ].join(' | ')
+        doc.text(line, 10, y)
+        y += 5
+        if (y > 280) { doc.addPage(); y = 12 }
+      })
+    })
+    doc.save('admin_pending_manifest.pdf')
+  }
+
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
@@ -280,7 +337,7 @@ function PendingAdminPageContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-5 gap-3 mb-4">
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>{selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}</button>
         <button 
@@ -304,6 +361,8 @@ function PendingAdminPageContent() {
             `Post Selected (${selected.size})`
           )}
         </button>
+        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>Export CSV</button>
+        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>Export PDF</button>
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='success'?'text-green-700':'text-red-700'}`}>{msg.text}</div>}
@@ -324,7 +383,9 @@ function PendingAdminPageContent() {
                 <div><span className="font-medium">Delivery:</span> {o.delivery?.name || '-'}</div>
                 <div><span className="font-medium">Department:</span> {o.departments?.name || '-'}</div>
                 <div><span className="font-medium">Payment:</span> <b>{o.payment_option}</b></div>
-                <div><span className="font-medium">Total:</span> ₦{Number(o.total_amount || 0).toLocaleString()}</div>
+                <div>
+                  <span className="font-medium">{o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'}</span> ₦{Number(o.total_amount || 0).toLocaleString()}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button className="px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700" onClick={() => startEdit(o)}>Edit</button>
