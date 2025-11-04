@@ -281,7 +281,7 @@ function RepPostedPageContent() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-white/10 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">{showModal.title}</h3>
             <p className="text-gray-600 mb-4">{showModal.message}</p>
