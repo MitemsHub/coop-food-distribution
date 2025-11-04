@@ -61,25 +61,53 @@ export async function GET(request) {
         prices: rows
       })
     } catch (error) {
-      // Fallback to Supabase client when direct DB fails for any reason
-
-      // Fallback to Supabase client (service role)
+      // Fallback to Supabase client when direct DB fails
       const supabase = createClient()
-      const { data: rows, error: sErr } = await supabase
-        .from('branch_item_prices')
-        .select('price, branches:branch_id(code, name), items:item_id(item_id, sku, name, category), markups:branch_item_markups!inner(branch_id, item_id, amount, active)')
-      if (sErr) return NextResponse.json({ ok: false, error: sErr.message }, { status: 500 })
 
-      const normalized = (rows || []).map(r => ({
-        branch_code: r.branches?.code,
-        branch_name: r.branches?.name,
-        item_id: r.items?.item_id,
-        sku: r.items?.sku,
-        item_name: r.items?.name,
-        item_category: r.items?.category,
-        price: r.price,
-        markup: Array.isArray(r.markups) ? Number((r.markups.find(m => m.active)?.amount) || 0) : 0
-      }))
+      // Fetch base branch-item prices
+      const { data: bipData, error: bipErr } = await supabase
+        .from('branch_item_prices')
+        .select('branch_id, item_id, price')
+      if (bipErr) return NextResponse.json({ ok: false, error: bipErr.message }, { status: 500 })
+
+      const branchIds = [...new Set((bipData || []).map(r => r.branch_id).filter(Boolean))]
+      const itemIds = [...new Set((bipData || []).map(r => r.item_id).filter(Boolean))]
+
+      // Fetch supporting branch and item metadata
+      const [{ data: branchesData, error: branchesErr }, { data: itemsData, error: itemsErr }] = await Promise.all([
+        supabase.from('branches').select('id, code, name').in('id', branchIds),
+        supabase.from('items').select('item_id, sku, name, category').in('item_id', itemIds)
+      ])
+      if (branchesErr) return NextResponse.json({ ok: false, error: branchesErr.message }, { status: 500 })
+      if (itemsErr) return NextResponse.json({ ok: false, error: itemsErr.message }, { status: 500 })
+
+      const branchById = new Map((branchesData || []).map(b => [b.id, { code: b.code, name: b.name }]))
+      const itemById = new Map((itemsData || []).map(i => [i.item_id, { item_id: i.item_id, sku: i.sku, name: i.name, category: i.category }]))
+
+      // Fetch markups separately (active only)
+      const { data: markupsData, error: markupsErr } = await supabase
+        .from('branch_item_markups')
+        .select('branch_id, item_id, amount, active')
+        .in('branch_id', branchIds)
+        .in('item_id', itemIds)
+      if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
+      const markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount)]))
+
+      const normalized = (bipData || []).map(r => {
+        const b = branchById.get(r.branch_id) || {}
+        const it = itemById.get(r.item_id) || {}
+        const key = `${r.branch_id}:${r.item_id}`
+        return {
+          branch_code: b.code,
+          branch_name: b.name,
+          item_id: it.item_id,
+          sku: it.sku,
+          item_name: it.name,
+          item_category: it.category,
+          price: Number(r.price || 0),
+          markup: Number(markupMap.get(key) || 0)
+        }
+      })
 
       const branchesMap = new Map()
       const itemsMap = new Map()
