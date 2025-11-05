@@ -1,6 +1,7 @@
 // app/api/admin/import/prices/route.js
 import { NextResponse } from 'next/server'
 import { createClient } from '../../../../../lib/supabaseServer'
+import { queryDirect } from '../../../../../lib/directDb'
 import * as XLSX from 'xlsx/xlsx.mjs'
 
 export const runtime = 'nodejs'
@@ -23,6 +24,15 @@ export async function POST(req) {
     const wb = XLSX.read(buf, { type: 'buffer' })
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+    // Preflight: ensure items sequence is correctly positioned to avoid duplicate key on item_id
+    try {
+      await queryDirect(
+        `SELECT setval(pg_get_serial_sequence('public.items','item_id'), (SELECT COALESCE(MAX(item_id), 0) FROM public.items));`
+      )
+    } catch (seqErr) {
+      console.warn('Items sequence preflight skipped:', seqErr?.message || seqErr)
+    }
 
     // Expected headers:
     // sku, item_name, unit, category, branch_code, price
@@ -49,12 +59,28 @@ export async function POST(req) {
     }
     itemUpserts.push(...itemsMap.values())
 
-    // Upsert items
+    // Upsert items with sequence repair and single retry on duplicate key
     let itemsAffected = 0
     for (const part of chunk(itemUpserts, 500)) {
-      const { error: iErr, count } = await supabase
-        .from('items')
-        .upsert(part, { onConflict: 'sku', ignoreDuplicates: false, count: 'exact' })
+      const doUpsert = async () => {
+        return await supabase
+          .from('items')
+          .upsert(part, { onConflict: 'sku', ignoreDuplicates: false, count: 'exact' })
+      }
+      let { error: iErr, count } = await doUpsert()
+      if (iErr && String(iErr.message || '').includes('duplicate key value') && String(iErr.message || '').includes('items_pkey')) {
+        // Attempt sequence repair then retry once
+        try {
+          await queryDirect(
+            `SELECT setval(pg_get_serial_sequence('public.items','item_id'), (SELECT COALESCE(MAX(item_id), 0) FROM public.items));`
+          )
+        } catch (seqErr) {
+          console.warn('Sequence repair failed:', seqErr?.message || seqErr)
+        }
+        const retry = await doUpsert()
+        iErr = retry.error
+        count = retry.count
+      }
       if (iErr) {
         console.error('Items upsert error:', iErr)
         return NextResponse.json({ ok: false, error: iErr.message }, { status: 500 })
@@ -77,6 +103,24 @@ export async function POST(req) {
     // Build branch_item_prices upserts and inventory movements
     const inventoryMovements = []
     
+    // Preflight: ensure branch_item_prices sequence is correctly positioned to avoid duplicate key on id
+    try {
+      await queryDirect(
+        `SELECT setval(pg_get_serial_sequence('public.branch_item_prices','id'), (SELECT COALESCE(MAX(id), 0) FROM public.branch_item_prices));`
+      )
+    } catch (seqErr) {
+      console.warn('Branch item prices sequence preflight skipped:', seqErr?.message || seqErr)
+    }
+
+    // Preflight: ensure unique index on (branch_id, item_id) exists for ON CONFLICT upserts
+    try {
+      await queryDirect(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_item_prices_branch_item ON public.branch_item_prices(branch_id, item_id);`
+      )
+    } catch (idxErr) {
+      console.warn('Ensure unique index failed:', idxErr?.message || idxErr)
+    }
+    
     for (const r of rows) {
       const sku = String(r.sku || '').trim().toUpperCase()
       const branch_code = String(r.branch_code || '').trim().toUpperCase()
@@ -91,41 +135,60 @@ export async function POST(req) {
       priceUpserts.push({ branch_id, item_id, price })
     }
 
-    // Insert/Update prices using manual conflict resolution
+    // Upsert prices with conflict on (branch_id, item_id) and retry on sequence error
     let pricesAffected = 0
     for (const part of chunk(priceUpserts, 500)) {
-      for (const priceData of part) {
-        // Check if record exists
-        const { data: existing } = await supabase
+      const doUpsertPrices = async () => {
+        return await supabase
           .from('branch_item_prices')
-          .select('id')
-          .eq('branch_id', priceData.branch_id)
-          .eq('item_id', priceData.item_id)
-          .single()
-        
-        if (existing) {
-          // Update existing record
-          const { error: updateErr } = await supabase
-             .from('branch_item_prices')
-             .update({ price: priceData.price })
-             .eq('branch_id', priceData.branch_id)
-             .eq('item_id', priceData.item_id)
-          if (updateErr) {
-            console.error('Price update error:', updateErr)
-            return NextResponse.json({ ok: false, error: updateErr.message }, { status: 500 })
-          }
-        } else {
-          // Insert new record
-          const { error: insertErr } = await supabase
+          .upsert(part, { onConflict: 'branch_id,item_id', ignoreDuplicates: false, count: 'exact' })
+      }
+      let { error: pErr, count } = await doUpsertPrices()
+      if (pErr && String(pErr.message || '').includes('duplicate key value') && String(pErr.message || '').includes('branch_item_prices_pkey')) {
+        // Attempt sequence repair then retry once
+        try {
+          await queryDirect(
+            `SELECT setval(pg_get_serial_sequence('public.branch_item_prices','id'), (SELECT COALESCE(MAX(id), 0) FROM public.branch_item_prices));`
+          )
+        } catch (seqErr) {
+          console.warn('Branch item prices sequence repair failed:', seqErr?.message || seqErr)
+        }
+        const retry = await doUpsertPrices()
+        pErr = retry.error
+        count = retry.count
+      }
+      // Fallback: if upsert failed because ON CONFLICT target is missing, do manual select/update/insert
+      if (pErr && String(pErr.message || '').toLowerCase().includes('no unique or exclusion constraint matching the on conflict specification')) {
+        console.warn('Upsert fallback to manual update/insert due to missing unique index')
+        for (const priceData of part) {
+          const { data: existing } = await supabase
             .from('branch_item_prices')
-            .insert(priceData)
-          if (insertErr) {
-            console.error('Price insert error:', insertErr)
-            return NextResponse.json({ ok: false, error: insertErr.message }, { status: 500 })
+            .select('id')
+            .eq('branch_id', priceData.branch_id)
+            .eq('item_id', priceData.item_id)
+            .single()
+          if (existing) {
+            const { error: uErr } = await supabase
+              .from('branch_item_prices')
+              .update({ price: priceData.price })
+              .eq('branch_id', priceData.branch_id)
+              .eq('item_id', priceData.item_id)
+            if (uErr) return NextResponse.json({ ok: false, error: uErr.message }, { status: 500 })
+          } else {
+            const { error: iErr2 } = await supabase
+              .from('branch_item_prices')
+              .insert(priceData)
+            if (iErr2) return NextResponse.json({ ok: false, error: iErr2.message }, { status: 500 })
           }
         }
-        pricesAffected++
+        pricesAffected += part.length
+        continue
       }
+      if (pErr) {
+        console.error('Prices upsert error:', pErr)
+        return NextResponse.json({ ok: false, error: pErr.message }, { status: 500 })
+      }
+      pricesAffected += count || part.length
     }
     
     return NextResponse.json({
