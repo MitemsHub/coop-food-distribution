@@ -104,7 +104,7 @@ export default function MemberVerification() {
                 Are you a member of the CBN Coop?
               </h2>
               <p className="text-gray-600 text-sm md:text-base leading-relaxed">
-                Please select your membership status to continue to the appropriate portal.
+                Please select your membership status to launch you to the appropriate portal.
               </p>
             </div>
 

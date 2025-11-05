@@ -60,6 +60,12 @@ function ShopPageContent() {
         setMessage({ type: 'error', text: 'Please select a member first' })
         return
       }
+      const prev = memberBranchCode
+      // Optimistic UI update for instant responsiveness
+      setMemberBranchCode(newCode)
+      // Persist locally for faster subsequent loads
+      try { localStorage.setItem(`member_${memberId}`, JSON.stringify({ ...(member || {}), branches: { ...(member?.branches || {}), code: newCode } })) } catch {}
+
       const res = await fetch('/api/members/update-branch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,9 +73,10 @@ function ShopPageContent() {
       })
       const json = await safeJson(res, '/api/members/update-branch')
       if (!json.ok) throw new Error(json.error || 'Failed to update member branch')
-      setMemberBranchCode(newCode)
       setMessage({ type: 'success', text: `Member branch updated to ${json.branch?.name || newCode}` })
     } catch (e) {
+      // Revert on failure
+      setMemberBranchCode(prev => prev)
       setMessage({ type: 'error', text: e.message })
     }
   }
@@ -81,6 +88,12 @@ function ShopPageContent() {
         setMessage({ type: 'error', text: 'Please select a member first' })
         return
       }
+      const prev = departmentName
+      // Optimistic UI update for instant responsiveness
+      setDepartmentName(newName)
+      // Persist locally for faster subsequent loads
+      try { localStorage.setItem(`department_${memberId}`, newName) } catch {}
+
       const res = await fetch('/api/members/update-department', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,9 +101,10 @@ function ShopPageContent() {
       })
       const json = await safeJson(res, '/api/members/update-department')
       if (!json.ok) throw new Error(json.error || 'Failed to update member department')
-      setDepartmentName(newName)
       setMessage({ type: 'success', text: `Member department updated to ${json.department?.name || newName}` })
     } catch (e) {
+      // Revert on failure
+      setDepartmentName(prev => prev)
       setMessage({ type: 'error', text: e.message })
     }
   }
@@ -138,19 +152,36 @@ function ShopPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberId])
 
-  // Load branches/departments
+  // Load branches/departments with simple session cache for snappy dropdowns
   useEffect(() => {
+    let cancelled = false
+    const cachedBranches = sessionStorage.getItem('branches_cache')
+    const cachedDepartments = sessionStorage.getItem('departments_cache')
+    if (cachedBranches) {
+      try { const b = JSON.parse(cachedBranches); if (!cancelled) setBranches(b || []) } catch {}
+    }
+    if (cachedDepartments) {
+      try { const d = JSON.parse(cachedDepartments); if (!cancelled) setDepartments(d || []) } catch {}
+    }
+
     ;(async () => {
       const [{ data: b }, { data: d }] = await Promise.all([
         supabase.from('branches').select('code,name').order('name'),
         supabase.from('departments').select('name').order('name'),
       ])
-      setBranches(b || [])
-      setDepartments(d || [])
-      
+      if (!cancelled) {
+        setBranches(b || [])
+        setDepartments(d || [])
+      }
+      try {
+        sessionStorage.setItem('branches_cache', JSON.stringify(b || []))
+        sessionStorage.setItem('departments_cache', JSON.stringify(d || []))
+      } catch {}
       // Don't auto-load saved values on login - let member make fresh selections
     })()
-  }, [memberId])
+
+    return () => { cancelled = true }
+  }, [])
 
   // Load items for DELIVERY branch (cycle-scoped view)
   useEffect(() => {

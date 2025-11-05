@@ -73,62 +73,89 @@ export async function GET(req) {
       }))
       return NextResponse.json({ ok: true, rows })
     } catch (directErr) {
-      // Fallback to Supabase view when direct DB is unavailable (e.g., local dev env)
-      const { data, error } = await supabase
-        .from('v_inventory_status_by_department')
-        .select('branch_code, branch_name, department_id, department_name, item_name, price, total_demand')
-        .match({ ...(branchCode ? { branch_code: branchCode } : {}), ...(departmentId ? { department_id: Number(departmentId) } : {}) })
+      // Fallback: aggregate from v_master_sheet and enrich with base prices + active markups
+      let q = supabase
+        .from('v_master_sheet')
+        .select('branch_code, branch_name, department_id, department_name, item_name, qty')
+      if (branchCode) q = q.eq('branch_code', branchCode)
+      if (departmentId) q = q.eq('department_id', Number(departmentId))
 
+      const { data, error } = await q
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
-      // Enrich with markup via lookups: branch_code -> id, item_name -> item_id
-      const branchCodes = [...new Set((data || []).map(r => r.branch_code).filter(Boolean))]
-      const itemNames = [...new Set((data || []).map(r => r.item_name).filter(Boolean))]
+      // Aggregate quantities per branch+department+item
+      const agg = new Map()
+      for (const r of (data || [])) {
+        const key = `${r.branch_code}|${r.department_id}|${r.item_name}`
+        const prev = agg.get(key)
+        const qty = Number(r.qty || 0)
+        agg.set(key, {
+          branch_code: r.branch_code,
+          branch_name: r.branch_name,
+          department_id: r.department_id,
+          department_name: r.department_name,
+          item_name: r.item_name,
+          total_qty: Number((prev?.total_qty || 0) + qty)
+        })
+      }
 
-      const { data: branchesData, error: branchesErr } = await supabase
-        .from('branches')
-        .select('id, code')
-        .in('code', branchCodes)
+      const aggregatedRows = Array.from(agg.values())
+      // If there is no matching data, avoid downstream empty-`in` queries and return gracefully
+      if (!aggregatedRows.length) {
+        return NextResponse.json({ ok: true, rows: [] })
+      }
+      const branchCodes = [...new Set(aggregatedRows.map(r => r.branch_code).filter(Boolean))]
+      const itemNames = [...new Set(aggregatedRows.map(r => r.item_name).filter(Boolean))]
+
+      const [{ data: branchesData, error: branchesErr }, { data: itemsData, error: itemsErr }] = await Promise.all([
+        supabase.from('branches').select('id, code').in('code', branchCodes),
+        supabase.from('items').select('item_id, name').in('name', itemNames)
+      ])
       if (branchesErr) return NextResponse.json({ ok: false, error: branchesErr.message }, { status: 500 })
-      const branchIdByCode = new Map((branchesData || []).map(b => [b.code, b.id]))
-
-      const { data: itemsData, error: itemsErr } = await supabase
-        .from('items')
-        .select('item_id, name')
-        .in('name', itemNames)
       if (itemsErr) return NextResponse.json({ ok: false, error: itemsErr.message }, { status: 500 })
+
+      const branchIdByCode = new Map((branchesData || []).map(b => [b.code, b.id]))
       const itemIdByName = new Map((itemsData || []).map(i => [i.name, i.item_id]))
 
       const branchIds = [...new Set(branchCodes.map(c => branchIdByCode.get(c)).filter(Boolean))]
       const itemIds = [...new Set((itemsData || []).map(i => i.item_id))]
 
-      const { data: markupsData, error: markupsErr } = await supabase
-        .from('branch_item_markups')
-        .select('branch_id, item_id, amount, active')
-        .in('branch_id', branchIds)
-        .in('item_id', itemIds)
-      if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
-      const markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount)]))
+      let priceMap = new Map()
+      let markupMap = new Map()
+      if (branchIds.length && itemIds.length) {
+        // Fetch base prices and active markups for branch+item pairs only when we have valid ids
+        const [{ data: bipData, error: bipErr }, { data: markupsData, error: markupsErr }] = await Promise.all([
+          supabase.from('branch_item_prices').select('branch_id, item_id, price').in('branch_id', branchIds).in('item_id', itemIds),
+          supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').in('branch_id', branchIds).in('item_id', itemIds)
+        ])
+        if (bipErr) return NextResponse.json({ ok: false, error: bipErr.message }, { status: 500 })
+        if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
+        priceMap = new Map((bipData || []).map(p => [`${p.branch_id}:${p.item_id}`, Number(p.price || 0)]))
+        markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount || 0)]))
+      }
 
-      const rows = (data || []).map(r => {
+      const rows = aggregatedRows.map(r => {
         const branchId = branchIdByCode.get(r.branch_code)
         const itemId = itemIdByName.get(r.item_name)
-        const key = branchId && itemId ? `${branchId}:${itemId}` : null
+        const key = branchId && itemId ? `${branchId}:${itemId}` : ''
+        const original = key ? (priceMap.get(key) || 0) : 0
         const markup = key ? (markupMap.get(key) || 0) : 0
-        const priceWithMarkup = Number(r.price || 0) + Number(markup)
+        const price = original + markup
+        const quantity = Number(r.total_qty || 0)
         return {
           items: r.item_name,
-          price: priceWithMarkup,
-          quantity: Number(r.total_demand || 0),
-          amount: priceWithMarkup * Number(r.total_demand || 0),
+          price,
+          quantity,
+          amount: price * quantity,
           branch_code: r.branch_code,
           branch_name: r.branch_name,
           department_id: r.department_id,
           department_name: r.department_name,
-          original_price: Number(r.price || 0),
-          markup: Number(markup)
+          original_price: original,
+          markup
         }
       })
+
       return NextResponse.json({ ok: true, rows })
     }
   } catch (e) {
