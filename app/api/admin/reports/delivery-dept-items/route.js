@@ -7,32 +7,187 @@ import { queryDirect } from '../../../../../lib/directDb'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Helper: Supabase-based aggregation using core tables (orders + order_lines)
+async function aggregateViaTables(supabase, { branchCode, departmentId }) {
+  const statuses = ['Pending', 'Posted', 'Delivered']
+
+  // Resolve delivery branch filter to ids (if provided)
+  let deliveryBranchIds = []
+  if (branchCode) {
+    const { data: branches, error: bErr } = await supabase
+      .from('branches')
+      .select('id, code')
+      .eq('code', branchCode)
+    if (bErr) throw new Error(bErr.message)
+    deliveryBranchIds = (branches || []).map(b => b.id)
+    if (!deliveryBranchIds.length) return []
+  }
+
+  // Load orders for statuses and optional filters
+  let ordersQ = supabase
+    .from('orders')
+    .select('order_id, delivery_branch_id, department_id, status')
+    .in('status', statuses)
+  if (deliveryBranchIds.length) ordersQ = ordersQ.in('delivery_branch_id', deliveryBranchIds)
+  if (departmentId) ordersQ = ordersQ.eq('department_id', Number(departmentId))
+  const { data: orders, error: oErr } = await ordersQ
+  if (oErr) throw new Error(oErr.message)
+  if (!orders?.length) return []
+
+  const orderIds = orders.map(o => o.order_id)
+  const branchIdsInOrders = [...new Set(orders.map(o => o.delivery_branch_id).filter(Boolean))]
+  const deptIdsInOrders = [...new Set(orders.map(o => o.department_id).filter(Boolean))]
+
+  // Load order lines
+  const { data: lines, error: lErr } = await supabase
+    .from('order_lines')
+    .select('order_id, item_id, qty')
+    .in('order_id', orderIds)
+  if (lErr) throw new Error(lErr.message)
+  if (!lines?.length) return []
+
+  // Load items metadata for names
+  const itemIdsSet = [...new Set(lines.map(l => l.item_id).filter(Boolean))]
+  const { data: items, error: iErr } = await supabase
+    .from('items')
+    .select('item_id, name')
+    .in('item_id', itemIdsSet)
+  if (iErr) throw new Error(iErr.message)
+  const itemNameById = new Map((items || []).map(i => [i.item_id, i.name]))
+
+  // Load base prices and active markups for branch+item pairs
+  let priceMap = new Map()
+  let markupMap = new Map()
+  if (branchIdsInOrders.length && itemIdsSet.length) {
+    const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([
+      supabase.from('branch_item_prices').select('branch_id, item_id, price').in('branch_id', branchIdsInOrders).in('item_id', itemIdsSet),
+      supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').in('branch_id', branchIdsInOrders).in('item_id', itemIdsSet)
+    ])
+    if (bipErr) throw new Error(bipErr.message)
+    if (bimErr) throw new Error(bimErr.message)
+    priceMap = new Map((bipData || []).map(p => [`${p.branch_id}:${p.item_id}`, Number(p.price || 0)]))
+    markupMap = new Map((bimData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount || 0)]))
+  }
+
+  // Aggregate quantity per delivery branch + department + item
+  const orderById = new Map(orders.map(o => [o.order_id, o]))
+  const keyAgg = new Map()
+  for (const l of lines) {
+    const o = orderById.get(l.order_id)
+    if (!o) continue
+    const dept = o.department_id
+    const branchId = o.delivery_branch_id
+    const itemId = l.item_id
+    const key = `${branchId || 'all'}|${dept || 'all'}|${itemId}`
+    const prev = keyAgg.get(key)
+    keyAgg.set(key, {
+      branch_id: branchId,
+      department_id: dept,
+      item_id: itemId,
+      quantity: Number((prev?.quantity || 0) + Number(l.qty || 0))
+    })
+  }
+
+  // Map branch_id to branch_code/name for display
+  let branchesMeta = []
+  if (branchIdsInOrders.length) {
+    const { data: bMeta, error: bMetaErr } = await supabase
+      .from('branches')
+      .select('id, code, name')
+      .in('id', branchIdsInOrders)
+    if (bMetaErr) throw new Error(bMetaErr.message)
+    branchesMeta = bMeta || []
+  }
+  const branchCodeById = new Map(branchesMeta.map(b => [b.id, b.code]))
+  const branchNameById = new Map(branchesMeta.map(b => [b.id, b.name]))
+
+  // Map department_id to name
+  let departmentsMeta = []
+  if (deptIdsInOrders.length) {
+    const { data: dMeta, error: dErr } = await supabase
+      .from('departments')
+      .select('id, name')
+      .in('id', deptIdsInOrders)
+    if (dErr) throw new Error(dErr.message)
+    departmentsMeta = dMeta || []
+  }
+  const deptNameById = new Map(departmentsMeta.map(d => [d.id, d.name]))
+
+  // Compute price/amount; if multiple branches selected, pick max price+markup per item
+  const rows = []
+  const itemBranchPairs = new Map() // item_id -> Set(branch_id)
+  for (const v of keyAgg.values()) {
+    if (!itemBranchPairs.has(v.item_id)) itemBranchPairs.set(v.item_id, new Set())
+    if (v.branch_id) itemBranchPairs.get(v.item_id).add(v.branch_id)
+  }
+
+  function priceForItemAcrossBranches(itemId) {
+    const branchesSet = itemBranchPairs.get(itemId) || new Set()
+    let maxOriginal = 0
+    let maxMarkup = 0
+    for (const bId of branchesSet) {
+      const original = priceMap.get(`${bId}:${itemId}`) || 0
+      const m = markupMap.get(`${bId}:${itemId}`) || 0
+      if (original > maxOriginal) maxOriginal = original
+      if (m > maxMarkup) maxMarkup = m
+    }
+    return { original: maxOriginal, markup: maxMarkup, price: maxOriginal + maxMarkup }
+  }
+
+  for (const v of keyAgg.values()) {
+    const { original, markup, price } = priceForItemAcrossBranches(v.item_id)
+    const itemName = itemNameById.get(v.item_id) || String(v.item_id)
+    rows.push({
+      items: itemName,
+      price,
+      quantity: Number(v.quantity || 0),
+      amount: Number(price) * Number(v.quantity || 0),
+      branch_code: branchCodeById.get(v.branch_id) || null,
+      branch_name: branchNameById.get(v.branch_id) || null,
+      department_id: v.department_id || null,
+      department_name: deptNameById.get(v.department_id) || null,
+      original_price: original,
+      markup
+    })
+  }
+
+  // Merge by item name for cleaner presentation when multiple branches are selected
+  const byItem = new Map()
+  for (const r of rows) {
+    const key = r.items
+    const prev = byItem.get(key)
+    byItem.set(key, {
+      items: r.items,
+      price: Math.max(prev?.price || 0, r.price || 0),
+      original_price: Math.max(prev?.original_price || 0, r.original_price || 0),
+      markup: Math.max(prev?.markup || 0, r.markup || 0),
+      quantity: Number((prev?.quantity || 0) + (r.quantity || 0)),
+      amount: Number((prev?.amount || 0) + (r.amount || 0))
+    })
+  }
+
+  return Array.from(byItem.values())
+}
+
 // Returns aggregated items demand by delivery branch (branch_code) and department_id
-// Response shape: { ok: true, rows: [{ items, price, quantity, amount }] }
 export async function GET(req) {
   try {
     const session = await validateSession(req, 'admin')
     if (!session.valid) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
+
     const supabase = createClient()
     const { searchParams } = new URL(req.url)
-    const branchCode = (searchParams.get('branch') || '').trim() // delivery branch_code
+    const branchCode = (searchParams.get('branch') || '').trim()
     const departmentId = searchParams.get('department_id')
-    
-    // Try direct SQL for robust aggregation; fallback to view via Supabase
+
+    // Primary path: direct SQL across core tables with prices and markups
     try {
-      const whereClauses = ["o.status IN ('Pending','Posted','Delivered')"]
+      const whereClauses = ["UPPER(o.status) IN ('PENDING','POSTED','DELIVERED')"]
       const params = []
-      if (branchCode) {
-        whereClauses.push('b.code = $1')
-        params.push(branchCode)
-      }
-      if (departmentId) {
-        const idx = params.length + 1
-        whereClauses.push(`d.id = $${idx}`)
-        params.push(Number(departmentId))
-      }
+      if (branchCode) { whereClauses.push('b.code = $1'); params.push(branchCode) }
+      if (departmentId) { const idx = params.length + 1; whereClauses.push(`d.id = $${idx}`); params.push(Number(departmentId)) }
 
       const sql = `
         SELECT 
@@ -49,8 +204,6 @@ export async function GET(req) {
         FROM orders o
         JOIN order_lines ol ON ol.order_id = o.order_id
         JOIN branches b ON o.delivery_branch_id = b.id
-        -- Use order-selected department when available; otherwise fall back to item's department
-        -- LEFT JOIN to avoid dropping rows when department is missing
         JOIN items i ON i.item_id = ol.item_id
         LEFT JOIN departments d ON d.id = COALESCE(o.department_id, i.department_id)
         LEFT JOIN branch_item_prices bip ON bip.branch_id = b.id AND bip.item_id = i.item_id
@@ -73,175 +226,18 @@ export async function GET(req) {
         original_price: Number(r.base_price),
         markup: Number(r.markup)
       }))
-      // If direct SQL returns empty, try view-based fallback before responding
-      if (!rows.length) {
-        let q = supabase
-          .from('v_master_sheet')
-          .select('branch_code, branch_name, department_id, department_name, item_name, qty')
-        if (branchCode) q = q.eq('branch_code', branchCode)
-        if (departmentId) q = q.eq('department_id', Number(departmentId))
 
-        const { data, error } = await q
-        if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-
-        const agg = new Map()
-        for (const r of (data || [])) {
-          const key = `${r.branch_code}|${r.department_id}|${r.item_name}`
-          const prev = agg.get(key)
-          const qty = Number(r.qty || 0)
-          agg.set(key, {
-            branch_code: r.branch_code,
-            branch_name: r.branch_name,
-            department_id: r.department_id,
-            department_name: r.department_name,
-            item_name: r.item_name,
-            total_qty: Number((prev?.total_qty || 0) + qty)
-          })
-        }
-
-        const aggregatedRows = Array.from(agg.values())
-        if (!aggregatedRows.length) {
-          return NextResponse.json({ ok: true, rows: [] })
-        }
-        const branchCodes = [...new Set(aggregatedRows.map(r => r.branch_code).filter(Boolean))]
-        const itemNames = [...new Set(aggregatedRows.map(r => r.item_name).filter(Boolean))]
-
-        const [{ data: branchesData, error: branchesErr }, { data: itemsData, error: itemsErr }] = await Promise.all([
-          supabase.from('branches').select('id, code').in('code', branchCodes),
-          supabase.from('items').select('item_id, name').in('name', itemNames)
-        ])
-        if (branchesErr) return NextResponse.json({ ok: false, error: branchesErr.message }, { status: 500 })
-        if (itemsErr) return NextResponse.json({ ok: false, error: itemsErr.message }, { status: 500 })
-
-        const branchIdByCode = new Map((branchesData || []).map(b => [b.code, b.id]))
-        const itemIdByName = new Map((itemsData || []).map(i => [i.name, i.item_id]))
-
-        const branchIds = [...new Set(branchCodes.map(c => branchIdByCode.get(c)).filter(Boolean))]
-        const itemIds = [...new Set((itemsData || []).map(i => i.item_id))]
-
-        let priceMap = new Map()
-        let markupMap = new Map()
-        if (branchIds.length && itemIds.length) {
-          const [{ data: bipData, error: bipErr }, { data: markupsData, error: markupsErr }] = await Promise.all([
-            supabase.from('branch_item_prices').select('branch_id, item_id, price').in('branch_id', branchIds).in('item_id', itemIds),
-            supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').in('branch_id', branchIds).in('item_id', itemIds)
-          ])
-          if (bipErr) return NextResponse.json({ ok: false, error: bipErr.message }, { status: 500 })
-          if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
-          priceMap = new Map((bipData || []).map(p => [`${p.branch_id}:${p.item_id}`, Number(p.price || 0)]))
-          markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount || 0)]))
-        }
-
-        const fallbackRows = aggregatedRows.map(r => {
-          const branchId = branchIdByCode.get(r.branch_code)
-          const itemId = itemIdByName.get(r.item_name)
-          const key = branchId && itemId ? `${branchId}:${itemId}` : ''
-          const original = key ? (priceMap.get(key) || 0) : 0
-          const markup = key ? (markupMap.get(key) || 0) : 0
-          const price = original + markup
-          const quantity = Number(r.total_qty || 0)
-          return {
-            items: r.item_name,
-            price,
-            quantity,
-            amount: price * quantity,
-            branch_code: r.branch_code,
-            branch_name: r.branch_name,
-            department_id: r.department_id,
-            department_name: r.department_name,
-            original_price: original,
-            markup
-          }
-        })
-
-        return NextResponse.json({ ok: true, rows: fallbackRows })
-      }
-      return NextResponse.json({ ok: true, rows })
-    } catch (directErr) {
-      // Fallback: aggregate from v_master_sheet and enrich with base prices + active markups
-      let q = supabase
-        .from('v_master_sheet')
-        .select('branch_code, branch_name, department_id, department_name, item_name, qty')
-      if (branchCode) q = q.eq('branch_code', branchCode)
-      if (departmentId) q = q.eq('department_id', Number(departmentId))
-
-      const { data, error } = await q
-      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-
-      // Aggregate quantities per branch+department+item
-      const agg = new Map()
-      for (const r of (data || [])) {
-        const key = `${r.branch_code}|${r.department_id}|${r.item_name}`
-        const prev = agg.get(key)
-        const qty = Number(r.qty || 0)
-        agg.set(key, {
-          branch_code: r.branch_code,
-          branch_name: r.branch_name,
-          department_id: r.department_id,
-          department_name: r.department_name,
-          item_name: r.item_name,
-          total_qty: Number((prev?.total_qty || 0) + qty)
-        })
+      if (rows.length) {
+        return NextResponse.json({ ok: true, rows })
       }
 
-      const aggregatedRows = Array.from(agg.values())
-      // If there is no matching data, avoid downstream empty-`in` queries and return gracefully
-      if (!aggregatedRows.length) {
-        return NextResponse.json({ ok: true, rows: [] })
-      }
-      const branchCodes = [...new Set(aggregatedRows.map(r => r.branch_code).filter(Boolean))]
-      const itemNames = [...new Set(aggregatedRows.map(r => r.item_name).filter(Boolean))]
-
-      const [{ data: branchesData, error: branchesErr }, { data: itemsData, error: itemsErr }] = await Promise.all([
-        supabase.from('branches').select('id, code').in('code', branchCodes),
-        supabase.from('items').select('item_id, name').in('name', itemNames)
-      ])
-      if (branchesErr) return NextResponse.json({ ok: false, error: branchesErr.message }, { status: 500 })
-      if (itemsErr) return NextResponse.json({ ok: false, error: itemsErr.message }, { status: 500 })
-
-      const branchIdByCode = new Map((branchesData || []).map(b => [b.code, b.id]))
-      const itemIdByName = new Map((itemsData || []).map(i => [i.name, i.item_id]))
-
-      const branchIds = [...new Set(branchCodes.map(c => branchIdByCode.get(c)).filter(Boolean))]
-      const itemIds = [...new Set((itemsData || []).map(i => i.item_id))]
-
-      let priceMap = new Map()
-      let markupMap = new Map()
-      if (branchIds.length && itemIds.length) {
-        // Fetch base prices and active markups for branch+item pairs only when we have valid ids
-        const [{ data: bipData, error: bipErr }, { data: markupsData, error: markupsErr }] = await Promise.all([
-          supabase.from('branch_item_prices').select('branch_id, item_id, price').in('branch_id', branchIds).in('item_id', itemIds),
-          supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').in('branch_id', branchIds).in('item_id', itemIds)
-        ])
-        if (bipErr) return NextResponse.json({ ok: false, error: bipErr.message }, { status: 500 })
-        if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
-        priceMap = new Map((bipData || []).map(p => [`${p.branch_id}:${p.item_id}`, Number(p.price || 0)]))
-        markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount || 0)]))
-      }
-
-      const rows = aggregatedRows.map(r => {
-        const branchId = branchIdByCode.get(r.branch_code)
-        const itemId = itemIdByName.get(r.item_name)
-        const key = branchId && itemId ? `${branchId}:${itemId}` : ''
-        const original = key ? (priceMap.get(key) || 0) : 0
-        const markup = key ? (markupMap.get(key) || 0) : 0
-        const price = original + markup
-        const quantity = Number(r.total_qty || 0)
-        return {
-          items: r.item_name,
-          price,
-          quantity,
-          amount: price * quantity,
-          branch_code: r.branch_code,
-          branch_name: r.branch_name,
-          department_id: r.department_id,
-          department_name: r.department_name,
-          original_price: original,
-          markup
-        }
-      })
-
-      return NextResponse.json({ ok: true, rows })
+      // Fallback: aggregate via Supabase tables
+      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId })
+      return NextResponse.json({ ok: true, rows: fallbackRows })
+    } catch (err) {
+      // Fallback if direct SQL fails
+      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId })
+      return NextResponse.json({ ok: true, rows: fallbackRows })
     }
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })

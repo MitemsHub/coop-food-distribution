@@ -55,7 +55,7 @@ export async function POST(request) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Try Supabase Storage first (serverless-friendly). Fallback to local filesystem in dev.
+    // Try Supabase Storage first (serverless-friendly). In production, DO NOT fall back to local filesystem.
     try {
       const supabase = createClient()
       const bucket = process.env.ITEM_IMAGES_BUCKET || 'item-images'
@@ -80,13 +80,20 @@ export async function POST(request) {
           return NextResponse.json({ success: true, imageUrl: versionedUrl, message: 'Image uploaded successfully' })
         }
       }
-      // If upload failed, fall through to local filesystem
-      console.warn('Supabase Storage upload failed or no public URL; falling back to local filesystem:', upErr?.message)
+      // If upload failed, decide fallback based on environment
+      console.warn('Supabase Storage upload failed or no public URL:', upErr?.message)
+      // In production, return error so UI does not save an inaccessible local path
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Image storage is unavailable in production. Check Supabase keys and bucket settings.' }, { status: 500 })
+      }
     } catch (e) {
-      console.warn('Supabase Storage not available; falling back to local filesystem:', e?.message)
+      console.warn('Supabase Storage not available:', e?.message)
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Image storage is unavailable in production. Ensure SUPABASE env vars and public bucket.' }, { status: 500 })
+      }
     }
 
-    // Local filesystem fallback (works in dev, not in Vercel serverless)
+    // Local filesystem fallback (intended for development only)
     const uploadDir = join(process.cwd(), 'public', 'images', 'items')
     if (!existsSync(uploadDir)) {
       await mkdir(uploadDir, { recursive: true })
