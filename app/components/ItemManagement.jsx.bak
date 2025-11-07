@@ -36,17 +36,11 @@ export default function ItemManagement() {
     }
   }
 
-  const withVersion = (url) => {
-    if (!url) return url
-    return url.includes('v=') ? url : (url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`)
-  }
-
   const updateItemImage = async (itemId, imageUrl) => {
     try {
-      const versionedUrl = withVersion(imageUrl)
       const { error } = await supabase
         .from('items')
-        .update({ image_url: versionedUrl })
+        .update({ image_url: imageUrl })
         .eq('item_id', itemId)
 
       if (error) throw error
@@ -68,12 +62,7 @@ export default function ItemManagement() {
 
   const handleImageUploaded = (imageUrl) => {
     if (selectedItem) {
-      // Optimistically update local UI for instant feedback
-      const versionedUrl = withVersion(imageUrl)
-      setItems(prev => prev.map(it => (it.item_id === selectedItem.item_id ? { ...it, image_url: versionedUrl } : it)))
-      setRefreshKey(prev => prev + 1)
-      // Persist change to the database
-      updateItemImage(selectedItem.item_id, versionedUrl)
+      updateItemImage(selectedItem.item_id, imageUrl)
     }
   }
 
@@ -141,7 +130,6 @@ export default function ItemManagement() {
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, (max-width: 1536px) 20vw, 16vw"
                     loading="lazy"
-                    unoptimized
                     className="object-contain"
                   />
                 ) : (
@@ -151,7 +139,6 @@ export default function ItemManagement() {
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, (max-width: 1536px) 20vw, 16vw"
                     loading="lazy"
-                    unoptimized
                     className="object-contain opacity-50"
                   />
                 )}
