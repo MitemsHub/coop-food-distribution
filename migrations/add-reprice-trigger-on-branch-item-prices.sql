@@ -25,7 +25,7 @@ BEGIN
     WHERE ol.order_id = o.order_id
       AND o.delivery_branch_id = p_branch_id
       AND ol.item_id = p_item_id
-      AND UPPER(o.status) IN ('PENDING','POSTED','DELIVERED');
+      AND o.status::text IN ('Pending','Posted','Delivered');
 
     GET DIAGNOSTICS updated_lines_count = ROW_COUNT;
 
@@ -39,7 +39,7 @@ BEGIN
         ), 0),
         updated_at = NOW()
     WHERE o.delivery_branch_id = p_branch_id
-      AND UPPER(o.status) IN ('PENDING','POSTED','DELIVERED')
+      AND o.status::text IN ('Pending','Posted','Delivered')
       AND EXISTS (
           SELECT 1 
           FROM order_lines ol 
