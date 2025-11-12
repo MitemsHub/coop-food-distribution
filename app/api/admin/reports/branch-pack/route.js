@@ -37,15 +37,31 @@ export async function GET(req) {
 
     let q = supabase.from('v_master_sheet').select(selectCols)
 
-    // Filter by DELIVERY branch code if provided
+    // Filter by DELIVERY branch code if provided (server-side)
     if (branch) q = q.eq('branch_code', branch)
-    if (from)   q = q.gte('posted_at', from)
-    if (to)     q = q.lte('posted_at', to + 'T23:59:59')
+
+    // NOTE: Do NOT filter by posted_at server-side; it excludes Pending orders.
+    // We'll filter by an effective date client-side: posted_at if present, else created_at.
 
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
-    const baseRows = (data || []).map(r => ({
+    // Paginate to fetch ALL rows using 1000-row pages (Supabase default cap)
+    const batchSize = 1000
+    let start = 0
+    const allData = []
+    while (true) {
+      const { data: page, error: pageErr } = await q
+        .order('order_id', { ascending: true })
+        .range(start, start + batchSize - 1)
+      if (pageErr) throw new Error(pageErr.message)
+      if (!page || page.length === 0) break
+      allData.push(...page)
+      if (page.length < batchSize) break
+      start += batchSize
+    }
+
+    let baseRows = (allData || []).map(r => ({
       OrderID: r.order_id,
       MemberID: r.member_id,
       MemberName: r.member_name,
@@ -58,11 +74,28 @@ export async function GET(req) {
       Qty: Number(r.qty),
       Amount: Number(r.amount),
       PostedAt: r.posted_at,
-      CreatedAt: r.created_at
+      CreatedAt: r.created_at,
+      EffectiveDate: r.posted_at || r.created_at
     }))
 
+    // Apply date filters client-side using EffectiveDate (posted_at || created_at)
+    if (from) {
+      const fromTs = new Date(from).getTime()
+      baseRows = baseRows.filter(r => {
+        const d = r.EffectiveDate ? new Date(r.EffectiveDate).getTime() : 0
+        return d >= fromTs
+      })
+    }
+    if (to) {
+      const toTs = new Date(to + 'T23:59:59').getTime()
+      baseRows = baseRows.filter(r => {
+        const d = r.EffectiveDate ? new Date(r.EffectiveDate).getTime() : 0
+        return d <= toTs
+      })
+    }
+
     // Build enrichment maps for Original Price and Markup
-    const branchCodes = [...new Set(baseRows.map(r => r.DeliveryBranch ? null : null).concat((data || []).map(r => r.branch_code)))].filter(Boolean)
+    const branchCodes = [...new Set((allData || []).map(r => r.branch_code))].filter(Boolean)
     const itemNames = [...new Set(baseRows.map(r => r.Item))]
 
     // Fetch branches map: code -> id
@@ -81,7 +114,7 @@ export async function GET(req) {
     if (itemsErr) throw new Error(itemsErr.message)
     const itemIdByName = new Map(itemsData.map(i => [i.name, i.item_id]))
 
-    const branchIds = [...new Set((data || []).map(r => branchIdByCode.get(r.branch_code)).filter(Boolean))]
+    const branchIds = [...new Set((allData || []).map(r => branchIdByCode.get(r.branch_code)).filter(Boolean))]
     const itemIds = [...new Set(itemsData.map(i => i.item_id))]
 
     // Fetch base prices for branch+item pairs
