@@ -35,12 +35,24 @@ BEGIN
     -- Use cycle-aware logic ONLY if both tables have cycle_id
     IF has_cycle AND orders_has_cycle THEN
         -- Cycle-aware update: match branch, item, and cycle
-        EXECUTE $$
+        EXECUTE $sql$
         UPDATE public.order_lines AS ol
         SET 
-            unit_price = bip.price,
+            unit_price = bip.price + COALESCE((
+                SELECT bim.amount
+                FROM public.branch_item_markups bim
+                WHERE bim.branch_id = o.delivery_branch_id
+                  AND bim.item_id = ol.item_id
+                  AND bim.active = TRUE
+            ), 0),
             branch_item_price_id = bip.id,
-            amount = bip.price * ol.qty
+            amount = (bip.price + COALESCE((
+                SELECT bim.amount
+                FROM public.branch_item_markups bim
+                WHERE bim.branch_id = o.delivery_branch_id
+                  AND bim.item_id = ol.item_id
+                  AND bim.active = TRUE
+            ), 0)) * ol.qty
         FROM public.orders AS o
         JOIN public.branch_item_prices AS bip 
           ON bip.branch_id = o.delivery_branch_id 
@@ -50,12 +62,12 @@ BEGIN
           AND o.delivery_branch_id = $1
           AND ol.item_id = $2
           AND o.status::text IN ('Pending','Posted','Delivered');
-        $$ USING p_branch_id, p_item_id;
+        $sql$ USING p_branch_id, p_item_id;
 
         GET DIAGNOSTICS updated_lines_count = ROW_COUNT;
 
         -- Recompute totals using a joined aggregate to avoid correlated subquery pitfalls
-        EXECUTE $$
+        EXECUTE $sql$
         UPDATE public.orders AS o
         SET 
             total_amount = COALESCE(s.sum_amount, 0),
@@ -74,14 +86,26 @@ BEGIN
               WHERE ol2.order_id = o.order_id 
                 AND ol2.item_id = $2
           );
-        $$ USING p_branch_id, p_item_id;
+        $sql$ USING p_branch_id, p_item_id;
     ELSE
         -- Legacy update: match branch and item only
         UPDATE public.order_lines AS ol
         SET 
-            unit_price = bip.price,
+            unit_price = bip.price + COALESCE((
+                SELECT bim.amount
+                FROM public.branch_item_markups bim
+                WHERE bim.branch_id = o.delivery_branch_id
+                  AND bim.item_id = ol.item_id
+                  AND bim.active = TRUE
+            ), 0),
             branch_item_price_id = bip.id,
-            amount = bip.price * ol.qty
+            amount = (bip.price + COALESCE((
+                SELECT bim.amount
+                FROM public.branch_item_markups bim
+                WHERE bim.branch_id = o.delivery_branch_id
+                  AND bim.item_id = ol.item_id
+                  AND bim.active = TRUE
+            ), 0)) * ol.qty
         FROM public.orders AS o
         JOIN public.branch_item_prices AS bip 
           ON bip.branch_id = o.delivery_branch_id 

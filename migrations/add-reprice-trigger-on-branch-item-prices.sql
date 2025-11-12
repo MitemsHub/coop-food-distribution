@@ -15,9 +15,21 @@ BEGIN
     -- Update affected order lines: set unit_price, branch_item_price_id, and amount
     UPDATE order_lines ol
     SET 
-        unit_price = bip.price,
+        unit_price = bip.price + COALESCE((
+            SELECT bim.amount
+            FROM branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id
+              AND bim.item_id = ol.item_id
+              AND bim.active = TRUE
+        ), 0),
         branch_item_price_id = bip.id,
-        amount = bip.price * ol.qty
+        amount = (bip.price + COALESCE((
+            SELECT bim.amount
+            FROM branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id
+              AND bim.item_id = ol.item_id
+              AND bim.active = TRUE
+        ), 0)) * ol.qty
     FROM orders o
     JOIN branch_item_prices bip 
       ON bip.branch_id = o.delivery_branch_id 
@@ -72,3 +84,20 @@ CREATE TRIGGER trg_reprice_orders_on_bip_change
 AFTER INSERT OR UPDATE OF price ON branch_item_prices
 FOR EACH ROW
 EXECUTE FUNCTION on_branch_item_prices_changed();
+
+-- Also reprice when markups change
+CREATE OR REPLACE FUNCTION on_branch_item_markups_changed()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    PERFORM reprice_orders_for_branch_item(NEW.branch_id, NEW.item_id);
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_reprice_orders_on_bim_change ON branch_item_markups;
+CREATE TRIGGER trg_reprice_orders_on_bim_change
+AFTER INSERT OR UPDATE OF amount, active ON branch_item_markups
+FOR EACH ROW
+EXECUTE FUNCTION on_branch_item_markups_changed();
