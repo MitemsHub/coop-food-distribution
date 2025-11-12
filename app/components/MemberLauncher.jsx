@@ -289,7 +289,7 @@ export default function MemberLauncher() {
                 validation.isValid ? 'border-green-500 focus:border-green-500' :
                 'border-red-500 focus:border-red-500'
               }`}
-              placeholder="Enter your Member ID (e.g., A12345)"
+              placeholder="Enter your Staff ID (e.g., A12345)"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:pr-3">
               {!memberId ? (

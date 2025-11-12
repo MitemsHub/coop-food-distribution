@@ -38,7 +38,7 @@ export default function Landing() {
                   <h2 className="text-xl md:text-2xl font-bold text-gray-800">Members Portal</h2>
                 </div>
                 <p className="text-sm md:text-base text-gray-600 mb-2 lg:mb-3 leading-normal">
-                  Welcome to your shopping portal! Enter your Member ID to browse and order from our cooperative food distribution system.
+                  Welcome to your shopping portal! Enter your Staff ID to browse and order from our cooperative food distribution system.
                 </p>
                 <MemberLauncher />
               </div>
