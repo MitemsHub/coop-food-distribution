@@ -49,6 +49,10 @@ export async function GET(request) {
       const delivered = r.delivered_qty || 0
       const allocated = pending + confirmed
       return {
+        // identifiers for React key stability
+        branch_id: r.branch_id,
+        department_id: r.department_id,
+        item_id: r.item_id,
         branch_code: b.code || 'N/A',
         branch_name: b.name || 'Unknown Branch',
         department_name: dname,

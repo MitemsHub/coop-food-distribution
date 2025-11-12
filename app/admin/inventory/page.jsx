@@ -282,7 +282,7 @@ function DepartmentInventorySection() {
               ) : (
                 paginatedData.map((row, index) => (
                   <tr 
-                    key={`${row.branch_code}-${row.department_id}-${row.sku}`}
+                    key={`${row.branch_code}-${row.department_id ?? 'no-dept'}-${row.item_id ?? row.sku ?? index}`}
                     className="hover:bg-gray-50"
                   >
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{row.branch_name}</td>
