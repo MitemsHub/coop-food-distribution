@@ -94,9 +94,8 @@ export async function GET(req) {
       })
     }
 
-    // Build enrichment maps for Original Price and Markup
+    // Build enrichment maps for Markup using item names joined from markups
     const branchCodes = [...new Set((allData || []).map(r => r.branch_code))].filter(Boolean)
-    const itemNames = [...new Set(baseRows.map(r => r.Item))]
 
     // Fetch branches map: code -> id
     const { data: branchesData, error: branchesErr } = await supabase
@@ -105,45 +104,41 @@ export async function GET(req) {
       .in('code', branchCodes)
     if (branchesErr) throw new Error(branchesErr.message)
     const branchIdByCode = new Map(branchesData.map(b => [b.code, b.id]))
-
-    // Fetch items map: name -> item_id
-    const { data: itemsData, error: itemsErr } = await supabase
-      .from('items')
-      .select('item_id, name')
-      .in('name', itemNames)
-    if (itemsErr) throw new Error(itemsErr.message)
-    const itemIdByName = new Map(itemsData.map(i => [i.name, i.item_id]))
-
     const branchIds = [...new Set((allData || []).map(r => branchIdByCode.get(r.branch_code)).filter(Boolean))]
-    const itemIds = [...new Set(itemsData.map(i => i.item_id))]
 
-    // Fetch base prices for branch+item pairs
-    const { data: bipData, error: bipErr } = await supabase
-      .from('branch_item_prices')
-      .select('branch_id, item_id, price')
-      .in('branch_id', branchIds)
-      .in('item_id', itemIds)
-    if (bipErr) throw new Error(bipErr.message)
-    const basePriceMap = new Map(bipData.map(r => [`${r.branch_id}:${r.item_id}`, Number(r.price)]))
-
-    // Fetch markups for branch+item pairs (active only)
-    const { data: markupData, error: markupErr } = await supabase
-      .from('branch_item_markups')
-      .select('branch_id, item_id, amount, active')
-      .in('branch_id', branchIds)
-      .in('item_id', itemIds)
-    if (markupErr) throw new Error(markupErr.message)
-    const markupMap = new Map(markupData.filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount)]))
+    // Fetch markups joined with items to resolve by item name; paginate to avoid 1000-row cap
+    const norm = s => String(s || '').toLowerCase().trim()
+    const markupByBranchAndName = new Map()
+    {
+      const batchSize = 1000
+      let start = 0
+      while (true) {
+        const { data: page, error: pageErr } = await supabase
+          .from('branch_item_markups')
+          .select('branch_id, amount, active, items(name)')
+          .in('branch_id', branchIds)
+          .order('branch_id', { ascending: true })
+          .range(start, start + batchSize - 1)
+        if (pageErr) throw new Error(pageErr.message)
+        if (!page || page.length === 0) break
+        for (const m of page) {
+          if (!m.active) continue
+          const key = `${m.branch_id}:${norm(m.items?.name)}`
+          markupByBranchAndName.set(key, Number(m.amount) || 0)
+        }
+        if (page.length < batchSize) break
+        start += batchSize
+      }
+    }
 
     // Enrich rows with OriginalPrice, Markup, Interest
     const rows = baseRows.map((r, idx) => {
-      const code = (data[idx] || {}).branch_code
+      const code = (allData[idx] || {}).branch_code
       const itemName = r.Item
       const branchId = branchIdByCode.get(code)
-      const itemId = itemIdByName.get(itemName)
-      const key = branchId && itemId ? `${branchId}:${itemId}` : null
-      const markup = key ? (markupMap.get(key) || 0) : 0
-      const basePrice = key ? (basePriceMap.get(key) ?? (r.Price - markup)) : (r.Price - markup)
+      const key2 = branchId ? `${branchId}:${norm(itemName)}` : null
+      const markup = key2 ? (markupByBranchAndName.get(key2) || 0) : 0
+      const basePrice = Number(r.Price) - Number(markup)
       const interest = r.Payment === 'Loan' ? Math.round(r.Amount * 0.13) : 0
       return {
         ...r,

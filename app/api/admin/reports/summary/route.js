@@ -91,6 +91,13 @@ export async function GET() {
       loansTotal = loansAmountTotal
     }
 
+    const savingsTotal = sumAmt(savingsAmount?.data || [])
+    const cashTotal = sumAmt(cashAmount?.data || [])
+    const loansOrdersTotal = sumAmt(loansAmount?.data || []) // orders.total_amount (includes interest) for loan orders
+
+    // Unified total: align with cards breakdown (principal + interest + cash + savings)
+    const totalUnified = Number(loansTotal || 0) + Number(savingsTotal || 0) + Number(cashTotal || 0)
+
     return NextResponse.json({
       ok: true,
       totals: {
@@ -100,13 +107,15 @@ export async function GET() {
         totalAll: (totalAll && totalAll.count) ?? 0
       },
       amounts: {
-        totalAll: sumAmt(allAmount?.data || []),
-        loans: sumAmt(loansAmount?.data || []), // total including interest (backward compatibility)
+        // Displayed Total Amount card should match the sum of displayed components
+        totalAll: totalUnified,
+        // Keep both breakdown methods for flexibility
+        loans: loansOrdersTotal, // total including interest from orders table (for reference/backward compatibility)
         loansPrincipal,
         loansInterest,
         loansTotal,
-        savings: sumAmt(savingsAmount?.data || []),
-        cash: sumAmt(cashAmount?.data || [])
+        savings: savingsTotal,
+        cash: cashTotal
       },
       byBranch: byBranch?.data || [],
       byBranchDept: byBranchDept?.data || [],
