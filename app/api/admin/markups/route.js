@@ -100,6 +100,13 @@ export async function POST(request) {
 
     // Self-heal if trigger calls missing repricer function due to BIGINT signature mismatch
     if (upErr && /reprice_orders_for_branch_item\(bigint,\s*bigint\) does not exist/i.test(upErr.message || '')) {
+      // If direct DB URL isn't available, return a helpful error immediately
+      if (!process.env.SUPABASE_DB_URL) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Database repair requires SUPABASE_DB_URL (Supabase pooler connection string). Add it to your server env and redeploy, then retry Save Markup.'
+        }, { status: 500 })
+      }
       try {
         const sql = `
           BEGIN;
