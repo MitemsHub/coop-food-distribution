@@ -21,10 +21,11 @@ export async function GET() {
 
     // Amount totals across all statuses (Pending, Posted, Delivered)
     const statuses = ['Pending','Posted','Delivered']
-    const loansAmountQ   = supabase.from('orders').select('total_amount').eq('payment_option','Loan').in('status', statuses)
-    const savingsAmountQ = supabase.from('orders').select('total_amount').eq('payment_option','Savings').in('status', statuses)
-    const cashAmountQ    = supabase.from('orders').select('total_amount').eq('payment_option','Cash').in('status', statuses)
-    const allAmountQ     = supabase.from('orders').select('total_amount').in('status', statuses)
+    // Row-level amounts via Supabase are subject to pagination; use direct SQL aggregates for accuracy
+    const loansAmountQ   = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Loan' AND status IN ('Pending','Posted','Delivered')`)
+    const savingsAmountQ = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Savings' AND status IN ('Pending','Posted','Delivered')`)
+    const cashAmountQ    = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Cash' AND status IN ('Pending','Posted','Delivered')`)
+    const allAmountQ     = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE status IN ('Pending','Posted','Delivered')`)
 
     const [
       byBranch, byBranchDept, byDeliveryMember, byCat,
@@ -52,7 +53,7 @@ export async function GET() {
       console.warn('Reports summary: amounts error:', amountsErr.message)
     }
 
-    const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
+    const getTotal = (res) => Number(res?.rows?.[0]?.total || 0)
 
     // Compute Loan principal and interest via direct SQL (per-order rounding)
     let loansPrincipal = 0
@@ -86,18 +87,18 @@ export async function GET() {
     } catch (err) {
       console.warn('Reports summary: loan principal/interest calc failed, falling back:', err?.message)
       // Fallback: derive principal approximately by subtracting a 13% aggregate interest (may differ due to per-order rounding)
-      const loansAmountTotal = sumAmt(loansAmount?.data || [])
+      const loansAmountTotal = getTotal(loansAmount)
       loansPrincipal = Math.round(loansAmountTotal / 1.13)
       loansInterest = loansAmountTotal - loansPrincipal
       loansTotal = loansAmountTotal
     }
 
-    const savingsTotal = sumAmt(savingsAmount?.data || [])
-    const cashTotal = sumAmt(cashAmount?.data || [])
-    const loansOrdersTotal = sumAmt(loansAmount?.data || []) // orders.total_amount (includes interest) for loan orders
+    const savingsTotal = getTotal(savingsAmount)
+    const cashTotal = getTotal(cashAmount)
+    const loansOrdersTotal = getTotal(loansAmount) // orders.total_amount (includes interest) for loan orders
 
-    // Unified total: align with cards breakdown (principal + interest + cash + savings)
-    const totalUnified = Number(loansTotal || 0) + Number(savingsTotal || 0) + Number(cashTotal || 0)
+    // Unified total used by the Total Amount card: align with displayed Loan card which reads from orders
+    const totalUnified = Number(loansOrdersTotal || 0) + Number(savingsTotal || 0) + Number(cashTotal || 0)
 
     return NextResponse.json({
       ok: true,
@@ -110,8 +111,8 @@ export async function GET() {
       amounts: {
         // Displayed Total Amount card should match the sum of displayed components
         totalAll: totalUnified,
-        // Keep both breakdown methods for flexibility
-        loans: loansOrdersTotal, // total including interest from orders table (for reference/backward compatibility)
+        // Loan Amount card reads from orders total to match Savings/Cash sourcing
+        loans: loansOrdersTotal, // total including interest from orders table
         loansPrincipal,
         loansInterest,
         loansTotal,
