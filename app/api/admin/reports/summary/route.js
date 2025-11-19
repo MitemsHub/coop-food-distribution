@@ -54,38 +54,28 @@ export async function GET() {
 
     const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
 
-    // Compute Loan principal and interest via direct SQL
-    // Robustness: if a loan order has no order_lines, derive principal from orders.total_amount
-    // and compute interest as the difference to ensure per-order sums match orders totals.
+    // Compute Loan principal and interest via direct SQL (per-order rounding)
     let loansPrincipal = 0
     let loansInterest = 0
     let loansTotal = 0
     try {
       const sql = `
         WITH loan_orders AS (
-          SELECT o.order_id, o.total_amount
+          SELECT o.order_id
           FROM orders o
           WHERE o.payment_option = 'Loan'
             AND o.status IN ('Pending','Posted','Delivered')
         ), per_order AS (
-          SELECT 
-            lo.order_id,
-            -- Prefer real line sums when available; otherwise derive principal from total_amount
-            COALESCE(
-              (
-                SELECT SUM(ol.unit_price * ol.qty)::numeric 
-                FROM order_lines ol 
-                WHERE ol.order_id = lo.order_id
-              ),
-              ROUND(lo.total_amount / 1.13)
-            ) AS base,
-            lo.total_amount AS order_total
-          FROM loan_orders lo
+          -- Use recorded line amount to avoid unit_price/qty drift
+          SELECT ol.order_id, SUM(ol.amount)::numeric AS base
+          FROM order_lines ol
+          JOIN loan_orders lo ON lo.order_id = ol.order_id
+          GROUP BY ol.order_id
         )
         SELECT 
           COALESCE(SUM(base), 0)::numeric AS loans_principal,
-          COALESCE(SUM(order_total - base), 0)::numeric AS loans_interest,
-          COALESCE(SUM(order_total), 0)::numeric AS loans_total
+          COALESCE(SUM(ROUND(base * 0.13)), 0)::numeric AS loans_interest,
+          COALESCE(SUM(base) + SUM(ROUND(base * 0.13)), 0)::numeric AS loans_total
         FROM per_order;
       `
       const result = await queryDirect(sql)
@@ -106,8 +96,8 @@ export async function GET() {
     const cashTotal = sumAmt(cashAmount?.data || [])
     const loansOrdersTotal = sumAmt(loansAmount?.data || []) // orders.total_amount (includes interest) for loan orders
 
-    // Unified total: align with orders.total_amount across all statuses for exact consistency
-    const totalUnified = sumAmt(allAmount?.data || [])
+    // Unified total: align with cards breakdown (principal + interest + cash + savings)
+    const totalUnified = Number(loansTotal || 0) + Number(savingsTotal || 0) + Number(cashTotal || 0)
 
     return NextResponse.json({
       ok: true,
@@ -118,10 +108,10 @@ export async function GET() {
         totalAll: (totalAll && totalAll.count) ?? 0
       },
       amounts: {
-        // Displayed Total Amount card matches SUM(orders.total_amount) for statuses
+        // Displayed Total Amount card should match the sum of displayed components
         totalAll: totalUnified,
-        // Loan totals are sourced from orders.total_amount; principal/interest are reconciled per order
-        loans: loansTotal,
+        // Keep both breakdown methods for flexibility
+        loans: loansOrdersTotal, // total including interest from orders table (for reference/backward compatibility)
         loansPrincipal,
         loansInterest,
         loansTotal,

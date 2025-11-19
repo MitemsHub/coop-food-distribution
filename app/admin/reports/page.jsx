@@ -350,8 +350,9 @@ function ReportsPageContent() {
 
       {/* Amount Totals */}
       <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Card title="Loan Amount" value={amounts?.loansPrincipal ?? amounts?.loans ?? 0} currency />
+        <Card title="Loan Principal" value={amounts?.loansPrincipal ?? 0} currency />
         <Card title="Loan Interest" value={amounts?.loansInterest ?? 0} currency />
+        <Card title="Loan Total" value={amounts?.loansTotal ?? amounts?.loans ?? 0} currency />
         <Card title="Savings" value={amounts?.savings ?? 0} currency />
         <Card title="Cash" value={amounts?.cash ?? 0} currency />
         <Card title="Total Amount" value={amounts?.totalAll ?? 0} currency />
