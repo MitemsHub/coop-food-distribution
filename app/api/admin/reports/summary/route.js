@@ -66,16 +66,19 @@ export async function GET() {
           WHERE o.payment_option = 'Loan'
             AND o.status IN ('Pending','Posted','Delivered')
         ), per_order AS (
-          SELECT ol.order_id, SUM(ol.amount)::numeric AS base
-          FROM order_lines ol
-          GROUP BY ol.order_id
+          -- Derive principal and interest directly from orders.total_amount
+          -- Ensures sums match SUM(orders.total_amount) exactly
+          SELECT 
+            order_id,
+            ROUND(total_amount / 1.13)::numeric AS principal,
+            (total_amount - ROUND(total_amount / 1.13))::numeric AS interest
+          FROM loan_orders
         )
         SELECT 
-          COALESCE(SUM(COALESCE(po.base, 0)), 0)::numeric AS loans_principal,
-          COALESCE(SUM(lo.total_amount - COALESCE(po.base, 0)), 0)::numeric AS loans_interest,
-          COALESCE(SUM(lo.total_amount), 0)::numeric AS loans_total
-        FROM loan_orders lo
-        LEFT JOIN per_order po ON po.order_id = lo.order_id;
+          COALESCE(SUM(principal), 0)::numeric AS loans_principal,
+          COALESCE(SUM(interest), 0)::numeric AS loans_interest,
+          COALESCE(SUM(principal + interest), 0)::numeric AS loans_total
+        FROM per_order;
       `
       const result = await queryDirect(sql)
       const row = result?.rows?.[0]
