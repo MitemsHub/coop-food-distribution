@@ -61,22 +61,21 @@ export async function GET() {
     try {
       const sql = `
         WITH loan_orders AS (
-          SELECT o.order_id
+          SELECT o.order_id, o.total_amount
           FROM orders o
           WHERE o.payment_option = 'Loan'
             AND o.status IN ('Pending','Posted','Delivered')
         ), per_order AS (
-          -- Use recorded line amount to avoid unit_price/qty drift
           SELECT ol.order_id, SUM(ol.amount)::numeric AS base
           FROM order_lines ol
-          JOIN loan_orders lo ON lo.order_id = ol.order_id
           GROUP BY ol.order_id
         )
         SELECT 
-          COALESCE(SUM(base), 0)::numeric AS loans_principal,
-          COALESCE(SUM(ROUND(base * 0.13)), 0)::numeric AS loans_interest,
-          COALESCE(SUM(base) + SUM(ROUND(base * 0.13)), 0)::numeric AS loans_total
-        FROM per_order;
+          COALESCE(SUM(COALESCE(po.base, 0)), 0)::numeric AS loans_principal,
+          COALESCE(SUM(lo.total_amount - COALESCE(po.base, 0)), 0)::numeric AS loans_interest,
+          COALESCE(SUM(lo.total_amount), 0)::numeric AS loans_total
+        FROM loan_orders lo
+        LEFT JOIN per_order po ON po.order_id = lo.order_id;
       `
       const result = await queryDirect(sql)
       const row = result?.rows?.[0]
