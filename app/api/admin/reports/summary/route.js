@@ -21,11 +21,6 @@ export async function GET() {
 
     // Amount totals across all statuses (Pending, Posted, Delivered)
     const statuses = ['Pending','Posted','Delivered']
-    // Row-level amounts via Supabase are subject to pagination; use direct SQL aggregates for accuracy
-    const loansAmountQ   = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Loan' AND status IN ('Pending','Posted','Delivered')`)
-    const savingsAmountQ = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Savings' AND status IN ('Pending','Posted','Delivered')`)
-    const cashAmountQ    = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Cash' AND status IN ('Pending','Posted','Delivered')`)
-    const allAmountQ     = queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE status IN ('Pending','Posted','Delivered')`)
 
     const [
       byBranch, byBranchDept, byDeliveryMember, byCat,
@@ -34,7 +29,8 @@ export async function GET() {
     ] = await Promise.all([
       byBranchQ, byBranchDeptQ, byDeliveryMemberQ, byCategoryQ,
       totalPostedQ, totalPendingQ, totalDeliveredQ, totalAllQ,
-      loansAmountQ, savingsAmountQ, cashAmountQ, allAmountQ
+      // Amounts are loaded below using either direct SQL or paged Supabase reads
+      null, null, null, null
     ])
 
     // Graceful handling: views may be missing in some environments
@@ -48,12 +44,72 @@ export async function GET() {
     if (totalsErr) {
       console.warn('Reports summary: totals error:', totalsErr.message)
     }
-    const amountsErr = loansAmount.error || savingsAmount.error || cashAmount.error || allAmount.error
-    if (amountsErr) {
-      console.warn('Reports summary: amounts error:', amountsErr.message)
+    const getTotal = (res) => Number(res?.rows?.[0]?.total || 0)
+
+    // Helper to sum via Supabase when direct DB URL is not available
+    async function sumViaSupabase(paymentOption) {
+      const countRes = await supabase
+        .from('orders')
+        .select('order_id', { count: 'exact', head: true })
+        .in('status', statuses)
+        .eq('payment_option', paymentOption)
+      const totalCount = countRes?.count || 0
+      const pageSize = 1000
+      let sum = 0
+      for (let start = 0; start < totalCount; start += pageSize) {
+        const end = Math.min(start + pageSize - 1, Math.max(totalCount - 1, 0))
+        const res = await supabase
+          .from('orders')
+          .select('total_amount')
+          .in('status', statuses)
+          .eq('payment_option', paymentOption)
+          .range(start, end)
+        sum += (res?.data || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
+      }
+      return sum
     }
 
-    const getTotal = (res) => Number(res?.rows?.[0]?.total || 0)
+    async function sumAllViaSupabase() {
+      const countRes = await supabase
+        .from('orders')
+        .select('order_id', { count: 'exact', head: true })
+        .in('status', statuses)
+      const totalCount = countRes?.count || 0
+      const pageSize = 1000
+      let sum = 0
+      for (let start = 0; start < totalCount; start += pageSize) {
+        const end = Math.min(start + pageSize - 1, Math.max(totalCount - 1, 0))
+        const res = await supabase
+          .from('orders')
+          .select('total_amount')
+          .in('status', statuses)
+          .range(start, end)
+        sum += (res?.data || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
+      }
+      return sum
+    }
+
+    // Compute amounts: prefer direct SQL, else robust Supabase fallback
+    const hasDirect = !!process.env.SUPABASE_DB_URL
+    let loansOrdersTotal = 0
+    let savingsTotal = 0
+    let cashTotal = 0
+    if (hasDirect) {
+      const [loansAmount, savingsAmount, cashAmount, allAmount] = await Promise.all([
+        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Loan' AND status IN ('Pending','Posted','Delivered')`),
+        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Savings' AND status IN ('Pending','Posted','Delivered')`),
+        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Cash' AND status IN ('Pending','Posted','Delivered')`),
+        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE status IN ('Pending','Posted','Delivered')`)
+      ])
+      loansOrdersTotal = getTotal(loansAmount)
+      savingsTotal = getTotal(savingsAmount)
+      cashTotal = getTotal(cashAmount)
+    } else {
+      loansOrdersTotal = await sumViaSupabase('Loan')
+      savingsTotal = await sumViaSupabase('Savings')
+      cashTotal = await sumViaSupabase('Cash')
+      // all total not needed for cards; compute if required with sumAllViaSupabase()
+    }
 
     // Compute Loan principal and interest via direct SQL (per-order rounding)
     let loansPrincipal = 0
@@ -87,15 +143,11 @@ export async function GET() {
     } catch (err) {
       console.warn('Reports summary: loan principal/interest calc failed, falling back:', err?.message)
       // Fallback: derive principal approximately by subtracting a 13% aggregate interest (may differ due to per-order rounding)
-      const loansAmountTotal = getTotal(loansAmount)
+      const loansAmountTotal = Number(loansOrdersTotal || 0)
       loansPrincipal = Math.round(loansAmountTotal / 1.13)
       loansInterest = loansAmountTotal - loansPrincipal
       loansTotal = loansAmountTotal
     }
-
-    const savingsTotal = getTotal(savingsAmount)
-    const cashTotal = getTotal(cashAmount)
-    const loansOrdersTotal = getTotal(loansAmount) // orders.total_amount (includes interest) for loan orders
 
     // Unified total used by the Total Amount card: align with displayed Loan card which reads from orders
     const totalUnified = Number(loansOrdersTotal || 0) + Number(savingsTotal || 0) + Number(cashTotal || 0)
