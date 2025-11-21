@@ -503,31 +503,33 @@ export default function MemberLauncher() {
             )}
           </button>
 
-          {/* View Orders button: always available when ID+PIN validated, even if shopping closed */}
-          <button
-            type="button"
-            onClick={viewOrders}
-            disabled={isLoading || !validation.isValid || memberExists !== true || isCheckingDatabase || (pinStatus === true && !pin.trim())}
-            className={`w-full mt-2 inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
-              validation.isValid && !isLoading && memberExists === true && !isCheckingDatabase && (pinStatus !== true || pin.trim())
-                ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700'
-                : 'bg-gray-400 cursor-not-allowed'
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-2 border-white border-t-transparent mr-2"></div>
-                Loading...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                View Orders
-              </>
-            )}
-          </button>
+          {/* View Orders button: show only when shopping is closed */}
+          {!shoppingStatusLoading && !shoppingOpen && (
+            <button
+              type="button"
+              onClick={viewOrders}
+              disabled={isLoading || !validation.isValid || memberExists !== true || isCheckingDatabase || (pinStatus === true && !pin.trim())}
+              className={`w-full mt-2 inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
+                validation.isValid && !isLoading && memberExists === true && !isCheckingDatabase && (pinStatus !== true || pin.trim())
+                  ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-2 border-white border-t-transparent mr-2"></div>
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  View Orders
+                </>
+              )}
+            </button>
+          )}
         </form>
       )}
 
