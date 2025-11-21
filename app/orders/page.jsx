@@ -11,6 +11,9 @@ function OrdersPageContent() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
   const [selectedStatus, setSelectedStatus] = useState('All')
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
+  const [shoppingStatusError, setShoppingStatusError] = useState('')
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -25,6 +28,27 @@ function OrdersPageContent() {
     }
     loadOrders()
   }, [memberId, router])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        setShoppingStatusLoading(true)
+        setShoppingStatusError('')
+        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
+        const json = await res.json()
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load shopping status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch (e) {
+        if (!cancelled) setShoppingStatusError(`Error: ${e.message}`)
+        if (!cancelled) setShoppingOpen(false)
+      } finally {
+        if (!cancelled) setShoppingStatusLoading(false)
+      }
+    }
+    loadStatus()
+    return () => { cancelled = true }
+  }, [])
 
   const loadOrders = async () => {
     try {
@@ -96,6 +120,7 @@ function OrdersPageContent() {
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-row">
+                {shoppingOpen && (
                 <button
                   onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
                   className="px-2 py-2 sm:px-3 md:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
@@ -105,6 +130,8 @@ function OrdersPageContent() {
                   </svg>
                   {isAdmin ? 'Shop for Member' : 'Shop'}
                 </button>
+                )}
+                {shoppingOpen && (
                 <button
                   onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
                   className="px-2 py-2 sm:px-3 md:px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
@@ -114,6 +141,7 @@ function OrdersPageContent() {
                   </svg>
                   Cart
                 </button>
+                )}
                 {isAdmin && (
                   <button
                     onClick={() => router.push('/admin/orders')}
@@ -194,12 +222,16 @@ function OrdersPageContent() {
                 <p className="text-gray-500 mb-2 lg:mb-3">
                   {selectedStatus === 'All' ? 'No orders found' : `No ${selectedStatus.toLowerCase()} orders found`}
                 </p>
-                <button
-                  onClick={() => router.push(`/shop?member_id=${memberId}`)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Start Shopping
-                </button>
+                {shoppingOpen ? (
+                  <button
+                    onClick={() => router.push(`/shop?mid=${memberId}`)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Start Shopping
+                  </button>
+                ) : (
+                  <div className="text-gray-600 text-sm">Shopping is currently closed.</div>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
