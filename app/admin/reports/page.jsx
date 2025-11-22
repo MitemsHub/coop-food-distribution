@@ -126,7 +126,18 @@ function ReportsPageContent() {
 
   // Format demand rows for display
   const formattedDemandRows = useMemo(() => {
-    return (demandRows || []).map((r, idx) => {
+    const sorted = [...(demandRows || [])].sort((a, b) => {
+      const ac = String(a.category || '').toLowerCase()
+      const bc = String(b.category || '').toLowerCase()
+      if (ac < bc) return -1
+      if (ac > bc) return 1
+      const ai = String(a.items || '').toLowerCase()
+      const bi = String(b.items || '').toLowerCase()
+      if (ai < bi) return -1
+      if (ai > bi) return 1
+      return 0
+    })
+    return sorted.map((r, idx) => {
       const original = Number(r.original_price || 0)
       const markup = Number(r.markup || 0)
       const qty = Number(r.quantity || 0)
@@ -134,6 +145,7 @@ function ReportsPageContent() {
       return {
         sn: idx + 1,
         items: r.items,
+        category: r.category || '',
         original_price: `₦${original.toLocaleString()}`,
         markup: `₦${markup.toLocaleString()}`,
         quantity: qty.toLocaleString(),
@@ -550,6 +562,7 @@ function ReportsPageContent() {
         cols={[
           ['sn', 'SN'],
           ['items', 'Items'],
+          ['category', 'Category'],
           ['original_price', 'Price'],
           ['markup', 'Markup'],
           ['quantity', 'Quantity'],

@@ -10,6 +10,8 @@ function RepPendingPageContent() {
   const [orders, setOrders] = useState([])
   const [dept, setDept] = useState('') // '' = All
   const [departments, setDepartments] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
   const [msg, setMsg] = useState(null)
   const [nextCursor, setNextCursor] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -233,11 +235,23 @@ function RepPendingPageContent() {
   }
 
   const exportCSV = () => {
-    const rows = orders.flatMap(o => (o.order_lines || []).map(l => ({
-      order_id:o.order_id, created_at:o.created_at, member:o.member_name_snapshot,
-      member_branch:o.member_branch?.name||'', delivery:o.delivery?.name||'',
-      department:o.departments?.name||'', payment:o.payment_option,
-      sku:l.items?.sku, item:l.items?.name, qty:l.qty, unit_price:l.unit_price, amount:l.amount
+    const filtered = !search ? orders : orders.filter(o => {
+      const s = search.toLowerCase()
+      return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
+    })
+    const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ({
+      id:o.member_id,
+      order_id:o.order_id,
+      created_at:o.created_at,
+      member:o.member_name_snapshot,
+      member_branch:o.member_branch?.name||'',
+      delivery:o.delivery?.name||'',
+      department:o.departments?.name||'',
+      payment:o.payment_option,
+      item:l.items?.name,
+      qty:l.qty,
+      unit_price:l.unit_price,
+      amount:l.amount
     })))
     if (rows.length === 0) return alert('No rows to export')
     const headers = Object.keys(rows[0])
@@ -250,32 +264,41 @@ function RepPendingPageContent() {
   const exportPDF = async () => {
     if (!orders.length) return alert('No rows to export')
     const { jsPDF } = await import('jspdf')
+    const { default: autoTable } = await import('jspdf-autotable')
     const doc = new jsPDF()
-    let y = 12
-    doc.setFontSize(14); doc.text('Pending Orders Manifest', 10, y); y += 6
-    doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 10, y); y += 6
-    if (dept) { doc.text(`Department: ${dept}`, 10, y); y += 6 }
-    const header = ['Order','Member','Dept','Pay','SKU','Item','Qty','Unit Price','Amount']
-    doc.text(header.join(' | '), 10, y); y += 4
-    doc.line(10, y, 200, y); y += 4
-    orders.forEach(o => {
-      (o.order_lines || []).forEach(l => {
-        const line = [
-          String(o.order_id),
-          String(o.member_name_snapshot || ''),
-          String(o.departments?.name || ''),
-          String(o.payment_option || ''),
-          String(l.items?.sku || ''),
-          String(l.items?.name || ''),
-          String(l.qty || 0),
-          `₦${Number(l.unit_price || 0).toLocaleString()}`,
-          `₦${Number(l.amount || 0).toLocaleString()}`,
-        ].join(' | ')
-        doc.text(line, 10, y)
-        y += 5
-        if (y > 280) { doc.addPage(); y = 12 }
-      })
+
+    doc.setFontSize(14); doc.text('Pending Orders Manifest', 14, 18)
+    doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 24)
+    if (dept) doc.text(`Department: ${dept}`, 14, 30)
+
+    const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount']
+    const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
+    const filtered2 = !search ? orders : orders.filter(o => {
+      const s = search.toLowerCase()
+      return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
+    const rows = filtered2.flatMap(o => (o.order_lines || []).map(l => ([
+      sanitize(o.member_id),
+      sanitize(o.order_id),
+      sanitize(o.member_name_snapshot),
+      sanitize(o.departments?.name),
+      sanitize(o.payment_option),
+      sanitize(l.items?.name),
+      String(l.qty || 0),
+      `NGN ${Number(l.unit_price || 0).toLocaleString()}`,
+      `NGN ${Number(l.amount || 0).toLocaleString()}`,
+    ])))
+
+    autoTable(doc, {
+      head: [headers],
+      body: rows,
+      startY: dept ? 34 : 28,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [75, 85, 99] },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } }
+    })
+
     doc.save('rep_pending_manifest.pdf')
   }
 
@@ -314,11 +337,21 @@ function RepPendingPageContent() {
 
       <div className="mb-4">
         <div className="mb-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-4 items-start">
             <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
               <option value="">All departments</option>
               {departments.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
+            <div className="flex gap-2 w-full">
+              <input
+                className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
+                placeholder="Search ID or Order ID"
+                value={searchInput}
+                onChange={e=>setSearchInput(e.target.value)}
+                onKeyDown={(e)=>{ if(e.key==='Enter') setSearch(searchInput.trim()) }}
+              />
+              <button className="px-2 py-2 border rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>setSearch(searchInput.trim())}>Search</button>
+            </div>
             <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
             <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
             <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
@@ -334,7 +367,12 @@ function RepPendingPageContent() {
         {orders.length === 0 && (
           <div className="col-span-full p-4 text-gray-600 text-center">No Pending orders.</div>
         )}
-        {orders.map(o => (
+        {(
+          (!search ? orders : orders.filter(o => {
+            const s = search.toLowerCase()
+            return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
+          }))
+        ).map(o => (
           <div key={o.order_id} className="border rounded-lg p-4 bg-white shadow-sm">
             <div className="grid grid-cols-1 gap-2 mb-3">
               <div className="flex items-center justify-between">

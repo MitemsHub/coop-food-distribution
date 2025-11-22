@@ -50,10 +50,11 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
   const itemIdsSet = [...new Set(lines.map(l => l.item_id).filter(Boolean))]
   const { data: items, error: iErr } = await supabase
     .from('items')
-    .select('item_id, name')
+    .select('item_id, name, category')
     .in('item_id', itemIdsSet)
   if (iErr) throw new Error(iErr.message)
   const itemNameById = new Map((items || []).map(i => [i.item_id, i.name]))
+  const itemCategoryById = new Map((items || []).map(i => [i.item_id, i.category]))
 
   // Load base prices and active markups for branch+item pairs
   let priceMap = new Map()
@@ -147,7 +148,8 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
       department_id: v.department_id || null,
       department_name: deptNameById.get(v.department_id) || null,
       original_price: original,
-      markup
+      markup,
+      category: itemCategoryById.get(v.item_id) || null
     })
   }
 
@@ -162,7 +164,8 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
       original_price: Math.max(prev?.original_price || 0, r.original_price || 0),
       markup: Math.max(prev?.markup || 0, r.markup || 0),
       quantity: Number((prev?.quantity || 0) + (r.quantity || 0)),
-      amount: Number((prev?.amount || 0) + (r.amount || 0))
+      amount: Number((prev?.amount || 0) + (r.amount || 0)),
+      category: prev?.category ?? r.category ?? null
     })
   }
 
@@ -197,6 +200,7 @@ export async function GET(req) {
           d.name AS department_name,
           i.item_id AS item_id,
           i.name AS item_name,
+          i.category AS item_category,
           COALESCE(bip.price, 0)::numeric AS base_price,
           COALESCE(bim.amount, 0)::numeric AS markup,
           (COALESCE(bip.price, 0) + COALESCE(bim.amount, 0))::numeric AS price,
@@ -209,8 +213,8 @@ export async function GET(req) {
         LEFT JOIN branch_item_prices bip ON bip.branch_id = b.id AND bip.item_id = i.item_id
         LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id AND bim.active = TRUE
         ${whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : ''}
-        GROUP BY b.code, b.name, d.id, d.name, i.item_id, i.name, bip.price, bim.amount
-        ORDER BY b.name, d.name, i.name
+        GROUP BY b.code, b.name, d.id, d.name, i.item_id, i.name, i.category, bip.price, bim.amount
+        ORDER BY i.category, i.name
       `
 
       const result = await queryDirect(sql, params)
@@ -224,7 +228,8 @@ export async function GET(req) {
         department_id: r.department_id,
         department_name: r.department_name,
         original_price: Number(r.base_price),
-        markup: Number(r.markup)
+        markup: Number(r.markup),
+        category: r.item_category || null
       }))
 
       if (rows.length) {
