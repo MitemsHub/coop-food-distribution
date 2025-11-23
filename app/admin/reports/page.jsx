@@ -75,6 +75,10 @@ function ReportsPageContent() {
     return Array.from(names).sort()
   }, [data])
 
+  // Loader for Items Pack export
+  const [itemsPackLoading, setItemsPackLoading] = useState(false)
+  const [itemsPackProgress, setItemsPackProgress] = useState({ current: 0, total: 0 })
+
   // Branch Item Prices Matrix (removed)
 
   // New: Items Demand by Delivery Location & Department
@@ -332,6 +336,168 @@ function ReportsPageContent() {
     }
   }
 
+  // Items Pack: multi-sheet Excel (one sheet per delivery location)
+  const exportItemsPack = async () => {
+    try {
+      setItemsPackLoading(true)
+      setItemsPackProgress({ current: 0, total: 0 })
+      const xlsxMod = await import('xlsx')
+      const XLSX = xlsxMod?.default ?? xlsxMod
+      const wb = XLSX.utils.book_new()
+      const safeName = (name) => String(name).replace(/[\\/?*\[\]]/g, ' ').slice(0, 31)
+      const summary = []
+
+      // Iterate over known delivery locations (branches) and fetch per branch
+      const branchList = branches && Array.isArray(branches) ? branches : []
+      if (!branchList.length) return alert('No delivery locations found to export')
+
+      // Helper: fetch rows for a branch with robust retry/backoff when rate-limited
+      const fetchBranchRows = async (branch) => {
+        const qsb = new URLSearchParams()
+        qsb.set('branch', branch.code)
+        if (selectedDepartmentId !== 'all') qsb.set('department_id', String(selectedDepartmentId))
+        let attempt = 0
+        const maxAttempts = 8
+        let lastErrorText = ''
+        while (attempt < maxAttempts) {
+          attempt += 1
+          const res = await fetch(`/api/admin/reports/delivery-dept-items?${qsb.toString()}`, { cache: 'no-store' })
+          const ct = res.headers.get('content-type') || ''
+          if (res.status === 429) {
+            // Honor Retry-After if provided, else exponential backoff with jitter
+            const retryAfterHeader = res.headers.get('retry-after') || res.headers.get('x-ratelimit-reset')
+            let waitMs = 0
+            if (retryAfterHeader) {
+              const seconds = Number(retryAfterHeader)
+              waitMs = Math.min(15000, Math.max(1000, Math.ceil(seconds * 1000)))
+            } else {
+              const base = 900
+              const jitter = Math.floor(Math.random() * 400) // 0-400ms
+              waitMs = Math.min(15000, Math.round(base * Math.pow(2, attempt - 1)) + jitter)
+            }
+            lastErrorText = await res.text()
+            await new Promise(r => setTimeout(r, waitMs))
+            continue
+          }
+          if (!res.ok) {
+            const txt = ct.includes('application/json') ? JSON.stringify(await res.json()) : await res.text()
+            throw new Error(`Request failed (${res.status}): ${txt.slice(0, 180)}`)
+          }
+          if (!ct.includes('application/json')) {
+            const txt = await res.text()
+            throw new Error(`Unexpected response: ${txt.slice(0, 180)}`)
+          }
+          const json = await res.json()
+          if (!json.ok) throw new Error(json.error || 'Failed to load demand data')
+          // Small pacing delay between successful branch fetches to avoid burst rate-limit
+          await new Promise(r => setTimeout(r, 250))
+          return json.rows || []
+        }
+        throw new Error(`Rate limited while fetching ${branch.name || branch.code}. Details: ${lastErrorText.slice(0, 180)}`)
+      }
+
+      setItemsPackProgress({ current: 0, total: branchList.length })
+
+      for (let i = 0; i < branchList.length; i++) {
+        const b = branchList[i]
+        // Update progress before fetching to show intent
+        setItemsPackProgress({ current: i + 1, total: branchList.length })
+        let arr = []
+        try {
+          arr = await fetchBranchRows(b)
+        } catch (err) {
+          console.warn('Items Pack: skipping branch due to repeated rate-limit:', b?.name || b?.code, err?.message)
+          // Still add an empty sheet to represent the branch with a note
+          const wsEmpty = XLSX.utils.aoa_to_sheet([["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"], ["", `Rate limited: ${b.name || b.code}`, "", "", "", "", "", "", ""]])
+          XLSX.utils.book_append_sheet(wb, wsEmpty, safeName(b.name || b.code || 'Unknown'))
+          summary.push({ 'Location': b.name || b.code || 'Unknown', 'Quantity': 0, 'Markup Amount': 0, 'Amount With Markup': 0, 'Amount Without Markup': 0 })
+          continue
+        }
+        const qsb = new URLSearchParams()
+        // Yield to UI so the spinner/progress can update
+        await new Promise(r => setTimeout(r, 10))
+        if (!arr.length) {
+          // Still add an empty sheet to represent the branch
+          const ws = XLSX.utils.aoa_to_sheet([["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"]])
+          XLSX.utils.book_append_sheet(wb, ws, safeName(b.name || b.code || 'Unknown'))
+          summary.push({ 'Location': b.name || b.code || 'Unknown', 'Quantity': 0, 'Markup Amount': 0, 'Amount With Markup': 0, 'Amount Without Markup': 0 })
+          continue
+        }
+
+        const sorted = [...arr].sort((a, b) => {
+          const ac = String(a.category || '').toLowerCase()
+          const bc = String(b.category || '').toLowerCase()
+          if (ac < bc) return -1
+          if (ac > bc) return 1
+          const ai = String(a.items || '').toLowerCase()
+          const bi = String(b.items || '').toLowerCase()
+          if (ai < bi) return -1
+          if (ai > bi) return 1
+          return 0
+        })
+
+        let sn = 0
+        let totalQty = 0
+        let totalMarkupAmt = 0
+        let totalAmtWithMarkup = 0
+        let totalAmtWithoutMarkup = 0
+
+        const sheetRows = sorted.map(r => {
+          sn += 1
+          const original = Number(r.original_price || 0)
+          const markup = Number(r.markup || 0)
+          const qty = Number(r.quantity || 0)
+          const recordedAmount = Number(r.amount || 0)
+          const amountWithoutMarkup = original * qty
+          const markupAmount = Math.max(recordedAmount - amountWithoutMarkup, 0)
+          const amountWithMarkup = recordedAmount
+
+          totalQty += qty
+          totalMarkupAmt += markupAmount
+          totalAmtWithMarkup += amountWithMarkup
+          totalAmtWithoutMarkup += amountWithoutMarkup
+
+          return {
+            'SN': sn,
+            'Items': r.items,
+            'Category': r.category || '',
+            'Original Price': original,
+            'Markup': markup,
+            'Quantity': qty,
+            'Markup Amount': markupAmount,
+            'Amount With Markup': amountWithMarkup,
+            'Amount Without Markup': amountWithoutMarkup,
+          }
+        })
+
+        const ws = XLSX.utils.json_to_sheet(sheetRows)
+        XLSX.utils.book_append_sheet(wb, ws, safeName(b.name || b.code || 'Unknown'))
+
+        summary.push({
+          'Location': b.name || b.code || 'Unknown',
+          'Quantity': totalQty,
+          'Markup Amount': totalMarkupAmt,
+          'Amount With Markup': totalAmtWithMarkup,
+          'Amount Without Markup': totalAmtWithoutMarkup,
+        })
+      }
+
+      const summarySheet = XLSX.utils.json_to_sheet(summary)
+      XLSX.utils.book_append_sheet(wb, summarySheet, safeName('Summary'))
+
+      const deptName = selectedDepartmentId === 'all'
+        ? 'ALL_DEPTS'
+        : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))
+      XLSX.writeFile(wb, `Items_Pack_${deptName}.xlsx`)
+    } catch (e) {
+      console.error('Items Pack export failed:', e)
+      alert(`Items Pack export failed: ${e.message}`)
+    } finally {
+      setItemsPackLoading(false)
+      setItemsPackProgress({ current: 0, total: 0 })
+    }
+  }
+
   if (loading) return <div className="p-6">Loading…</div>
   if (err) return (
     <div className="p-6">
@@ -572,6 +738,9 @@ function ReportsPageContent() {
         setCurrentPage={setDemandCurrentPage}
         totalPages={demandTotalPages}
         itemsPerPage={itemsPerPage}
+        onExportItemsPack={exportItemsPack}
+        itemsPackLoading={itemsPackLoading}
+        itemsPackProgress={itemsPackProgress}
         onExportCSV={() => exportCSV(
           formattedDemandRows,
           'items_demand_by_delivery_and_department.csv',
@@ -659,7 +828,7 @@ function BranchFilter({ value, onChange, label, branches }) {
   )
 }
 
-function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportCSV, onExportPDF, filter }) {
+function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportCSV, onExportPDF, onExportItemsPack, filter, itemsPackLoading = false, itemsPackProgress = { current: 0, total: 0 } }) {
   const showPagination = allData?.length > itemsPerPage
 
   return (
@@ -667,6 +836,25 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3">
         <h2 className="text-lg sm:text-xl font-medium">{title}</h2>
         <div className="flex gap-2">
+          {onExportItemsPack && (
+            <button
+              className={`px-3 py-1 text-white text-sm rounded flex items-center gap-2 ${itemsPackLoading ? 'bg-purple-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+              onClick={onExportItemsPack}
+              disabled={itemsPackLoading}
+              aria-busy={itemsPackLoading}
+            >
+              {itemsPackLoading ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>
+                    Exporting… {itemsPackProgress.total > 0 ? `${itemsPackProgress.current}/${itemsPackProgress.total}` : ''}
+                  </span>
+                </>
+              ) : (
+                'Items Pack'
+              )}
+            </button>
+          )}
           <button 
             className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700" 
             onClick={onExportPDF}

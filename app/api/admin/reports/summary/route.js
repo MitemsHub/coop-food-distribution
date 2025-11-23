@@ -96,9 +96,11 @@ export async function GET() {
     let cashTotal = 0
     if (hasDirect) {
       const [loansAmount, savingsAmount, cashAmount, allAmount] = await Promise.all([
+        // Loans total uses orders.total_amount because it includes interest by definition
         queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Loan' AND status IN ('Pending','Posted','Delivered')`),
-        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Savings' AND status IN ('Pending','Posted','Delivered')`),
-        queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE payment_option='Cash' AND status IN ('Pending','Posted','Delivered')`),
+        // Savings and Cash totals should reflect recorded line amounts to align with demand exports
+        queryDirect(`WITH tgt AS (SELECT order_id FROM orders WHERE payment_option='Savings' AND status IN ('Pending','Posted','Delivered')) SELECT COALESCE(SUM(ol.amount),0)::numeric AS total FROM order_lines ol JOIN tgt t ON t.order_id = ol.order_id`),
+        queryDirect(`WITH tgt AS (SELECT order_id FROM orders WHERE payment_option='Cash' AND status IN ('Pending','Posted','Delivered')) SELECT COALESCE(SUM(ol.amount),0)::numeric AS total FROM order_lines ol JOIN tgt t ON t.order_id = ol.order_id`),
         queryDirect(`SELECT COALESCE(SUM(total_amount),0)::numeric AS total FROM orders WHERE status IN ('Pending','Posted','Delivered')`)
       ])
       loansOrdersTotal = getTotal(loansAmount)
@@ -106,6 +108,8 @@ export async function GET() {
       cashTotal = getTotal(cashAmount)
     } else {
       loansOrdersTotal = await sumViaSupabase('Loan')
+      // Fallback retains orders.total_amount for Savings/Cash; if exact alignment is required without direct SQL,
+      // consider implementing a paged sum over order_lines by payment_option here.
       savingsTotal = await sumViaSupabase('Savings')
       cashTotal = await sumViaSupabase('Cash')
       // all total not needed for cards; compute if required with sumAllViaSupabase()

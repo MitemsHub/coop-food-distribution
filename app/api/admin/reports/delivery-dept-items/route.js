@@ -41,7 +41,7 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
   // Load order lines
   const { data: lines, error: lErr } = await supabase
     .from('order_lines')
-    .select('order_id, item_id, qty')
+    .select('order_id, item_id, qty, amount')
     .in('order_id', orderIds)
   if (lErr) throw new Error(lErr.message)
   if (!lines?.length) return []
@@ -85,7 +85,8 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
       branch_id: branchId,
       department_id: dept,
       item_id: itemId,
-      quantity: Number((prev?.quantity || 0) + Number(l.qty || 0))
+      quantity: Number((prev?.quantity || 0) + Number(l.qty || 0)),
+      amount_sum: Number((prev?.amount_sum || 0) + Number(l.amount || 0))
     })
   }
 
@@ -136,19 +137,21 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
   }
 
   for (const v of keyAgg.values()) {
-    const { original, markup, price } = priceForItemAcrossBranches(v.item_id)
+    const { original, markup } = priceForItemAcrossBranches(v.item_id)
+    const effectiveUnitPrice = Number(v.quantity || 0) > 0 ? Number(v.amount_sum || 0) / Number(v.quantity || 0) : 0
+    const effectiveMarkup = Math.max(effectiveUnitPrice - Number(original || 0), 0)
     const itemName = itemNameById.get(v.item_id) || String(v.item_id)
     rows.push({
       items: itemName,
-      price,
+      price: effectiveUnitPrice,
       quantity: Number(v.quantity || 0),
-      amount: Number(price) * Number(v.quantity || 0),
+      amount: Number(v.amount_sum || 0),
       branch_code: branchCodeById.get(v.branch_id) || null,
       branch_name: branchNameById.get(v.branch_id) || null,
       department_id: v.department_id || null,
       department_name: deptNameById.get(v.department_id) || null,
-      original_price: original,
-      markup,
+      original_price: Number(original || 0),
+      markup: Number(effectiveMarkup || 0),
       category: itemCategoryById.get(v.item_id) || null
     })
   }
@@ -187,7 +190,7 @@ export async function GET(req) {
 
     // Primary path: direct SQL across core tables with prices and markups
     try {
-      const whereClauses = ["UPPER(o.status) IN ('PENDING','POSTED','DELIVERED')"]
+      const whereClauses = ["o.status::text IN ('Pending','Posted','Delivered')"]
       const params = []
       if (branchCode) { whereClauses.push('b.code = $1'); params.push(branchCode) }
       if (departmentId) { const idx = params.length + 1; whereClauses.push(`d.id = $${idx}`); params.push(Number(departmentId)) }
@@ -202,33 +205,36 @@ export async function GET(req) {
           i.name AS item_name,
           i.category AS item_category,
           COALESCE(bip.price, 0)::numeric AS base_price,
-          COALESCE(bim.amount, 0)::numeric AS markup,
-          (COALESCE(bip.price, 0) + COALESCE(bim.amount, 0))::numeric AS price,
-          COALESCE(SUM(ol.qty), 0)::numeric AS total_demand
+          COALESCE(SUM(ol.qty), 0)::numeric AS total_demand,
+          COALESCE(SUM(ol.amount), 0)::numeric AS total_amount_recorded,
+          CASE WHEN COALESCE(SUM(ol.qty), 0) > 0 THEN COALESCE(SUM(ol.amount), 0) / COALESCE(SUM(ol.qty), 0) ELSE 0 END::numeric AS effective_unit_price,
+          GREATEST(
+            CASE WHEN COALESCE(SUM(ol.qty), 0) > 0 THEN COALESCE(SUM(ol.amount), 0) / COALESCE(SUM(ol.qty), 0) ELSE 0 END - COALESCE(bip.price, 0),
+            0
+          )::numeric AS effective_markup
         FROM orders o
         JOIN order_lines ol ON ol.order_id = o.order_id
         JOIN branches b ON o.delivery_branch_id = b.id
         JOIN items i ON i.item_id = ol.item_id
         LEFT JOIN departments d ON d.id = COALESCE(o.department_id, i.department_id)
         LEFT JOIN branch_item_prices bip ON bip.branch_id = b.id AND bip.item_id = i.item_id
-        LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id AND bim.active = TRUE
         ${whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : ''}
-        GROUP BY b.code, b.name, d.id, d.name, i.item_id, i.name, i.category, bip.price, bim.amount
+        GROUP BY b.code, b.name, d.id, d.name, i.item_id, i.name, i.category, bip.price
         ORDER BY i.category, i.name
       `
 
       const result = await queryDirect(sql, params)
       const rows = (result.rows || []).map(r => ({
         items: r.item_name,
-        price: Number(r.price),
-        quantity: Number(r.total_demand),
-        amount: Number(r.price) * Number(r.total_demand),
+        price: Number(r.effective_unit_price || 0),
+        quantity: Number(r.total_demand || 0),
+        amount: Number(r.total_amount_recorded || 0),
         branch_code: r.branch_code,
         branch_name: r.branch_name,
         department_id: r.department_id,
         department_name: r.department_name,
-        original_price: Number(r.base_price),
-        markup: Number(r.markup),
+        original_price: Number(r.base_price || 0),
+        markup: Number(r.effective_markup || 0),
         category: r.item_category || null
       }))
 
