@@ -138,12 +138,11 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
 
   for (const v of keyAgg.values()) {
     const { original, markup } = priceForItemAcrossBranches(v.item_id)
-    const effectiveUnitPrice = Number(v.quantity || 0) > 0 ? Number(v.amount_sum || 0) / Number(v.quantity || 0) : 0
-    const effectiveMarkup = Math.max(effectiveUnitPrice - Number(original || 0), 0)
     const itemName = itemNameById.get(v.item_id) || String(v.item_id)
     rows.push({
       items: itemName,
-      price: effectiveUnitPrice,
+      // Price shown is base + configured markup; UI recomputes amount
+      price: Number(original || 0) + Number(markup || 0),
       quantity: Number(v.quantity || 0),
       amount: Number(v.amount_sum || 0),
       branch_code: branchCodeById.get(v.branch_id) || null,
@@ -151,7 +150,7 @@ async function aggregateViaTables(supabase, { branchCode, departmentId }) {
       department_id: v.department_id || null,
       department_name: deptNameById.get(v.department_id) || null,
       original_price: Number(original || 0),
-      markup: Number(effectiveMarkup || 0),
+      markup: Number(markup || 0),
       category: itemCategoryById.get(v.item_id) || null
     })
   }
@@ -188,45 +187,46 @@ export async function GET(req) {
     const branchCode = (searchParams.get('branch') || '').trim()
     const departmentId = searchParams.get('department_id')
 
-    // Primary path: direct SQL across core tables with prices and markups
+    // Primary path: direct SQL across core tables with prices and configured markups
     try {
       const whereClauses = ["o.status::text IN ('Pending','Posted','Delivered')"]
       const params = []
       if (branchCode) { whereClauses.push('b.code = $1'); params.push(branchCode) }
       if (departmentId) { const idx = params.length + 1; whereClauses.push(`d.id = $${idx}`); params.push(Number(departmentId)) }
 
+      // If no department filter, aggregate across all departments by item (avoid duplicates)
+      const groupByDept = Boolean(departmentId)
+
       const sql = `
         SELECT 
-          b.code AS branch_code,
-          b.name AS branch_name,
-          d.id   AS department_id,
-          d.name AS department_name,
+          ${groupByDept ? 'b.code AS branch_code,' : ''}
+          ${groupByDept ? 'b.name AS branch_name,' : ''}
+          ${groupByDept ? 'd.id   AS department_id,' : ''}
+          ${groupByDept ? 'd.name AS department_name,' : ''}
           i.item_id AS item_id,
           i.name AS item_name,
           i.category AS item_category,
-          COALESCE(bip.price, 0)::numeric AS base_price,
+          COALESCE(MAX(bip.price), 0)::numeric AS base_price,
+          COALESCE(MAX(CASE WHEN bim.active THEN bim.amount END), 0)::numeric AS markup_amount,
           COALESCE(SUM(ol.qty), 0)::numeric AS total_demand,
-          COALESCE(SUM(ol.amount), 0)::numeric AS total_amount_recorded,
-          CASE WHEN COALESCE(SUM(ol.qty), 0) > 0 THEN COALESCE(SUM(ol.amount), 0) / COALESCE(SUM(ol.qty), 0) ELSE 0 END::numeric AS effective_unit_price,
-          GREATEST(
-            CASE WHEN COALESCE(SUM(ol.qty), 0) > 0 THEN COALESCE(SUM(ol.amount), 0) / COALESCE(SUM(ol.qty), 0) ELSE 0 END - COALESCE(bip.price, 0),
-            0
-          )::numeric AS effective_markup
+          COALESCE(SUM(ol.amount), 0)::numeric AS total_amount_recorded
         FROM orders o
         JOIN order_lines ol ON ol.order_id = o.order_id
         JOIN branches b ON o.delivery_branch_id = b.id
         JOIN items i ON i.item_id = ol.item_id
         LEFT JOIN departments d ON d.id = COALESCE(o.department_id, i.department_id)
         LEFT JOIN branch_item_prices bip ON bip.branch_id = b.id AND bip.item_id = i.item_id
+        LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id
         ${whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : ''}
-        GROUP BY b.code, b.name, d.id, d.name, i.item_id, i.name, i.category, bip.price
+        GROUP BY ${groupByDept ? 'b.code, b.name, d.id, d.name,' : ''} i.item_id, i.name, i.category
         ORDER BY i.category, i.name
       `
 
       const result = await queryDirect(sql, params)
       const rows = (result.rows || []).map(r => ({
         items: r.item_name,
-        price: Number(r.effective_unit_price || 0),
+        // Keep price for debugging; UI uses original_price + markup to compute amount
+        price: Number(r.base_price || 0) + Number(r.markup_amount || 0),
         quantity: Number(r.total_demand || 0),
         amount: Number(r.total_amount_recorded || 0),
         branch_code: r.branch_code,
@@ -234,7 +234,7 @@ export async function GET(req) {
         department_id: r.department_id,
         department_name: r.department_name,
         original_price: Number(r.base_price || 0),
-        markup: Number(r.effective_markup || 0),
+        markup: Number(r.markup_amount || 0),
         category: r.item_category || null
       }))
 

@@ -145,7 +145,7 @@ function ReportsPageContent() {
       const original = Number(r.original_price || 0)
       const markup = Number(r.markup || 0)
       const qty = Number(r.quantity || 0)
-      const amt = (original + markup) * qty
+      const recordedAmount = Number(r.amount || 0)
       return {
         sn: idx + 1,
         items: r.items,
@@ -153,7 +153,7 @@ function ReportsPageContent() {
         original_price: `₦${original.toLocaleString()}`,
         markup: `₦${markup.toLocaleString()}`,
         quantity: qty.toLocaleString(),
-        amount: `₦${amt.toLocaleString()}`
+        amount: `₦${recordedAmount.toLocaleString()}`
       }
     })
   }, [demandRows])
@@ -161,11 +161,8 @@ function ReportsPageContent() {
   // Raw rows used for totals calculations in exports (amount recomputed)
   const demandRawForTotals = useMemo(() => {
     return (demandRows || []).map(r => {
-      const original = Number(r.original_price || 0)
-      const markup = Number(r.markup || 0)
-      const qty = Number(r.quantity || 0)
-      const amt = (original + markup) * qty
-      return { ...r, amount: amt }
+      const recordedAmount = Number(r.amount || 0)
+      return { ...r, amount: recordedAmount }
     })
   }, [demandRows])
 
@@ -341,9 +338,9 @@ function ReportsPageContent() {
     try {
       setItemsPackLoading(true)
       setItemsPackProgress({ current: 0, total: 0 })
-      const xlsxMod = await import('xlsx')
-      const XLSX = xlsxMod?.default ?? xlsxMod
-      const wb = XLSX.utils.book_new()
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
       const safeName = (name) => String(name).replace(/[\\/?*\[\]]/g, ' ').slice(0, 31)
       const summary = []
 
@@ -407,9 +404,47 @@ function ReportsPageContent() {
           arr = await fetchBranchRows(b)
         } catch (err) {
           console.warn('Items Pack: skipping branch due to repeated rate-limit:', b?.name || b?.code, err?.message)
-          // Still add an empty sheet to represent the branch with a note
-          const wsEmpty = XLSX.utils.aoa_to_sheet([["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"], ["", `Rate limited: ${b.name || b.code}`, "", "", "", "", "", "", ""]])
-          XLSX.utils.book_append_sheet(wb, wsEmpty, safeName(b.name || b.code || 'Unknown'))
+          const sheetName = safeName(b.name || b.code || 'Unknown')
+          const ws = wb.addWorksheet(sheetName)
+          const title = `Summary of Items from ${b.name || b.code || 'Unknown'}`
+          const headers = ["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"]
+          ws.addRow([title])
+          ws.addRow(headers)
+          ws.addRow(['', `Rate limited: ${b.name || b.code}`, '', '', '', '', '', '', ''])
+          ws.addRow(['','TOTAL','','','',0,0,0,0])
+          ws.mergeCells('A1','I1')
+          ws.columns = [
+            { key: 'sn', width: 6 },
+            { key: 'items', width: 28 },
+            { key: 'category', width: 18 },
+            { key: 'original', width: 14 },
+            { key: 'markup', width: 12 },
+            { key: 'qty', width: 10 },
+            { key: 'markupAmt', width: 18 },
+            { key: 'amtWith', width: 20 },
+            { key: 'amtWithout', width: 20 },
+          ]
+          const titleCell = ws.getCell('A1')
+          titleCell.font = { bold: true, size: 13 }
+          titleCell.alignment = { horizontal: 'center' }
+          const headerRow = ws.getRow(2)
+          headerRow.font = { bold: true }
+          headerRow.alignment = { horizontal: 'center' }
+          const lastRow = ws.rowCount
+          for (let r = 2; r <= lastRow; r++) {
+            for (let c = 1; c <= 9; c++) {
+              const cell = ws.getRow(r).getCell(c)
+              cell.border = {
+                top: { style: 'thick' },
+                left: { style: 'thick' },
+                bottom: { style: 'thick' },
+                right: { style: 'thick' },
+              }
+              if (c >= 4 && r >= 3) {
+                if (c === 6) cell.numFmt = '0'; else cell.numFmt = '#,##0'
+              }
+            }
+          }
           summary.push({ 'Location': b.name || b.code || 'Unknown', 'Quantity': 0, 'Markup Amount': 0, 'Amount With Markup': 0, 'Amount Without Markup': 0 })
           continue
         }
@@ -417,9 +452,46 @@ function ReportsPageContent() {
         // Yield to UI so the spinner/progress can update
         await new Promise(r => setTimeout(r, 10))
         if (!arr.length) {
-          // Still add an empty sheet to represent the branch
-          const ws = XLSX.utils.aoa_to_sheet([["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"]])
-          XLSX.utils.book_append_sheet(wb, ws, safeName(b.name || b.code || 'Unknown'))
+          const sheetName = safeName(b.name || b.code || 'Unknown')
+          const ws = wb.addWorksheet(sheetName)
+          const title = `Summary of Items from ${b.name || b.code || 'Unknown'}`
+          const headers = ["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"]
+          ws.addRow([title])
+          ws.addRow(headers)
+          ws.addRow(['','TOTAL','','','',0,0,0,0])
+          ws.mergeCells('A1','I1')
+          ws.columns = [
+            { key: 'sn', width: 6 },
+            { key: 'items', width: 28 },
+            { key: 'category', width: 18 },
+            { key: 'original', width: 14 },
+            { key: 'markup', width: 12 },
+            { key: 'qty', width: 10 },
+            { key: 'markupAmt', width: 18 },
+            { key: 'amtWith', width: 20 },
+            { key: 'amtWithout', width: 20 },
+          ]
+          const titleCell = ws.getCell('A1')
+          titleCell.font = { bold: true, size: 13 }
+          titleCell.alignment = { horizontal: 'center' }
+          const headerRow = ws.getRow(2)
+          headerRow.font = { bold: true }
+          headerRow.alignment = { horizontal: 'center' }
+          const lastRow = ws.rowCount
+          for (let r = 2; r <= lastRow; r++) {
+            for (let c = 1; c <= 9; c++) {
+              const cell = ws.getRow(r).getCell(c)
+              cell.border = {
+                top: { style: 'thick' },
+                left: { style: 'thick' },
+                bottom: { style: 'thick' },
+                right: { style: 'thick' },
+              }
+              if (c >= 4 && r >= 3) {
+                if (c === 6) cell.numFmt = '0'; else cell.numFmt = '#,##0'
+              }
+            }
+          }
           summary.push({ 'Location': b.name || b.code || 'Unknown', 'Quantity': 0, 'Markup Amount': 0, 'Amount With Markup': 0, 'Amount Without Markup': 0 })
           continue
         }
@@ -470,8 +542,49 @@ function ReportsPageContent() {
           }
         })
 
-        const ws = XLSX.utils.json_to_sheet(sheetRows)
-        XLSX.utils.book_append_sheet(wb, ws, safeName(b.name || b.code || 'Unknown'))
+        const sheetName = safeName(b.name || b.code || 'Unknown')
+        const ws = wb.addWorksheet(sheetName)
+        const title = `Summary of Items from ${b.name || b.code || 'Unknown'}`
+        const headers = ["SN","Items","Category","Original Price","Markup","Quantity","Markup Amount","Amount With Markup","Amount Without Markup"]
+        ws.addRow([title])
+        ws.addRow(headers)
+        for (const rr of sheetRows) {
+          ws.addRow([rr['SN'], rr['Items'], rr['Category'], rr['Original Price'], rr['Markup'], rr['Quantity'], rr['Markup Amount'], rr['Amount With Markup'], rr['Amount Without Markup']])
+        }
+        ws.addRow(['','TOTAL','','','', totalQty, totalMarkupAmt, totalAmtWithMarkup, totalAmtWithoutMarkup])
+        ws.mergeCells('A1','I1')
+        ws.columns = [
+          { key: 'sn', width: 6 },
+          { key: 'items', width: 28 },
+          { key: 'category', width: 18 },
+          { key: 'original', width: 14 },
+          { key: 'markup', width: 12 },
+          { key: 'qty', width: 10 },
+          { key: 'markupAmt', width: 18 },
+          { key: 'amtWith', width: 20 },
+          { key: 'amtWithout', width: 20 },
+        ]
+        const titleCell = ws.getCell('A1')
+        titleCell.font = { bold: true, size: 13 }
+        titleCell.alignment = { horizontal: 'center' }
+        const headerRow = ws.getRow(2)
+        headerRow.font = { bold: true }
+        headerRow.alignment = { horizontal: 'center' }
+        const lastRow = ws.rowCount
+        for (let r = 2; r <= lastRow; r++) {
+          for (let c = 1; c <= 9; c++) {
+            const cell = ws.getRow(r).getCell(c)
+            cell.border = {
+              top: { style: 'thick' },
+              left: { style: 'thick' },
+              bottom: { style: 'thick' },
+              right: { style: 'thick' },
+            }
+            if (c >= 4 && r >= 3) {
+              if (c === 6) cell.numFmt = '0'; else cell.numFmt = '#,##0'
+            }
+          }
+        }
 
         summary.push({
           'Location': b.name || b.code || 'Unknown',
@@ -482,13 +595,53 @@ function ReportsPageContent() {
         })
       }
 
-      const summarySheet = XLSX.utils.json_to_sheet(summary)
-      XLSX.utils.book_append_sheet(wb, summarySheet, safeName('Summary'))
+      const summarySheet = wb.addWorksheet(safeName('Summary'))
+      summarySheet.addRow(['Summary of Items by Location'])
+      summarySheet.mergeCells('A1','E1')
+      summarySheet.addRow(['Location','Quantity','Markup Amount','Amount With Markup','Amount Without Markup'])
+      for (const row of summary) {
+        summarySheet.addRow([row['Location'], row['Quantity'], row['Markup Amount'], row['Amount With Markup'], row['Amount Without Markup']])
+      }
+      summarySheet.columns = [
+        { key: 'loc', width: 28 },
+        { key: 'qty', width: 12 },
+        { key: 'markupAmt', width: 18 },
+        { key: 'amtWith', width: 20 },
+        { key: 'amtWithout', width: 20 },
+      ]
+      const sumTitle = summarySheet.getCell('A1')
+      sumTitle.font = { bold: true, size: 13 }
+      sumTitle.alignment = { horizontal: 'center' }
+      const sumHeaderRow = summarySheet.getRow(2)
+      sumHeaderRow.font = { bold: true }
+      sumHeaderRow.alignment = { horizontal: 'center' }
+      const sumLastRow = summarySheet.rowCount
+      for (let r = 2; r <= sumLastRow; r++) {
+        for (let c = 1; c <= 5; c++) {
+          const cell = summarySheet.getRow(r).getCell(c)
+          cell.border = {
+            top: { style: 'thick' },
+            left: { style: 'thick' },
+            bottom: { style: 'thick' },
+            right: { style: 'thick' },
+          }
+          if (c >= 2 && r >= 3) {
+            if (c === 2) cell.numFmt = '0'; else cell.numFmt = '#,##0'
+          }
+        }
+      }
 
       const deptName = selectedDepartmentId === 'all'
         ? 'ALL_DEPTS'
         : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))
-      XLSX.writeFile(wb, `Items_Pack_${deptName}.xlsx`)
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Items_Pack_${deptName}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
     } catch (e) {
       console.error('Items Pack export failed:', e)
       alert(`Items Pack export failed: ${e.message}`)
