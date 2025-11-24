@@ -519,10 +519,9 @@ function ReportsPageContent() {
           const original = Number(r.original_price || 0)
           const markup = Number(r.markup || 0)
           const qty = Number(r.quantity || 0)
-          const recordedAmount = Number(r.amount || 0)
           const amountWithoutMarkup = original * qty
-          const markupAmount = Math.max(recordedAmount - amountWithoutMarkup, 0)
-          const amountWithMarkup = recordedAmount
+          const markupAmount = markup * qty
+          const amountWithMarkup = (original + markup) * qty
 
           totalQty += qty
           totalMarkupAmt += markupAmount
