@@ -18,6 +18,7 @@ function RepPostedPageContent() {
   const [nextCursor, setNextCursor] = useState(null)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
+  const [itemsPackLoading, setItemsPackLoading] = useState(false)
   const { user, logout } = useAuth()
   const router = useRouter()
 
@@ -191,6 +192,100 @@ function RepPostedPageContent() {
     doc.save('rep_posted_manifest.pdf')
   }
 
+  const exportItemsPack = async () => {
+    try {
+      setItemsPackLoading(true)
+      const qs = new URLSearchParams()
+      if (dept) qs.set('dept', dept)
+      const res = await fetch(`/api/rep/items-pack?${qs.toString()}`, { cache: 'no-store' })
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) throw new Error(`Unexpected response (${res.status})`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load items pack')
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Items Pack')
+
+      const branchLabel = json.branch?.name || json.branch?.code || (user?.branchCode || 'Branch')
+      const title = `Summary of Items from ${branchLabel}${dept ? ' — ' + dept : ''}`
+      const headers = ['SN','Items','Category','Price','Quantity','Amount']
+
+      ws.addRow([title])
+      ws.addRow(headers)
+
+      let sn = 0
+      let totalQty = 0
+      let totalAmount = 0
+
+      const sorted = [...(json.rows || [])].sort((a,b)=>{
+        const ac = String(a.category||'').toLowerCase()
+        const bc = String(b.category||'').toLowerCase()
+        if (ac < bc) return -1
+        if (ac > bc) return 1
+        const ai = String(a.items||'').toLowerCase()
+        const bi = String(b.items||'').toLowerCase()
+        if (ai < bi) return -1
+        if (ai > bi) return 1
+        return 0
+      })
+
+      for (const r of sorted) {
+        sn += 1
+        const original = Number(r.original_price || 0)
+        const markup = Number(r.markup || 0)
+        const qty = Number(r.quantity || 0)
+        const price = original + markup
+        const amount = price * qty
+        totalQty += qty
+        totalAmount += amount
+        ws.addRow([sn, r.items, r.category || '', price, qty, amount])
+      }
+
+      ws.addRow(['','TOTAL','','', totalQty, totalAmount])
+      ws.mergeCells('A1','F1')
+      ws.columns = [
+        { key:'sn', width:6 },
+        { key:'items', width:28 },
+        { key:'category', width:18 },
+        { key:'price', width:14 },
+        { key:'qty', width:10 },
+        { key:'amount', width:18 },
+      ]
+      const titleCell = ws.getCell('A1')
+      titleCell.font = { bold:true, size:13 }
+      titleCell.alignment = { horizontal:'center' }
+      const headerRow = ws.getRow(2)
+      headerRow.font = { bold:true }
+      headerRow.alignment = { horizontal:'center' }
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        for (let c = 1; c <= 6; c++) {
+          const cell = ws.getRow(r).getCell(c)
+          cell.border = { top:{style:'thick'}, left:{style:'thick'}, bottom:{style:'thick'}, right:{style:'thick'} }
+          if (c >= 4 && r >= 3) {
+            if (c === 5) cell.numFmt = '0'; else cell.numFmt = '#,##0'
+          }
+        }
+      }
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Items_Pack_${branchLabel}_${dept || 'ALL_DEPTS'}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Rep Items Pack export failed:', e)
+      alert(`Items Pack export failed: ${e.message}`)
+    } finally {
+      setItemsPackLoading(false)
+    }
+  }
+
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
       <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-4">Rep — Posted Orders</h1>
@@ -237,6 +332,7 @@ function RepPostedPageContent() {
           />
           <button className="px-2 py-2 border rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>setSearch(searchInput.trim())}>Search</button>
         </div>
+        <button className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-purple-400" disabled={itemsPackLoading} onClick={exportItemsPack}>{itemsPackLoading ? 'Preparing…' : 'Items Pack'}</button>
         <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
         <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
