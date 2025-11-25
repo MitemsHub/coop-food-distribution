@@ -332,7 +332,21 @@ function RepPostedPageContent() {
           />
           <button className="px-2 py-2 border rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>setSearch(searchInput.trim())}>Search</button>
         </div>
-        <button className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-purple-400" disabled={itemsPackLoading} onClick={exportItemsPack}>{itemsPackLoading ? 'Preparing…' : 'Items Pack'}</button>
+        <button
+          className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-purple-400 flex items-center justify-center gap-2"
+          disabled={itemsPackLoading}
+          onClick={exportItemsPack}
+          aria-busy={itemsPackLoading}
+        >
+          {itemsPackLoading ? (
+            <>
+              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>Exporting…</span>
+            </>
+          ) : (
+            'Items Pack'
+          )}
+        </button>
         <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
         <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
@@ -467,6 +481,8 @@ function RepPostedPageContent() {
           </div>
         </div>
       )}
+
+      {/* Simple button-only loader (no overlay) */}
     </div>
   )
 }
