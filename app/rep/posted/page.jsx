@@ -137,7 +137,26 @@ function RepPostedPageContent() {
     })))
     if (!rows.length) return alert('No rows to export')
     const headers = Object.keys(rows[0])
-    const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))].join('\n')
+    const bodyLines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))
+
+    // Footer rows: empty spacer, SIGNATURE/DATE at last two columns, Issued/Received under column C
+    const empty = headers.map(()=> '""').join(',')
+    const sigDate = headers.map((_, i) => {
+      if (i === headers.length - 2) return '"SIGNATURE"'
+      if (i === headers.length - 1) return '"DATE"'
+      return '""'
+    }).join(',')
+    const issued = headers.map((_, i) => i === 2 ? '"ITEMS ISSUED BY"' : '""').join(',')
+    const received = headers.map((_, i) => i === 2 ? '"ITEMS RECEIVED BY"' : '""').join(',')
+
+    const csv = [
+      headers.join(','),
+      ...bodyLines,
+      empty,
+      sigDate,
+      issued,
+      received
+    ].join('\n')
     const blob = new Blob([csv], { type:'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob); const a = document.createElement('a')
     a.href = url; a.download = 'rep_posted.csv'; a.click(); URL.revokeObjectURL(url)
@@ -187,6 +206,18 @@ function RepPostedPageContent() {
         7: { halign: 'right' },
         8: { halign: 'right' },
       }
+    })
+    // Footer rows appended after main table
+    const makeRow = (mapper) => headers.map((_, i) => mapper(i))
+    const sigDateRow = makeRow(i => i === headers.length - 2 ? 'SIGNATURE' : (i === headers.length - 1 ? 'DATE' : ''))
+    const issuedRow = makeRow(i => i === 2 ? 'ITEMS ISSUED BY' : '')
+    const receivedRow = makeRow(i => i === 2 ? 'ITEMS RECEIVED BY' : '')
+    autoTable(doc, {
+      head: [],
+      body: [sigDateRow, issuedRow, receivedRow],
+      startY: (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 6 : undefined,
+      styles: { fontSize: 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
+      theme: 'grid'
     })
 
     doc.save('rep_posted_manifest.pdf')
@@ -243,7 +274,17 @@ function RepPostedPageContent() {
         ws.addRow([sn, r.items, r.category || '', price, qty, amount])
       }
 
+      // Totals row
       ws.addRow(['','TOTAL','','', totalQty, totalAmount])
+
+      // Record the row number of totals to control numeric formatting
+      const totalsRowNumber = ws.rowCount
+
+      // Footer rows: SIGNATURE/DATE at right, move Issued/Received under column C
+      ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
+      ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
+      ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
+
       ws.mergeCells('A1','F1')
       ws.columns = [
         { key:'sn', width:6 },
@@ -264,7 +305,8 @@ function RepPostedPageContent() {
         for (let c = 1; c <= 6; c++) {
           const cell = ws.getRow(r).getCell(c)
           cell.border = { top:{style:'thick'}, left:{style:'thick'}, bottom:{style:'thick'}, right:{style:'thick'} }
-          if (c >= 4 && r >= 3) {
+          // Apply numeric formats only for data and totals rows, not footer rows
+          if (r >= 3 && r <= totalsRowNumber && c >= 4) {
             if (c === 5) cell.numFmt = '0'; else cell.numFmt = '#,##0'
           }
         }
@@ -283,6 +325,182 @@ function RepPostedPageContent() {
       alert(`Items Pack export failed: ${e.message}`)
     } finally {
       setItemsPackLoading(false)
+    }
+  }
+
+  const exportItemsPackCSV = async () => {
+    try {
+      const qs = new URLSearchParams()
+      if (dept) qs.set('dept', dept)
+      const res = await fetch(`/api/rep/items-pack?${qs.toString()}`, { cache: 'no-store' })
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) throw new Error(`Unexpected response (${res.status})`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load items pack')
+
+      const branchLabel = json.branch?.name || json.branch?.code || (user?.branchCode || 'Branch')
+      const title = `Summary of Items from ${branchLabel}${dept ? ' — ' + dept : ''}`
+      const headers = ['SN','Items','Category','Price','Quantity','Amount']
+
+      const sorted = [...(json.rows || [])].sort((a,b)=>{
+        const ac = String(a.category||'').toLowerCase()
+        const bc = String(b.category||'').toLowerCase()
+        if (ac < bc) return -1
+        if (ac > bc) return 1
+        const ai = String(a.items||'').toLowerCase()
+        const bi = String(b.items||'').toLowerCase()
+        if (ai < bi) return -1
+        if (ai > bi) return 1
+        return 0
+      })
+
+      let sn = 0
+      let totalQty = 0
+      let totalAmount = 0
+      const rows = sorted.map(r => {
+        sn += 1
+        const original = Number(r.original_price || 0)
+        const markup = Number(r.markup || 0)
+        const qty = Number(r.quantity || 0)
+        const price = original + markup
+        const amount = price * qty
+        totalQty += qty
+        totalAmount += amount
+        return {
+          SN: sn,
+          Items: r.items,
+          Category: r.category || '',
+          Price: Number(price).toLocaleString(),
+          Quantity: Number(qty).toLocaleString(),
+          Amount: Number(amount).toLocaleString()
+        }
+      })
+
+      const totalsRow = {
+        SN: '', Items: 'TOTAL', Category: '', Price: '', Quantity: Number(totalQty).toLocaleString(), Amount: Number(totalAmount).toLocaleString()
+      }
+
+      const csvLines = []
+      csvLines.push(title)
+      csvLines.push(headers.join(','))
+      const sanitize = s => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/"/g, '""')
+      const headerKeys = headers
+      rows.forEach(r => {
+        csvLines.push(headerKeys.map(h => `"${sanitize(r[h])}"`).join(','))
+      })
+      csvLines.push(headerKeys.map(h => `"${sanitize(totalsRow[h])}"`).join(','))
+      // Footer rows
+      const empty = headerKeys.map(()=> '""').join(',')
+      const sigDate = headerKeys.map((_, i) => {
+        if (i === headerKeys.length - 2) return '"SIGNATURE"'
+        if (i === headerKeys.length - 1) return '"DATE"'
+        return '""'
+      }).join(',')
+      const issued = headerKeys.map((_, i) => i === 2 ? '"ITEMS ISSUED BY"' : '""').join(',')
+      const received = headerKeys.map((_, i) => i === 2 ? '"ITEMS RECEIVED BY"' : '""').join(',')
+      csvLines.push(empty)
+      csvLines.push(sigDate)
+      csvLines.push(issued)
+      csvLines.push(received)
+
+      const blob = new Blob([csvLines.join('\n')], { type:'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Items_Pack_${branchLabel}_${dept || 'ALL_DEPTS'}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Rep Items Pack CSV export failed:', e)
+      alert(`Items Pack CSV export failed: ${e.message}`)
+    }
+  }
+
+  const exportItemsPackPDF = async () => {
+    try {
+      const qs = new URLSearchParams()
+      if (dept) qs.set('dept', dept)
+      const res = await fetch(`/api/rep/items-pack?${qs.toString()}`, { cache: 'no-store' })
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) throw new Error(`Unexpected response (${res.status})`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load items pack')
+
+      const { jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF()
+
+      const branchLabel = json.branch?.name || json.branch?.code || (user?.branchCode || 'Branch')
+      const title = `Summary of Items from ${branchLabel}${dept ? ' — ' + dept : ''}`
+      doc.setFontSize(16); doc.text(title, 14, 22)
+      doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30)
+
+      const headers = ['SN','Items','Category','Price','Quantity','Amount']
+      const sanitize = s => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ')
+      const sorted = [...(json.rows || [])].sort((a,b)=>{
+        const ac = String(a.category||'').toLowerCase()
+        const bc = String(b.category||'').toLowerCase()
+        if (ac < bc) return -1
+        if (ac > bc) return 1
+        const ai = String(a.items||'').toLowerCase()
+        const bi = String(b.items||'').toLowerCase()
+        if (ai < bi) return -1
+        if (ai > bi) return 1
+        return 0
+      })
+
+      let sn = 0
+      let totalQty = 0
+      let totalAmount = 0
+      const body = sorted.map(r => {
+        sn += 1
+        const original = Number(r.original_price || 0)
+        const markup = Number(r.markup || 0)
+        const qty = Number(r.quantity || 0)
+        const price = original + markup
+        const amount = price * qty
+        totalQty += qty
+        totalAmount += amount
+        return [
+          String(sn),
+          sanitize(r.items),
+          sanitize(r.category || ''),
+          `NGN ${Number(price).toLocaleString()}`,
+          Number(qty).toLocaleString(),
+          `NGN ${Number(amount).toLocaleString()}`
+        ]
+      })
+
+      const totalsRow = [ '', 'TOTAL', '', '', Number(totalQty).toLocaleString(), `NGN ${Number(totalAmount).toLocaleString()}` ]
+      const tableData = [...body, totalsRow]
+
+      autoTable(doc, {
+        head: [headers],
+        body: tableData,
+        startY: 36,
+        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
+        headStyles: { fillColor: [75, 85, 99] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        theme: 'grid'
+      })
+
+      // Footer rows
+      const makeRow = (mapper) => headers.map((_, i) => mapper(i))
+      const sigDateRow = makeRow(i => i === headers.length - 2 ? 'SIGNATURE' : (i === headers.length - 1 ? 'DATE' : ''))
+      const issuedRow = makeRow(i => i === 2 ? 'ITEMS ISSUED BY' : '')
+      const receivedRow = makeRow(i => i === 2 ? 'ITEMS RECEIVED BY' : '')
+      autoTable(doc, {
+        head: [],
+        body: [sigDateRow, issuedRow, receivedRow],
+        startY: (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 6 : undefined,
+        styles: { fontSize: 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
+        theme: 'grid'
+      })
+
+      doc.save(`Items_Pack_${branchLabel}_${dept || 'ALL_DEPTS'}.pdf`)
+    } catch (e) {
+      console.error('Rep Items Pack PDF export failed:', e)
+      alert(`Items Pack PDF export failed: ${e.message}`)
     }
   }
 
@@ -347,6 +565,8 @@ function RepPostedPageContent() {
             'Items Pack'
           )}
         </button>
+        <button className="px-2 py-2 bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportItemsPackCSV}>Items Pack CSV</button>
+        <button className="px-2 py-2 bg-emerald-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportItemsPackPDF}>Items Pack PDF</button>
         <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
         <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>

@@ -154,15 +154,15 @@ function ReportsPageContent() {
       : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
     // Raw rows for totals (numeric values)
     const rawRows = filtered.map((r, idx) => {
-      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const original = Number(r?.original_price || 0)
       const qty = Number(r?.quantity || 0)
-      const amount = Number(r?.amount || (price * qty))
+      const amount = original * qty
       return {
         sn: idx + 1,
         'delivery location': branchName,
         items: r.items || '',
         qty,
-        price,
+        price: original,
         amount
       }
     })
@@ -179,7 +179,9 @@ function ReportsPageContent() {
     const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.csv`
     exportCSV(rows, filename, {
       heading,
-      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' }
+      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' },
+      footer: true,
+      footerColumnIndex: 2
     })
   }
 
@@ -194,15 +196,15 @@ function ReportsPageContent() {
       : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
 
     const rawRows = filtered.map((r, idx) => {
-      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const original = Number(r?.original_price || 0)
       const qty = Number(r?.quantity || 0)
-      const amount = Number(r?.amount || (price * qty))
+      const amount = original * qty
       return {
         sn: idx + 1,
         'delivery location': branchName,
         items: r.items || '',
         qty,
-        price,
+        price: original,
         amount
       }
     })
@@ -215,7 +217,9 @@ function ReportsPageContent() {
 
     exportPDF(rows, `Summary of Items - ${branchName} - ${departmentName}`, {
       filters: { 'Delivery Location': branchName, 'Department': departmentName },
-      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' }
+      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' },
+      footer: true,
+      footerColumnIndex: 2
     })
   }
 
@@ -230,10 +234,10 @@ function ReportsPageContent() {
       : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
 
     const rows = filtered.map((r, idx) => {
-      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const original = Number(r?.original_price || 0)
       const qty = Number(r?.quantity || 0)
-      const amount = Number(r?.amount || (price * qty))
-      return { sn: idx + 1, location: branchName, item: r.items || '', qty, price, amount }
+      const amount = original * qty
+      return { sn: idx + 1, location: branchName, item: r.items || '', qty, price: original, amount }
     })
 
     const totalQty = rows.reduce((acc, r) => acc + Number(r.qty || 0), 0)
@@ -272,6 +276,23 @@ function ReportsPageContent() {
         cell.font = { bold: true }
       })
 
+      // Record totals row index to limit numeric formatting to data rows
+      const totalsRowNumber = ws.rowCount
+
+      // Footer write as per provided screenshot
+      const sigRow = ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
+      sigRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+      })
+      const issuedRow = ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
+      issuedRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+      })
+      const receivedRow = ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
+      receivedRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+      })
+
       ws.columns = [
         { width: 6 },
         { width: 24 },
@@ -282,7 +303,7 @@ function ReportsPageContent() {
       ]
 
       const lastRow = ws.rowCount
-      for (let r = 3; r <= lastRow; r++) {
+      for (let r = 3; r <= totalsRowNumber; r++) {
         ws.getCell(`D${r}`).numFmt = '#,##0'
         ws.getCell(`E${r}`).numFmt = '#,##0'
         ws.getCell(`F${r}`).numFmt = '#,##0'
@@ -426,16 +447,34 @@ function ReportsPageContent() {
       lines.push(options.heading)
     }
     lines.push(headers.join(','))
+    const bodyLines = exportRows.map(r => headers
+      .map(h => {
+        const raw = String(r[h] ?? '')
+        const sanitized = raw.replace(/\u20A6|₦/g, 'NGN ')
+        return `"${sanitized.replace(/"/g, '""')}"`
+      })
+      .join(',')
+    )
+
+    // Optional footer rows: Signature/Date, Issued/Received labels
+    let footerLines = []
+    if (options.footer) {
+      const footerCol = Number(options.footerColumnIndex ?? 0)
+      const empty = headers.map(()=> '""').join(',')
+      const sigDate = headers.map((_, i) => {
+        if (i === headers.length - 2) return '"SIGNATURE"'
+        if (i === headers.length - 1) return '"DATE"'
+        return '""'
+      }).join(',')
+      const issued = headers.map((_, i) => i === footerCol ? '"ITEMS ISSUED BY"' : '""').join(',')
+      const received = headers.map((_, i) => i === footerCol ? '"ITEMS RECEIVED BY"' : '""').join(',')
+      footerLines = [empty, sigDate, issued, received]
+    }
+
     const csv = [
       ...lines,
-      ...exportRows.map(r => headers
-        .map(h => {
-          const raw = String(r[h] ?? '')
-          const sanitized = raw.replace(/\u20A6|₦/g, 'NGN ')
-          return `"${sanitized.replace(/"/g, '""')}"`
-        })
-        .join(',')
-      )
+      ...bodyLines,
+      ...footerLines
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -511,6 +550,22 @@ function ReportsPageContent() {
         alternateRowStyles: { fillColor: [249, 250, 251] },
         theme: 'grid'
       })
+
+      // Optional footer section appended after the table
+      if (options.footer) {
+        const footerCol = Number(options.footerColumnIndex ?? 0)
+        const makeRow = (mapper) => headers.map((_, i) => mapper(i))
+        const sigDateRow = makeRow(i => i === headers.length - 2 ? 'SIGNATURE' : (i === headers.length - 1 ? 'DATE' : ''))
+        const issuedRow = makeRow(i => i === footerCol ? 'ITEMS ISSUED BY' : '')
+        const receivedRow = makeRow(i => i === footerCol ? 'ITEMS RECEIVED BY' : '')
+        autoTable(doc, {
+          head: [],
+          body: [sigDateRow, issuedRow, receivedRow],
+          startY: (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 6 : undefined,
+          styles: { fontSize: 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
+          theme: 'grid'
+        })
+      }
       
       // Save the PDF
       doc.save(`${title.replace(/\s+/g, '_').toLowerCase()}.pdf`)
@@ -1134,9 +1189,9 @@ function ReportsPageContent() {
       {(() => {
         const baseRows = (summarySelectedItems.length ? demandRows.filter(r => summarySelectedItems.includes(r.items)) : demandRows)
         const formattedRows = baseRows.map((r, idx) => {
-          const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+          const original = Number(r?.original_price || 0)
           const qty = Number(r?.quantity || 0)
-          const amount = Number(r?.amount || (price * qty))
+          const amount = original * qty
           return {
             sn: idx + 1,
             'delivery location': selectedDeliveryCode === 'all'
@@ -1144,7 +1199,7 @@ function ReportsPageContent() {
               : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode),
             items: r.items,
             qty: qty.toLocaleString(),
-            price: price.toLocaleString(),
+            price: original.toLocaleString(),
             amount: amount.toLocaleString()
           }
         })
