@@ -565,8 +565,7 @@ function RepPostedPageContent() {
             'Items Pack'
           )}
         </button>
-        <button className="px-2 py-2 bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportItemsPackCSV}>Items Pack CSV</button>
-        <button className="px-2 py-2 bg-emerald-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportItemsPackPDF}>Items Pack PDF</button>
+        {/* Items Pack CSV/PDF buttons temporarily removed as requested */}
         <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
         <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
