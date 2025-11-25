@@ -89,6 +89,23 @@ function ReportsPageContent() {
   const [demandLoading, setDemandLoading] = useState(false)
   const [demandErr, setDemandErr] = useState(null)
   const [demandCurrentPage, setDemandCurrentPage] = useState(1)
+  const [summaryCurrentPage, setSummaryCurrentPage] = useState(1)
+
+  // Summary of Items: selection state
+  const [summarySelectedItems, setSummarySelectedItems] = useState([])
+  const summaryItemOptions = useMemo(() => {
+    const names = new Set()
+    demandRows.forEach(r => {
+      if (r?.items) names.add(r.items)
+    })
+    return Array.from(names).sort()
+  }, [demandRows])
+
+  useEffect(() => {
+    // Reset selection when source rows change (filters updated)
+    setSummarySelectedItems([])
+    setSummaryCurrentPage(1)
+  }, [demandRows])
 
   // Branch Item Prices Matrix loader removed
 
@@ -125,6 +142,166 @@ function ReportsPageContent() {
       }
     })()
   }, [selectedDeliveryCode, selectedDepartmentId])
+
+  const exportSummaryCSV = () => {
+    const selectedSet = new Set(summarySelectedItems)
+    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = selectedDeliveryCode === 'all'
+      ? 'All Delivery Locations'
+      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
+    const departmentName = selectedDepartmentId === 'all'
+      ? 'All Departments'
+      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+    // Raw rows for totals (numeric values)
+    const rawRows = filtered.map((r, idx) => {
+      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const qty = Number(r?.quantity || 0)
+      const amount = Number(r?.amount || (price * qty))
+      return {
+        sn: idx + 1,
+        'delivery location': branchName,
+        items: r.items || '',
+        qty,
+        price,
+        amount
+      }
+    })
+
+    // Formatted rows with commas
+    const rows = rawRows.map(r => ({
+      ...r,
+      qty: Number(r.qty).toLocaleString(),
+      price: Number(r.price).toLocaleString(),
+      amount: Number(r.amount).toLocaleString()
+    }))
+
+    const heading = `Summary of Items - ${branchName} - ${departmentName}`
+    const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.csv`
+    exportCSV(rows, filename, {
+      heading,
+      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' }
+    })
+  }
+
+  const exportSummaryPDF = () => {
+    const selectedSet = new Set(summarySelectedItems)
+    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = selectedDeliveryCode === 'all'
+      ? 'All Delivery Locations'
+      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
+    const departmentName = selectedDepartmentId === 'all'
+      ? 'All Departments'
+      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+
+    const rawRows = filtered.map((r, idx) => {
+      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const qty = Number(r?.quantity || 0)
+      const amount = Number(r?.amount || (price * qty))
+      return {
+        sn: idx + 1,
+        'delivery location': branchName,
+        items: r.items || '',
+        qty,
+        price,
+        amount
+      }
+    })
+    const rows = rawRows.map(r => ({
+      ...r,
+      qty: Number(r.qty).toLocaleString(),
+      price: Number(r.price).toLocaleString(),
+      amount: Number(r.amount).toLocaleString()
+    }))
+
+    exportPDF(rows, `Summary of Items - ${branchName} - ${departmentName}`, {
+      filters: { 'Delivery Location': branchName, 'Department': departmentName },
+      totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' }
+    })
+  }
+
+  const exportSummaryExcel = async () => {
+    const selectedSet = new Set(summarySelectedItems)
+    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = selectedDeliveryCode === 'all'
+      ? 'All Delivery Locations'
+      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
+    const departmentName = selectedDepartmentId === 'all'
+      ? 'All Departments'
+      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+
+    const rows = filtered.map((r, idx) => {
+      const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+      const qty = Number(r?.quantity || 0)
+      const amount = Number(r?.amount || (price * qty))
+      return { sn: idx + 1, location: branchName, item: r.items || '', qty, price, amount }
+    })
+
+    const totalQty = rows.reduce((acc, r) => acc + Number(r.qty || 0), 0)
+    const totalAmount = rows.reduce((acc, r) => acc + Number(r.amount || 0), 0)
+
+    try {
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Summary of Items')
+
+      const heading = `Summary of Items - ${branchName} - ${departmentName}`
+      ws.addRow([heading])
+      ws.mergeCells('A1','F1')
+      ws.getRow(1).font = { bold: true, size: 14 }
+      ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
+
+      const headerRow = ws.addRow(['SN','Delivery Location','Items','Qty','Price','Amount'])
+      headerRow.font = { bold: true }
+      headerRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+        cell.alignment = { vertical: 'middle', horizontal: 'center' }
+      })
+
+      rows.forEach(r => {
+        const row = ws.addRow([r.sn, r.location, r.item, r.qty, r.price, r.amount])
+        row.eachCell(cell => {
+          cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        })
+      })
+
+      const totalsRow = ws.addRow(['', '','TOTAL', totalQty, '', totalAmount])
+      totalsRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        cell.font = { bold: true }
+      })
+
+      ws.columns = [
+        { width: 6 },
+        { width: 24 },
+        { width: 28 },
+        { width: 10 },
+        { width: 12 },
+        { width: 14 }
+      ]
+
+      const lastRow = ws.rowCount
+      for (let r = 3; r <= lastRow; r++) {
+        ws.getCell(`D${r}`).numFmt = '#,##0'
+        ws.getCell(`E${r}`).numFmt = '#,##0'
+        ws.getCell(`F${r}`).numFmt = '#,##0'
+      }
+
+      const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.xlsx`
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting Excel:', error)
+      alert('Error exporting Excel. Please try again.')
+    }
+  }
 
   // Branch Item Prices Matrix calculations removed
 
@@ -223,10 +400,14 @@ function ReportsPageContent() {
       headers.forEach(h => {
         if (options.totals.sumKeys.includes(h)) {
           const sum = rawRows.reduce((acc, r) => acc + Number(r[h] || 0), 0)
+          const sumStr = Number(sum).toLocaleString()
           if (h.toLowerCase() === 'amount' || h.toLowerCase() === 'price') {
-            totalsRow[h] = `NGN ${Number(sum).toLocaleString()}`
+            const prefix = options.totals && Object.prototype.hasOwnProperty.call(options.totals, 'currencyPrefix')
+              ? options.totals.currencyPrefix
+              : 'NGN '
+            totalsRow[h] = `${prefix ?? ''}${sumStr}`
           } else {
-            totalsRow[h] = Number(sum).toLocaleString()
+            totalsRow[h] = sumStr
           }
         } else if (h === options.totals.labelKey) {
           totalsRow[h] = options.totals.label || 'TOTAL'
@@ -240,8 +421,13 @@ function ReportsPageContent() {
     }
 
     const headers = Object.keys(exportRows[0])
+    const lines = []
+    if (options.heading) {
+      lines.push(options.heading)
+    }
+    lines.push(headers.join(','))
     const csv = [
-      headers.join(','),
+      ...lines,
       ...exportRows.map(r => headers
         .map(h => {
           const raw = String(r[h] ?? '')
@@ -320,9 +506,10 @@ function ReportsPageContent() {
         head: [headers],
         body: tableData,
         startY: options.filters ? 44 : 40,
-        styles: { fontSize: 8 },
+        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
         headStyles: { fillColor: [75, 85, 99] },
-        alternateRowStyles: { fillColor: [249, 250, 251] }
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        theme: 'grid'
       })
       
       // Save the PDF
@@ -943,6 +1130,129 @@ function ReportsPageContent() {
         )}
       />
 
+      {/* Summary of Items Section with pagination and Excel export */}
+      {(() => {
+        const baseRows = (summarySelectedItems.length ? demandRows.filter(r => summarySelectedItems.includes(r.items)) : demandRows)
+        const formattedRows = baseRows.map((r, idx) => {
+          const price = Number(r?.original_price || 0) + Number(r?.markup || 0)
+          const qty = Number(r?.quantity || 0)
+          const amount = Number(r?.amount || (price * qty))
+          return {
+            sn: idx + 1,
+            'delivery location': selectedDeliveryCode === 'all'
+              ? 'All Delivery Locations'
+              : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode),
+            items: r.items,
+            qty: qty.toLocaleString(),
+            price: price.toLocaleString(),
+            amount: amount.toLocaleString()
+          }
+        })
+        const startIndex = (summaryCurrentPage - 1) * itemsPerPage
+        const paginatedRows = formattedRows.slice(startIndex, startIndex + itemsPerPage)
+        const totalPages = Math.ceil(formattedRows.length / itemsPerPage) || 1
+
+        return (
+          <PaginatedSection
+            title="Summary of Items"
+            data={paginatedRows}
+            allData={formattedRows}
+            cols={[
+              ['sn', 'SN'],
+              ['delivery location', 'Delivery Location'],
+              ['items', 'Items'],
+              ['qty', 'Qty'],
+              ['price', 'Price'],
+              ['amount', 'Amount']
+            ]}
+            currentPage={summaryCurrentPage}
+            setCurrentPage={setSummaryCurrentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            onExportCSV={exportSummaryCSV}
+            onExportPDF={exportSummaryPDF}
+            onExportExcel={exportSummaryExcel}
+            filter={(
+              <div className="flex gap-6 mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Delivery Location</label>
+                  <select
+                    value={selectedDeliveryCode}
+                    onChange={e => setSelectedDeliveryCode(e.target.value)}
+                    className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="all">All Delivery Locations</option>
+                    {branches.map(b => (
+                      <option key={b.code} value={b.code}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Department</label>
+                  <select
+                    value={selectedDepartmentId}
+                    onChange={e => setSelectedDepartmentId(e.target.value)}
+                    className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Items</label>
+                  <div className="flex items-center gap-3 mb-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+                      onClick={() => setSummarySelectedItems(summaryItemOptions)}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+                      onClick={() => setSummarySelectedItems([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-auto border rounded p-2">
+                    {summaryItemOptions.length === 0 && (
+                      <div className="text-sm text-gray-500">No items available for current filters.</div>
+                    )}
+                    {summaryItemOptions.map(name => {
+                      const checked = summarySelectedItems.includes(name)
+                      return (
+                        <label key={name} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setSummarySelectedItems(prev => {
+                                const set = new Set(prev)
+                                if (set.has(name)) {
+                                  set.delete(name)
+                                } else {
+                                  set.add(name)
+                                }
+                                return Array.from(set)
+                              })
+                            }}
+                          />
+                          <span>{name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          />
+        )
+      })()}
+
       {/* Branch Item Prices Matrix removed */}
     </div>
   )
@@ -980,7 +1290,7 @@ function BranchFilter({ value, onChange, label, branches }) {
   )
 }
 
-function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportCSV, onExportPDF, onExportItemsPack, filter, itemsPackLoading = false, itemsPackProgress = { current: 0, total: 0 } }) {
+function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportCSV, onExportPDF, onExportItemsPack, onExportExcel, filter, itemsPackLoading = false, itemsPackProgress = { current: 0, total: 0 } }) {
   const showPagination = allData?.length > itemsPerPage
 
   return (
@@ -1005,6 +1315,14 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
               ) : (
                 'Items Pack'
               )}
+            </button>
+          )}
+          {onExportExcel && (
+            <button 
+              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700" 
+              onClick={onExportExcel}
+            >
+              Export Excel
             </button>
           )}
           <button 
