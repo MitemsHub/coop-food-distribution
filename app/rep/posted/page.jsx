@@ -19,6 +19,8 @@ function RepPostedPageContent() {
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
   const [itemsPackLoading, setItemsPackLoading] = useState(false)
+  const [excelLoading, setExcelLoading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
   const { user, logout } = useAuth()
   const router = useRouter()
 
@@ -122,28 +124,28 @@ function RepPostedPageContent() {
       return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
     const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ({
-      id:o.member_id,
-      order_id:o.order_id,
-      posted_at:o.posted_at,
-      member:o.member_name_snapshot,
-      member_branch:o.member_branch?.name||'',
-      delivery:o.delivery?.name||'',
-      department:o.departments?.name||'',
-      payment:o.payment_option,
-      item:l.items?.name,
-      qty:l.qty,
-      unit_price:l.unit_price,
-      amount:l.amount
+      ID:o.member_id,
+      Order:o.order_id,
+      Member:o.member_name_snapshot,
+      Dept:o.departments?.name||'',
+      Pay:o.payment_option,
+      Item:l.items?.name,
+      Qty:Number(l.qty||0),
+      'Unit Price':Number(l.unit_price||0),
+      Amount:Number(l.amount||0),
+      Remarks:'',
+      Sign:''
     })))
     if (!rows.length) return alert('No rows to export')
-    const headers = Object.keys(rows[0])
+    const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
     const bodyLines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))
 
     // Footer rows: empty spacer, SIGNATURE/DATE at last two columns, Issued/Received under column C
     const empty = headers.map(()=> '""').join(',')
     const sigDate = headers.map((_, i) => {
-      if (i === headers.length - 2) return '"SIGNATURE"'
-      if (i === headers.length - 1) return '"DATE"'
+      // Place DATE in column E (index 4), SIGN in column F (index 5)
+      if (i === 4) return '"DATE"'
+      if (i === 5) return '"SIGN"'
       return '""'
     }).join(',')
     const issued = headers.map((_, i) => i === 2 ? '"ITEMS ISSUED BY"' : '""').join(',')
@@ -164,19 +166,30 @@ function RepPostedPageContent() {
 
   const exportPDF = async () => {
     if (!orders.length) return alert('No rows to export')
-    const { jsPDF } = await import('jspdf')
-    const { default: autoTable } = await import('jspdf-autotable')
-    const doc = new jsPDF()
+    setPdfLoading(true)
+    try {
+      const { jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      // Use A4 landscape to give more horizontal room for 11 columns
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
-    // Header
+    // Determine delivery branch from filtered data
+    const filteredForHeader = !search ? orders : orders.filter(o => {
+      const s = search.toLowerCase()
+      return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
+    })
+    const branchSet = new Set(filteredForHeader.map(o => o?.delivery?.name).filter(Boolean))
+    const branchLabel = branchSet.size === 1 ? [...branchSet][0] : (branchSet.size > 1 ? 'Multiple Delivery Branches' : 'All Delivery Branches')
+
+    // Header (first page)
     doc.setFontSize(14)
-    doc.text('Posted Orders Manifest', 14, 18)
-    doc.setFontSize(10)
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 24)
-    if (dept) doc.text(`Department: ${dept}`, 14, 30)
+    doc.text('Posted Orders Manifest', 12, 12)
+    doc.setFontSize(9)
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
+    doc.text(`Delivery Branch: ${branchLabel}${dept ? '  |  Department: ' + dept : ''}`, 12, 24)
 
     // Build table rows
-    const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount']
+    const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
     const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
     const filtered = !search ? orders : orders.filter(o => {
       const s = search.toLowerCase()
@@ -192,24 +205,72 @@ function RepPostedPageContent() {
       String(l.qty || 0),
       `NGN ${Number(l.unit_price || 0).toLocaleString()}`,
       `NGN ${Number(l.amount || 0).toLocaleString()}`,
+      '',
+      '',
     ])))
+
+    // Compute totals for Qty and Amount
+    const lineItems = filtered.flatMap(o => (o.order_lines || []))
+    const totalQty = lineItems.reduce((acc, l) => acc + Number(l?.qty || 0), 0)
+    const totalAmount = lineItems.reduce((acc, l) => acc + Number(l?.amount || 0), 0)
+    // Create a foot row: label under Item, totals under Qty and Amount
+    const footRow = headers.map((_, i) => {
+      if (i === 5) return 'TOTAL'
+      if (i === 6) return String(totalQty)
+      if (i === 8) return `NGN ${Number(totalAmount).toLocaleString()}`
+      return ''
+    })
 
     autoTable(doc, {
       head: [headers],
       body: rows,
-      startY: dept ? 34 : 28,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [75, 85, 99] },
+      foot: [footRow],
+      showFoot: 'lastPage',
+      startY: 30,
+      margin: { top: 28, left: 10, right: 10 },
+      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
+      headStyles: { fillColor: [75, 85, 99], fontSize: 9, halign: 'center', valign: 'middle', textColor: [255,255,255] },
+      // Stronger, high-contrast styles for the totals row (match body font size)
+      footStyles: { fillColor: [75, 85, 99], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, halign: 'right', lineWidth: 0.3 },
       alternateRowStyles: { fillColor: [249, 250, 251] },
       columnStyles: {
-        6: { halign: 'right' },
-        7: { halign: 'right' },
-        8: { halign: 'right' },
+        0: { cellWidth: 16 },   // ID
+        1: { cellWidth: 14 },   // Order
+        2: { cellWidth: 40 },   // Member
+        3: { cellWidth: 28 },   // Dept
+        4: { cellWidth: 16 },   // Pay
+        5: { cellWidth: 45 },   // Item
+        6: { cellWidth: 12, halign: 'right' },   // Qty
+        7: { cellWidth: 22, halign: 'right' },   // Unit Price
+        8: { cellWidth: 24, halign: 'right' },   // Amount
+        9: { cellWidth: 36 },   // Remarks
+        10: { cellWidth: 14 },  // Signature
+      },
+      // Ensure label and numeric cells are aligned appropriately in the foot
+      didParseCell: (data) => {
+        if (data.section === 'foot') {
+          if (data.column.index === 5) {
+            data.cell.styles.halign = 'center' // TOTAL label under Item
+          }
+          if (data.column.index === 6 || data.column.index === 8) {
+            data.cell.styles.halign = 'right' // Qty and Amount totals
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        // Repeat header on subsequent pages
+        if (data.pageNumber > 1) {
+          doc.setFontSize(14)
+          doc.text('Posted Orders Manifest', 12, 12)
+          doc.setFontSize(9)
+          doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
+          doc.text(`Delivery Branch: ${branchLabel}${dept ? '  |  Department: ' + dept : ''}`, 12, 24)
+        }
       }
     })
     // Footer rows appended after main table
     const makeRow = (mapper) => headers.map((_, i) => mapper(i))
-    const sigDateRow = makeRow(i => i === headers.length - 2 ? 'SIGNATURE' : (i === headers.length - 1 ? 'DATE' : ''))
+    const sigDateRow = makeRow(i => i === 4 ? 'DATE' : (i === 5 ? 'SIGNATURE' : ''))
     const issuedRow = makeRow(i => i === 2 ? 'ITEMS ISSUED BY' : '')
     const receivedRow = makeRow(i => i === 2 ? 'ITEMS RECEIVED BY' : '')
     autoTable(doc, {
@@ -219,8 +280,130 @@ function RepPostedPageContent() {
       styles: { fontSize: 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
       theme: 'grid'
     })
-
     doc.save('rep_posted_manifest.pdf')
+    } catch (error) {
+      console.error('Error exporting PDF:', error)
+      alert(`PDF export failed: ${error.message}`)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const exportExcel = async () => {
+    setExcelLoading(true)
+    const filtered = !search ? orders : orders.filter(o => {
+      const s = search.toLowerCase()
+      return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
+    })
+    const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ({
+      id:o.member_id,
+      order:o.order_id,
+      member:o.member_name_snapshot,
+      dept:o.departments?.name||'',
+      pay:o.payment_option,
+      item:l.items?.name,
+      qty:Number(l.qty||0),
+      unit_price:Number(l.unit_price||0),
+      amount:Number(l.amount||0),
+      remarks:'',
+      signature:''
+    })))
+    if (!rows.length) return alert('No rows to export')
+
+    try {
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Posted Orders')
+
+      const heading = 'Posted Orders Manifest'
+      ws.addRow([heading])
+      ws.mergeCells('A1','K1')
+      ws.getRow(1).font = { bold: true, size: 14 }
+      ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
+
+      // Derive delivery branch from filtered rows
+      const branchSet = new Set(filtered.map(o => o?.delivery?.name).filter(Boolean))
+      const branchLabel = branchSet.size === 1 ? [...branchSet][0] : (branchSet.size > 1 ? 'Multiple Delivery Branches' : 'All Delivery Branches')
+      const details = `Delivery Branch: ${branchLabel}${dept ? '  |  Department: ' + dept : ''}`
+      ws.addRow([details])
+      ws.mergeCells('A2','K2')
+      ws.getRow(2).font = { italic: true }
+      ws.getRow(2).alignment = { vertical: 'middle', horizontal: 'center' }
+
+      const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
+      const headerRow = ws.addRow(headers)
+      headerRow.font = { bold: true }
+      headerRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+        cell.alignment = { vertical: 'middle', horizontal: 'center' }
+      })
+
+      rows.forEach(r => {
+        const row = ws.addRow([r.id, r.order, r.member, r.dept, r.pay, r.item, r.qty, r.unit_price, r.amount, r.remarks, r.signature])
+        row.eachCell(cell => {
+          cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        })
+      })
+
+      const totalQty = rows.reduce((acc, r) => acc + Number(r.qty||0), 0)
+      const totalAmount = rows.reduce((acc, r) => acc + Number(r.amount||0), 0)
+      const totalsRow = ws.addRow(['', '', 'TOTAL', '', '', '', totalQty, '', totalAmount, '', ''])
+      totalsRow.eachCell(cell => {
+        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        cell.font = { bold: true }
+      })
+
+      const totalsRowNumber = ws.rowCount
+
+      ws.columns = [
+        { width: 10 }, // ID
+        { width: 10 }, // Order
+        { width: 26 }, // Member
+        { width: 18 }, // Dept
+        { width: 10 }, // Pay
+        { width: 26 }, // Item
+        { width: 8 },  // Qty
+        { width: 12 }, // Unit Price
+        { width: 14 }, // Amount
+        { width: 18 }, // Remarks
+        { width: 14 }, // Signature
+      ]
+
+      for (let r = 3; r <= totalsRowNumber; r++) {
+        ws.getCell(`G${r}`).numFmt = '#,##0'
+        ws.getCell(`H${r}`).numFmt = '#,##0'
+        ws.getCell(`I${r}`).numFmt = '#,##0'
+      }
+
+      // Footer rows: place labels under Column C and move DATE/SIGNATURE closer (E/F)
+      const footerSigDate = ['', '', '', '', 'DATE', 'SIGNATURE', '', '', '', '', '']
+      const footerIssued = ['', '', 'ITEMS ISSUED BY', '', '', '', '', '', '', '', '']
+      const footerReceived = ['', '', 'ITEMS RECEIVED BY', '', '', '', '', '', '', '', '']
+      const fsr1 = ws.addRow(footerSigDate)
+      const fsr2 = ws.addRow(footerIssued)
+      const fsr3 = ws.addRow(footerReceived)
+      ;[fsr1, fsr2, fsr3].forEach(r => {
+        r.eachCell(cell => {
+          cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+        })
+      })
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'rep_posted_manifest.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting Excel:', error)
+      alert(`Excel export failed: ${error.message}`)
+    } finally {
+      setExcelLoading(false)
+    }
   }
 
   const exportItemsPack = async () => {
@@ -566,8 +749,36 @@ function RepPostedPageContent() {
           )}
         </button>
         {/* Items Pack CSV/PDF buttons temporarily removed as requested */}
-        <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
-        <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
+        <button
+          className="px-2 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-gray-500 flex items-center justify-center gap-2"
+          onClick={exportExcel}
+          disabled={excelLoading}
+          aria-busy={excelLoading}
+        >
+          {excelLoading ? (
+            <>
+              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>Exporting…</span>
+            </>
+          ) : (
+            'Export Excel'
+          )}
+        </button>
+        <button
+          className="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-emerald-400 flex items-center justify-center gap-2"
+          onClick={exportPDF}
+          disabled={pdfLoading}
+          aria-busy={pdfLoading}
+        >
+          {pdfLoading ? (
+            <>
+              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>Exporting…</span>
+            </>
+          ) : (
+            'Export PDF'
+          )}
+        </button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 
