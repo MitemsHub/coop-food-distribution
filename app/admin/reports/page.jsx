@@ -872,6 +872,54 @@ function ReportsPageContent() {
         }
       }
 
+      // Memo sheet: Summary of Orders from All Delivery Locations
+      const memo = wb.addWorksheet(safeName('Memo'))
+      memo.addRow(['Summary of Orders from All Delivery Locations'])
+      memo.mergeCells('A1','D1')
+      memo.addRow(['SN','Delivery Location','Amount With Markup','Amount Without Markup'])
+
+      let snMemo = 0
+      let totalWith = 0
+      let totalWithout = 0
+      for (const row of summary) {
+        snMemo += 1
+        const withMarkup = Number(row['Amount With Markup'] || 0)
+        const withoutMarkup = Number(row['Amount Without Markup'] || 0)
+        totalWith += withMarkup
+        totalWithout += withoutMarkup
+        memo.addRow([snMemo, row['Location'], withMarkup, withoutMarkup])
+      }
+      // Totals row
+      memo.addRow(['', 'TOTAL', totalWith, totalWithout])
+
+      memo.columns = [
+        { key: 'sn', width: 6 },
+        { key: 'loc', width: 28 },
+        { key: 'amtWith', width: 20 },
+        { key: 'amtWithout', width: 20 },
+      ]
+      const memoTitle = memo.getCell('A1')
+      memoTitle.font = { bold: true, size: 13 }
+      memoTitle.alignment = { horizontal: 'center' }
+      const memoHeaderRow = memo.getRow(2)
+      memoHeaderRow.font = { bold: true }
+      memoHeaderRow.alignment = { horizontal: 'center' }
+      const memoLastRow = memo.rowCount
+      for (let r = 2; r <= memoLastRow; r++) {
+        for (let c = 1; c <= 4; c++) {
+          const cell = memo.getRow(r).getCell(c)
+          cell.border = {
+            top: { style: 'thick' },
+            left: { style: 'thick' },
+            bottom: { style: 'thick' },
+            right: { style: 'thick' },
+          }
+          if (c >= 3 && r >= 3) {
+            cell.numFmt = '#,##0'
+          }
+        }
+      }
+
       const deptName = selectedDepartmentId === 'all'
         ? 'ALL_DEPTS'
         : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))

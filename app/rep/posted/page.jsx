@@ -228,10 +228,11 @@ function RepPostedPageContent() {
       showFoot: 'lastPage',
       startY: 30,
       margin: { top: 28, left: 10, right: 10 },
-      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
+      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+      theme: 'grid',
       headStyles: { fillColor: [75, 85, 99], fontSize: 9, halign: 'center', valign: 'middle', textColor: [255,255,255] },
       // Stronger, high-contrast styles for the totals row (match body font size)
-      footStyles: { fillColor: [75, 85, 99], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, halign: 'right', lineWidth: 0.3 },
+      footStyles: { fillColor: [75, 85, 99], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, halign: 'right', lineWidth: 0.1 },
       alternateRowStyles: { fillColor: [249, 250, 251] },
       columnStyles: {
         0: { cellWidth: 16 },   // ID
