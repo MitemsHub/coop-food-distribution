@@ -12,6 +12,9 @@ export default function Navbar() {
   const [lowCount, setLowCount] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isDemandTrackingMode, setIsDemandTrackingMode] = useState(false)
+  // Shopping availability state (controls visibility of Shop link when portal is closed)
+  const [shoppingOpen, setShoppingOpen] = useState(false)
+  const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
 
   const userType = user?.type
 
@@ -61,6 +64,26 @@ export default function Navbar() {
     return () => t && clearTimeout(t)
   }, [userType, isDemandTrackingMode])
 
+  // Load current shopping status to control Shop button visibility for members
+  useEffect(() => {
+    let cancelled = false
+    const loadShoppingStatus = async () => {
+      try {
+        setShoppingStatusLoading(true)
+        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
+        const json = await res.json()
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch {
+        if (!cancelled) setShoppingOpen(false)
+      } finally {
+        if (!cancelled) setShoppingStatusLoading(false)
+      }
+    }
+    // Only fetch for members, others don't see Shop link here
+    if (userType === 'member') loadShoppingStatus()
+    return () => { cancelled = true }
+  }, [userType])
+
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
       <div className="max-w-7xl mx-auto px-3 lg:px-4 xl:px-6 h-12 lg:h-14 flex items-center gap-2 lg:gap-4">
@@ -82,19 +105,21 @@ export default function Navbar() {
           {/* Member Navigation */}
           {userType === 'member' && (
             <>
-              <Link
-                href={`/shop?mid=${user?.id}`}
-                className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/shop') 
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
-                    : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
-                }`}
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-                </svg>
-                Shop
-              </Link>
+              {shoppingOpen && (
+                <Link
+                  href={`/shop?mid=${user?.id}`}
+                  className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                    isActive('/shop') 
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                      : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                  }`}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                  </svg>
+                  Shop
+                </Link>
+              )}
               <button
                 onClick={logout}
                 className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
@@ -331,17 +356,19 @@ export default function Navbar() {
             {/* Member Mobile Navigation */}
             {userType === 'member' && (
               <>
-                <Link
-                  href={`/shop?mid=${user?.id}`}
-                  onClick={closeMobileMenu}
-                  className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/shop') 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
-                      : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
-                  }`}
-                >
-                  Shop
-                </Link>
+                {shoppingOpen && (
+                  <Link
+                    href={`/shop?mid=${user?.id}`}
+                    onClick={closeMobileMenu}
+                    className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                      isActive('/shop') 
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
+                        : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                    }`}
+                  >
+                    Shop
+                  </Link>
+                )}
                 <button
                   onClick={() => { logout(); closeMobileMenu(); }}
                   className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
