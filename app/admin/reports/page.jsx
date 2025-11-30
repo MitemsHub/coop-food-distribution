@@ -90,6 +90,9 @@ function ReportsPageContent() {
   const [demandErr, setDemandErr] = useState(null)
   const [demandCurrentPage, setDemandCurrentPage] = useState(1)
   const [summaryCurrentPage, setSummaryCurrentPage] = useState(1)
+  // Summary Items Pack: loading/progress
+  const [summaryItemsPackLoading, setSummaryItemsPackLoading] = useState(false)
+  const [summaryItemsPackProgress, setSummaryItemsPackProgress] = useState({ current: 0, total: 0 })
 
   // Summary of Items: selection state
   const [summarySelectedItems, setSummarySelectedItems] = useState([])
@@ -321,6 +324,262 @@ function ReportsPageContent() {
     } catch (error) {
       console.error('Error exporting Excel:', error)
       alert('Error exporting Excel. Please try again.')
+    }
+  }
+
+  // Summary of Items — Items Pack (multi-sheet Excel per delivery location)
+  const exportSummaryItemsPack = async () => {
+    try {
+      setSummaryItemsPackLoading(true)
+      setSummaryItemsPackProgress({ current: 0, total: 0 })
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const safeName = (name) => String(name).replace(/[\\/?*\[\]]/g, ' ').slice(0, 31)
+      const selectedSet = new Set(summarySelectedItems || [])
+
+      const branchList = branches && Array.isArray(branches) ? branches : []
+      if (!branchList.length) {
+        alert('No delivery locations found to export')
+        return
+      }
+
+      const departmentName = selectedDepartmentId === 'all'
+        ? 'All Departments'
+        : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))
+
+      // Helper to fetch rows per branch with backoff to handle rate limits
+      const fetchBranchRows = async (branch) => {
+        const qsb = new URLSearchParams()
+        qsb.set('branch', branch.code)
+        if (selectedDepartmentId !== 'all') qsb.set('department_id', String(selectedDepartmentId))
+        let attempt = 0
+        const maxAttempts = 8
+        let lastErrorText = ''
+        while (attempt < maxAttempts) {
+          attempt += 1
+          const res = await fetch(`/api/admin/reports/delivery-dept-items?${qsb.toString()}`, { cache: 'no-store' })
+          const ct = res.headers.get('content-type') || ''
+          if (res.status === 429) {
+            const retryAfterHeader = res.headers.get('retry-after') || res.headers.get('x-ratelimit-reset')
+            let waitMs = 0
+            if (retryAfterHeader) {
+              const seconds = Number(retryAfterHeader)
+              waitMs = Math.min(15000, Math.max(1000, Math.ceil(seconds * 1000)))
+            } else {
+              const base = 900
+              const jitter = Math.floor(Math.random() * 400)
+              waitMs = Math.min(15000, Math.round(base * Math.pow(2, attempt - 1)) + jitter)
+            }
+            lastErrorText = await res.text()
+            await new Promise(r => setTimeout(r, waitMs))
+            continue
+          }
+          if (!res.ok) {
+            const txt = ct.includes('application/json') ? JSON.stringify(await res.json()) : await res.text()
+            throw new Error(`Request failed (${res.status}): ${txt.slice(0, 180)}`)
+          }
+          if (!ct.includes('application/json')) {
+            const txt = await res.text()
+            throw new Error(`Unexpected response: ${txt.slice(0, 180)}`)
+          }
+          const json = await res.json()
+          if (!json.ok) throw new Error(json.error || 'Failed to load demand data')
+          await new Promise(r => setTimeout(r, 250))
+          return json.rows || []
+        }
+        throw new Error(`Rate limited while fetching ${branch.name || branch.code}. Details: ${lastErrorText.slice(0, 180)}`)
+      }
+
+      const summaryTotals = []
+      setSummaryItemsPackProgress({ current: 0, total: branchList.length })
+
+      for (let i = 0; i < branchList.length; i++) {
+        const b = branchList[i]
+        setSummaryItemsPackProgress({ current: i + 1, total: branchList.length })
+        let arr = []
+        try {
+          arr = await fetchBranchRows(b)
+        } catch (err) {
+          console.warn('Summary Items Pack: rate-limited branch, creating placeholder:', b?.name || b?.code, err?.message)
+          const ws = wb.addWorksheet(safeName(b.name || b.code || 'Unknown'))
+          const heading = `Summary of Items - ${b.name || b.code || 'Unknown'} - ${departmentName}`
+          ws.addRow([heading])
+          ws.mergeCells('A1','F1')
+          ws.getRow(1).font = { bold: true, size: 14 }
+          ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
+          const headerRow = ws.addRow(['SN','Delivery Location','Items','Qty','Price','Amount'])
+          headerRow.font = { bold: true }
+          headerRow.eachCell(cell => {
+            cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+            cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          })
+          ws.addRow(['', b.name || b.code || 'Unknown', 'Rate limited — no data', '', '', ''])
+          const totalsRow = ws.addRow(['', '', 'TOTAL', 0, '', 0])
+          totalsRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }; cell.font = { bold: true } })
+          ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
+          ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
+          ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
+          ws.columns = [{ width: 6 }, { width: 24 }, { width: 28 }, { width: 10 }, { width: 12 }, { width: 14 }]
+          for (let r = 3; r <= ws.rowCount - 3; r++) { ws.getCell(`D${r}`).numFmt = '#,##0'; ws.getCell(`E${r}`).numFmt = '#,##0'; ws.getCell(`F${r}`).numFmt = '#,##0' }
+          summaryTotals.push({ Location: b.name || b.code || 'Unknown', Quantity: 0, Amount: 0 })
+          continue
+        }
+        // Apply selected items filter if any
+        const arrFiltered = selectedSet.size ? arr.filter(r => selectedSet.has(r.items)) : arr
+        if (!arrFiltered.length) {
+          const ws = wb.addWorksheet(safeName(b.name || b.code || 'Unknown'))
+          const heading = `Summary of Items - ${b.name || b.code || 'Unknown'} - ${departmentName}`
+          ws.addRow([heading])
+          ws.mergeCells('A1','F1')
+          ws.getRow(1).font = { bold: true, size: 14 }
+          ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
+          const headerRow = ws.addRow(['SN','Delivery Location','Items','Qty','Price','Amount'])
+          headerRow.font = { bold: true }
+          headerRow.eachCell(cell => {
+            cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+            cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          })
+          // Indicate empty due to selection
+          if (selectedSet.size) {
+            ws.addRow(['', b.name || b.code || 'Unknown', 'No matching selected items', '', '', ''])
+          }
+          const totalsRow = ws.addRow(['', '', 'TOTAL', 0, '', 0])
+          totalsRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }; cell.font = { bold: true } })
+          ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
+          ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
+          ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
+          ws.columns = [{ width: 6 }, { width: 24 }, { width: 28 }, { width: 10 }, { width: 12 }, { width: 14 }]
+          for (let r = 3; r <= ws.rowCount - 3; r++) { ws.getCell(`D${r}`).numFmt = '#,##0'; ws.getCell(`E${r}`).numFmt = '#,##0'; ws.getCell(`F${r}`).numFmt = '#,##0' }
+          summaryTotals.push({ Location: b.name || b.code || 'Unknown', Quantity: 0, Amount: 0 })
+          continue
+        }
+
+        const sorted = [...arrFiltered].sort((a, b) => {
+          const ac = String(a.category || '').toLowerCase()
+          const bc = String(b.category || '').toLowerCase()
+          if (ac < bc) return -1
+          if (ac > bc) return 1
+          const ai = String(a.items || '').toLowerCase()
+          const bi = String(b.items || '').toLowerCase()
+          if (ai < bi) return -1
+          if (ai > bi) return 1
+          return 0
+        })
+
+        let totalQty = 0
+        let totalAmount = 0
+        const rows = sorted.map((r, idx) => {
+          const original = Number(r?.original_price || 0)
+          const qty = Number(r?.quantity || 0)
+          const amount = original * qty
+          totalQty += qty
+          totalAmount += amount
+          return { sn: idx + 1, location: b.name || b.code || 'Unknown', item: r.items || '', qty, price: original, amount }
+        })
+
+        const ws = wb.addWorksheet(safeName(b.name || b.code || 'Unknown'))
+        const heading = `Summary of Items - ${b.name || b.code || 'Unknown'} - ${departmentName}`
+        ws.addRow([heading])
+        ws.mergeCells('A1','F1')
+        ws.getRow(1).font = { bold: true, size: 14 }
+        ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
+
+        const headerRow = ws.addRow(['SN','Delivery Location','Items','Qty','Price','Amount'])
+        headerRow.font = { bold: true }
+        headerRow.eachCell(cell => {
+          cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+          cell.alignment = { vertical: 'middle', horizontal: 'center' }
+        })
+
+        rows.forEach(r => {
+          const row = ws.addRow([r.sn, r.location, r.item, r.qty, r.price, r.amount])
+          row.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} } })
+        })
+
+        const totalsRow = ws.addRow(['', '','TOTAL', totalQty, '', totalAmount])
+        totalsRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }; cell.font = { bold: true } })
+
+        const totalsRowNumber = ws.rowCount
+
+        const sigRow = ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
+        sigRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} } })
+        const issuedRow = ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
+        issuedRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} } })
+        const receivedRow = ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
+        receivedRow.eachCell(cell => { cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} } })
+
+        ws.columns = [ { width: 6 }, { width: 24 }, { width: 28 }, { width: 10 }, { width: 12 }, { width: 14 } ]
+        for (let r = 3; r <= totalsRowNumber; r++) { ws.getCell(`D${r}`).numFmt = '#,##0'; ws.getCell(`E${r}`).numFmt = '#,##0'; ws.getCell(`F${r}`).numFmt = '#,##0' }
+
+        summaryTotals.push({ Location: b.name || b.code || 'Unknown', Quantity: totalQty, Amount: totalAmount })
+      }
+
+      // Summary sheet
+      const summarySheet = wb.addWorksheet(safeName('Summary'))
+      summarySheet.addRow(['Summary of Items by Location'])
+      summarySheet.mergeCells('A1','C1')
+      summarySheet.getRow(1).font = { bold: true, size: 13 }
+      summarySheet.getRow(1).alignment = { horizontal: 'center' }
+      summarySheet.addRow(['Location','Quantity','Amount'])
+      summaryTotals.forEach(r => summarySheet.addRow([r.Location, r.Quantity, r.Amount]))
+      summarySheet.columns = [ { width: 28 }, { width: 12 }, { width: 20 } ]
+      const sumLast = summarySheet.rowCount
+      const sumHeaderRow = summarySheet.getRow(2)
+      sumHeaderRow.font = { bold: true }
+      sumHeaderRow.alignment = { horizontal: 'center' }
+      for (let r = 2; r <= sumLast; r++) {
+        for (let c = 1; c <= 3; c++) {
+          const cell = summarySheet.getRow(r).getCell(c)
+          cell.border = { top: { style: 'thick' }, left: { style: 'thick' }, bottom: { style: 'thick' }, right: { style: 'thick' } }
+          if (c >= 2 && r >= 3) { if (c === 2) cell.numFmt = '0'; else cell.numFmt = '#,##0' }
+        }
+      }
+
+      // Memo sheet
+      const memo = wb.addWorksheet(safeName('Memo'))
+      memo.addRow(['Summary of Items from All Delivery Locations'])
+      memo.mergeCells('A1','C1')
+      memo.getRow(1).font = { bold: true, size: 13 }
+      memo.getRow(1).alignment = { horizontal: 'center' }
+      memo.addRow(['SN','Delivery Location','Amount'])
+      let snMemo = 0
+      let totalMemoAmt = 0
+      summaryTotals.forEach(r => { snMemo += 1; totalMemoAmt += Number(r.Amount || 0); memo.addRow([snMemo, r.Location, r.Amount]) })
+      memo.addRow(['', 'TOTAL', totalMemoAmt])
+      memo.columns = [ { width: 6 }, { width: 28 }, { width: 20 } ]
+      const memoHeaderRow = memo.getRow(2)
+      memoHeaderRow.font = { bold: true }
+      memoHeaderRow.alignment = { horizontal: 'center' }
+      const memoLast = memo.rowCount
+      for (let r = 2; r <= memoLast; r++) {
+        for (let c = 1; c <= 3; c++) {
+          const cell = memo.getRow(r).getCell(c)
+          cell.border = { top: { style: 'thick' }, left: { style: 'thick' }, bottom: { style: 'thick' }, right: { style: 'thick' } }
+          if (c === 3 && r >= 3) cell.numFmt = '#,##0'
+        }
+      }
+
+      const deptName = selectedDepartmentId === 'all'
+        ? 'ALL_DEPTS'
+        : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Summary_Items_Pack_${deptName}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Summary Items Pack export failed:', e)
+      alert(`Summary Items Pack export failed: ${e.message}`)
+    } finally {
+      setSummaryItemsPackLoading(false)
+      setSummaryItemsPackProgress({ current: 0, total: 0 })
     }
   }
 
@@ -1260,7 +1519,7 @@ function ReportsPageContent() {
         const totalPages = Math.ceil(formattedRows.length / itemsPerPage) || 1
 
         return (
-          <PaginatedSection
+          <PaginatedSection 
             title="Summary of Items"
             data={paginatedRows}
             allData={formattedRows}
@@ -1279,6 +1538,9 @@ function ReportsPageContent() {
             onExportCSV={exportSummaryCSV}
             onExportPDF={exportSummaryPDF}
             onExportExcel={exportSummaryExcel}
+            onExportItemsPack={exportSummaryItemsPack}
+            itemsPackLoading={summaryItemsPackLoading}
+            itemsPackProgress={summaryItemsPackProgress}
             filter={(
               <div className="flex gap-6 mb-3">
                 <div>
