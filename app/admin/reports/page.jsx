@@ -761,9 +761,13 @@ function ReportsPageContent() {
           const original = Number(r.original_price || 0)
           const markup = Number(r.markup || 0)
           const qty = Number(r.quantity || 0)
-          const amountWithoutMarkup = original * qty
+          // Use recorded order amount (SUM(order_lines.amount)) for accuracy
+          const recordedAmount = Number(r.amount || 0)
           const markupAmount = markup * qty
-          const amountWithMarkup = (original + markup) * qty
+          // Keep amount without markup as original * qty (display-only)
+          const amountWithoutMarkup = original * qty
+          // Amount with markup should reflect recorded amounts
+          const amountWithMarkup = recordedAmount || ((original + markup) * qty)
 
           totalQty += qty
           totalMarkupAmt += markupAmount
