@@ -9,14 +9,13 @@ export const dynamic = 'force-dynamic'
 
 // Fallback aggregator using Supabase tables when direct DB URL isn't available
 async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
-  // Load orders for this rep's branch and status Posted
-  let ordersQ = supabase
+  // Load orders for this rep's branch and status Posted (do NOT filter by department here;
+  // we'll filter per-line using either order.department_id or item.department_id to avoid misses)
+  const { data: orders, error: oErr } = await supabase
     .from('orders')
     .select('order_id, delivery_branch_id, department_id, status')
     .eq('status', 'Posted')
     .eq('delivery_branch_id', Number(branchId))
-  if (departmentId) ordersQ = ordersQ.eq('department_id', Number(departmentId))
-  const { data: orders, error: oErr } = await ordersQ
   if (oErr) throw new Error(oErr.message)
   if (!orders?.length) return []
 
@@ -34,11 +33,12 @@ async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
   const itemIdsSet = [...new Set(lines.map(l => l.item_id).filter(Boolean))]
   const { data: items, error: iErr } = await supabase
     .from('items')
-    .select('item_id, name, category')
+    .select('item_id, name, category, department_id')
     .in('item_id', itemIdsSet)
   if (iErr) throw new Error(iErr.message)
   const itemNameById = new Map((items || []).map(i => [i.item_id, i.name]))
   const itemCategoryById = new Map((items || []).map(i => [i.item_id, i.category]))
+  const itemDeptById = new Map((items || []).map(i => [i.item_id, i.department_id]))
 
   // Base prices and active markups for branch+item pairs (only this branch)
   let priceMap = new Map()
@@ -61,6 +61,10 @@ async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
     const o = orderById.get(l.order_id)
     if (!o) continue
     const itemId = l.item_id
+    const includeLine = !departmentId
+      || Number(o.department_id || 0) === Number(departmentId)
+      || Number(itemDeptById.get(itemId) || 0) === Number(departmentId)
+    if (!includeLine) continue
     const prev = itemAgg.get(itemId)
     itemAgg.set(itemId, {
       item_id: itemId,

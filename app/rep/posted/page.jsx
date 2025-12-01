@@ -74,6 +74,25 @@ function RepPostedPageContent() {
     }
   }
 
+  // Collect all posted orders for current filters (used by exports to avoid pagination truncation)
+  const collectAllOrdersForExport = async () => {
+    const base = new URLSearchParams({ status: 'Posted', limit: '200' })
+    if (dept) base.set('dept', dept)
+    let cursor = null
+    let all = []
+    for (let page = 0; page < 100; page++) { // hard cap to prevent infinite loops
+      const qs = new URLSearchParams(base)
+      if (cursor) { qs.set('cursor', cursor); qs.set('dir', 'next') }
+      const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache: 'no-store', headers:{ 'Accept':'application/json' } })
+      const j = await safeJson(res, '/api/rep/orders/list')
+      if (!res.ok || !j.ok) throw new Error(j.error || 'Failed to collect orders for export')
+      all = all.concat(j.orders || [])
+      if (!j.nextCursor) break
+      cursor = j.nextCursor
+    }
+    return all
+  }
+
   const deliverOne = async (id) => {
     setShowModal({ 
       type: 'deliver', 
@@ -123,19 +142,30 @@ function RepPostedPageContent() {
       const s = search.toLowerCase()
       return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
-    const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ({
-      ID:o.member_id,
-      Order:o.order_id,
-      Member:o.member_name_snapshot,
-      Dept:o.departments?.name||'',
-      Pay:o.payment_option,
-      Item:l.items?.name,
-      Qty:Number(l.qty||0),
-      'Unit Price':Number(l.unit_price||0),
-      Amount:Number(l.amount||0),
-      Remarks:'',
-      Sign:''
-    })))
+    const filterLineByDept = (line, orderDeptName, selectedDeptName) => {
+      if (!selectedDeptName) return true
+      const orderMatches = String(orderDeptName || '').trim().toLowerCase() === String(selectedDeptName).trim().toLowerCase()
+      const itemDeptId = line?.items?.department_id
+      // We only have the selected dept name; rows include the order dept name and item dept id.
+      // If order dept name matches, include all lines. Otherwise include when item has a dept id (client-side cannot map id->name reliably).
+      // This heuristic prevents excluding lines from orders missing department_id but items carry department tags.
+      return orderMatches || Boolean(itemDeptId)
+    }
+    const rows = filtered.flatMap(o => (o.order_lines || [])
+      .filter(l => filterLineByDept(l, o.departments?.name, dept))
+      .map(l => ({
+        ID:o.member_id,
+        Order:o.order_id,
+        Member:o.member_name_snapshot,
+        Dept:o.departments?.name||'',
+        Pay:o.payment_option,
+        Item:l.items?.name,
+        Qty:Number(l.qty||0),
+        'Unit Price':Number(l.unit_price||0),
+        Amount:Number(l.amount||0),
+        Remarks:'',
+        Sign:''
+      })))
     if (!rows.length) return alert('No rows to export')
     const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
     const bodyLines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))
@@ -165,7 +195,9 @@ function RepPostedPageContent() {
   }
 
   const exportPDF = async () => {
-    if (!orders.length) return alert('No rows to export')
+    // Load all pages to prevent partial exports
+    const sourceOrders = await collectAllOrdersForExport()
+    if (!sourceOrders.length) return alert('No rows to export')
     setPdfLoading(true)
     try {
       const { jsPDF } = await import('jspdf')
@@ -174,7 +206,7 @@ function RepPostedPageContent() {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
     // Determine delivery branch from filtered data
-    const filteredForHeader = !search ? orders : orders.filter(o => {
+    const filteredForHeader = !search ? sourceOrders : sourceOrders.filter(o => {
       const s = search.toLowerCase()
       return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
@@ -191,11 +223,19 @@ function RepPostedPageContent() {
     // Build table rows
     const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
     const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
-    const filtered = !search ? orders : orders.filter(o => {
+    const filtered = !search ? sourceOrders : sourceOrders.filter(o => {
       const s = search.toLowerCase()
       return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
-    const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ([
+    const rows = filtered.flatMap(o => (o.order_lines || [])
+      .filter(l => {
+        if (!dept) return true
+        const orderDeptName = o.departments?.name
+        const itemDeptId = l?.items?.department_id
+        const orderMatches = String(orderDeptName || '').trim().toLowerCase() === String(dept).trim().toLowerCase()
+        return orderMatches || Boolean(itemDeptId)
+      })
+      .map(l => ([
       sanitize(o.member_id),
       sanitize(o.order_id),
       sanitize(o.member_name_snapshot),
@@ -210,7 +250,14 @@ function RepPostedPageContent() {
     ])))
 
     // Compute totals for Qty and Amount
-    const lineItems = filtered.flatMap(o => (o.order_lines || []))
+    const lineItems = filtered.flatMap(o => (o.order_lines || [])
+      .filter(l => {
+        if (!dept) return true
+        const orderDeptName = o.departments?.name
+        const itemDeptId = l?.items?.department_id
+        const orderMatches = String(orderDeptName || '').trim().toLowerCase() === String(dept).trim().toLowerCase()
+        return orderMatches || Boolean(itemDeptId)
+      }))
     const totalQty = lineItems.reduce((acc, l) => acc + Number(l?.qty || 0), 0)
     const totalAmount = lineItems.reduce((acc, l) => acc + Number(l?.amount || 0), 0)
     // Create a foot row: label under Item, totals under Qty and Amount
@@ -292,23 +339,33 @@ function RepPostedPageContent() {
 
   const exportExcel = async () => {
     setExcelLoading(true)
-    const filtered = !search ? orders : orders.filter(o => {
+    // Load all pages to prevent partial exports
+    const sourceOrders = await collectAllOrdersForExport()
+    const filtered = !search ? sourceOrders : sourceOrders.filter(o => {
       const s = search.toLowerCase()
       return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
     })
-    const rows = filtered.flatMap(o => (o.order_lines || []).map(l => ({
-      id:o.member_id,
-      order:o.order_id,
-      member:o.member_name_snapshot,
-      dept:o.departments?.name||'',
-      pay:o.payment_option,
-      item:l.items?.name,
-      qty:Number(l.qty||0),
-      unit_price:Number(l.unit_price||0),
-      amount:Number(l.amount||0),
-      remarks:'',
-      signature:''
-    })))
+    const rows = filtered.flatMap(o => (o.order_lines || [])
+      .filter(l => {
+        if (!dept) return true
+        const orderDeptName = o.departments?.name
+        const itemDeptId = l?.items?.department_id
+        const orderMatches = String(orderDeptName || '').trim().toLowerCase() === String(dept).trim().toLowerCase()
+        return orderMatches || Boolean(itemDeptId)
+      })
+      .map(l => ({
+        id:o.member_id,
+        order:o.order_id,
+        member:o.member_name_snapshot,
+        dept:o.departments?.name||'',
+        pay:o.payment_option,
+        item:l.items?.name,
+        qty:Number(l.qty||0),
+        unit_price:Number(l.unit_price||0),
+        amount:Number(l.amount||0),
+        remarks:'',
+        signature:''
+      })))
     if (!rows.length) return alert('No rows to export')
 
     try {

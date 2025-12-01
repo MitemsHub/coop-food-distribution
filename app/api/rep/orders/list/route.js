@@ -30,7 +30,7 @@ export async function GET(req) {
       member_branch:branch_id(code,name),
       delivery:delivery_branch_id(code,name),
       departments:department_id(name),
-      order_lines(id, qty, unit_price, amount, items:item_id(sku,name))
+      order_lines(id, qty, unit_price, amount, items:item_id(sku,name,department_id))
     `
     let q = supabase
       .from('orders')
