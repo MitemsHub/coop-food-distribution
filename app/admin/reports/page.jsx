@@ -83,12 +83,19 @@ function ReportsPageContent() {
 
   // New: Items Demand by Delivery Location & Department
   const [departments, setDepartments] = useState([])
+  // Items Demand filters/state
   const [selectedDeliveryCode, setSelectedDeliveryCode] = useState('all')
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('all')
   const [demandRows, setDemandRows] = useState([])
   const [demandLoading, setDemandLoading] = useState(false)
   const [demandErr, setDemandErr] = useState(null)
   const [demandCurrentPage, setDemandCurrentPage] = useState(1)
+  // Summary of Items filters/state — independent from Items Demand
+  const [summarySelectedDeliveryCode, setSummarySelectedDeliveryCode] = useState('all')
+  const [summarySelectedDepartmentId, setSummarySelectedDepartmentId] = useState('all')
+  const [summaryRows, setSummaryRows] = useState([])
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryErr, setSummaryErr] = useState(null)
   const [summaryCurrentPage, setSummaryCurrentPage] = useState(1)
   // Summary Items Pack: loading/progress
   const [summaryItemsPackLoading, setSummaryItemsPackLoading] = useState(false)
@@ -98,17 +105,17 @@ function ReportsPageContent() {
   const [summarySelectedItems, setSummarySelectedItems] = useState([])
   const summaryItemOptions = useMemo(() => {
     const names = new Set()
-    demandRows.forEach(r => {
+    summaryRows.forEach(r => {
       if (r?.items) names.add(r.items)
     })
     return Array.from(names).sort()
-  }, [demandRows])
+  }, [summaryRows])
 
   useEffect(() => {
     // Reset selection when source rows change (filters updated)
     setSummarySelectedItems([])
     setSummaryCurrentPage(1)
-  }, [demandRows])
+  }, [summaryRows])
 
   // Branch Item Prices Matrix loader removed
 
@@ -146,15 +153,38 @@ function ReportsPageContent() {
     })()
   }, [selectedDeliveryCode, selectedDepartmentId])
 
+  // Load summary rows whenever Summary filters change
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setSummaryLoading(true)
+        setSummaryErr(null)
+        const qs = new URLSearchParams()
+        if (summarySelectedDeliveryCode !== 'all') qs.set('branch', summarySelectedDeliveryCode)
+        if (summarySelectedDepartmentId !== 'all') qs.set('department_id', String(summarySelectedDepartmentId))
+        const res = await fetch(`/api/admin/reports/delivery-dept-items?${qs.toString()}`, { cache: 'no-store' })
+        const json = await res.json()
+        if (!json.ok) throw new Error(json.error || 'Failed to load summary data')
+        setSummaryRows(json.rows || [])
+        setSummaryCurrentPage(1)
+      } catch (e) {
+        setSummaryErr(e.message)
+        setSummaryRows([])
+      } finally {
+        setSummaryLoading(false)
+      }
+    })()
+  }, [summarySelectedDeliveryCode, summarySelectedDepartmentId])
+
   const exportSummaryCSV = () => {
     const selectedSet = new Set(summarySelectedItems)
-    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
-    const branchName = selectedDeliveryCode === 'all'
+    const filtered = summaryRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = summarySelectedDeliveryCode === 'all'
       ? 'All Delivery Locations'
-      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
-    const departmentName = selectedDepartmentId === 'all'
+      : (branches.find(b => b.code === summarySelectedDeliveryCode)?.name || summarySelectedDeliveryCode)
+    const departmentName = summarySelectedDepartmentId === 'all'
       ? 'All Departments'
-      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+      : (departments.find(d => String(d.id) === String(summarySelectedDepartmentId))?.name || summarySelectedDepartmentId)
     // Raw rows for totals (numeric values)
     const rawRows = filtered.map((r, idx) => {
       const original = Number(r?.original_price || 0)
@@ -190,13 +220,13 @@ function ReportsPageContent() {
 
   const exportSummaryPDF = () => {
     const selectedSet = new Set(summarySelectedItems)
-    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
-    const branchName = selectedDeliveryCode === 'all'
+    const filtered = summaryRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = summarySelectedDeliveryCode === 'all'
       ? 'All Delivery Locations'
-      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
-    const departmentName = selectedDepartmentId === 'all'
+      : (branches.find(b => b.code === summarySelectedDeliveryCode)?.name || summarySelectedDeliveryCode)
+    const departmentName = summarySelectedDepartmentId === 'all'
       ? 'All Departments'
-      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+      : (departments.find(d => String(d.id) === String(summarySelectedDepartmentId))?.name || summarySelectedDepartmentId)
 
     const rawRows = filtered.map((r, idx) => {
       const original = Number(r?.original_price || 0)
@@ -228,13 +258,13 @@ function ReportsPageContent() {
 
   const exportSummaryExcel = async () => {
     const selectedSet = new Set(summarySelectedItems)
-    const filtered = demandRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
-    const branchName = selectedDeliveryCode === 'all'
+    const filtered = summaryRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
+    const branchName = summarySelectedDeliveryCode === 'all'
       ? 'All Delivery Locations'
-      : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode)
-    const departmentName = selectedDepartmentId === 'all'
+      : (branches.find(b => b.code === summarySelectedDeliveryCode)?.name || summarySelectedDeliveryCode)
+    const departmentName = summarySelectedDepartmentId === 'all'
       ? 'All Departments'
-      : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || selectedDepartmentId)
+      : (departments.find(d => String(d.id) === String(summarySelectedDepartmentId))?.name || summarySelectedDepartmentId)
 
     const rows = filtered.map((r, idx) => {
       const original = Number(r?.original_price || 0)
@@ -344,15 +374,15 @@ function ReportsPageContent() {
         return
       }
 
-      const departmentName = selectedDepartmentId === 'all'
+      const departmentName = summarySelectedDepartmentId === 'all'
         ? 'All Departments'
-        : (departments.find(d => String(d.id) === String(selectedDepartmentId))?.name || String(selectedDepartmentId))
+        : (departments.find(d => String(d.id) === String(summarySelectedDepartmentId))?.name || String(summarySelectedDepartmentId))
 
       // Helper to fetch rows per branch with backoff to handle rate limits
       const fetchBranchRows = async (branch) => {
         const qsb = new URLSearchParams()
         qsb.set('branch', branch.code)
-        if (selectedDepartmentId !== 'all') qsb.set('department_id', String(selectedDepartmentId))
+        if (summarySelectedDepartmentId !== 'all') qsb.set('department_id', String(summarySelectedDepartmentId))
         let attempt = 0
         const maxAttempts = 8
         let lastErrorText = ''
@@ -1498,16 +1528,16 @@ function ReportsPageContent() {
 
       {/* Summary of Items Section with pagination and Excel export */}
       {(() => {
-        const baseRows = (summarySelectedItems.length ? demandRows.filter(r => summarySelectedItems.includes(r.items)) : demandRows)
+        const baseRows = (summarySelectedItems.length ? summaryRows.filter(r => summarySelectedItems.includes(r.items)) : summaryRows)
         const formattedRows = baseRows.map((r, idx) => {
           const original = Number(r?.original_price || 0)
           const qty = Number(r?.quantity || 0)
           const amount = original * qty
           return {
             sn: idx + 1,
-            'delivery location': selectedDeliveryCode === 'all'
+            'delivery location': summarySelectedDeliveryCode === 'all'
               ? 'All Delivery Locations'
-              : (branches.find(b => b.code === selectedDeliveryCode)?.name || selectedDeliveryCode),
+              : (branches.find(b => b.code === summarySelectedDeliveryCode)?.name || summarySelectedDeliveryCode),
             items: r.items,
             qty: qty.toLocaleString(),
             price: original.toLocaleString(),
@@ -1546,8 +1576,8 @@ function ReportsPageContent() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Delivery Location</label>
                   <select
-                    value={selectedDeliveryCode}
-                    onChange={e => setSelectedDeliveryCode(e.target.value)}
+                    value={summarySelectedDeliveryCode}
+                    onChange={e => setSummarySelectedDeliveryCode(e.target.value)}
                     className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   >
                     <option value="all">All Delivery Locations</option>
@@ -1559,8 +1589,8 @@ function ReportsPageContent() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Department</label>
                   <select
-                    value={selectedDepartmentId}
-                    onChange={e => setSelectedDepartmentId(e.target.value)}
+                    value={summarySelectedDepartmentId}
+                    onChange={e => setSummarySelectedDepartmentId(e.target.value)}
                     className="block w-56 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   >
                     <option value="all">All Departments</option>
