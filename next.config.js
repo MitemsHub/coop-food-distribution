@@ -99,16 +99,6 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
   
-  // Webpack configuration for additional security
-  webpack: (config, { dev, isServer }) => {
-    // Security-related webpack configurations
-    if (!dev && !isServer) {
-      // Remove console logs in production
-      config.optimization.minimizer[0].options.terserOptions.compress.drop_console = true
-    }
-    
-    return config
-  },
   
   // External packages for server components
   serverExternalPackages: ['@supabase/supabase-js'],
