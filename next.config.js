@@ -189,7 +189,6 @@ const nextConfig = {
       ignoreBuildErrors: true
     },
     // Additional production optimizations
-    swcMinify: true,
     compiler: {
       removeConsole: {
         exclude: ['error', 'warn']
