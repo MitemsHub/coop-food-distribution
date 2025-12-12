@@ -9,12 +9,12 @@ export const dynamic = 'force-dynamic'
 
 // Fallback aggregator using Supabase tables when direct DB URL isn't available
 async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
-  // Load orders for this rep's branch and status Posted (do NOT filter by department here;
+  // Load orders for this rep's branch and status Posted/Delivered (do NOT filter by department here;
   // we'll filter per-line using either order.department_id or item.department_id to avoid misses)
   const { data: orders, error: oErr } = await supabase
     .from('orders')
     .select('order_id, delivery_branch_id, department_id, status')
-    .eq('status', 'Posted')
+    .in('status', ['Posted', 'Delivered'])
     .eq('delivery_branch_id', Number(branchId))
   if (oErr) throw new Error(oErr.message)
   if (!orders?.length) return []
@@ -121,9 +121,9 @@ export async function GET(req) {
     const branchName = bMeta?.name || claim.branch_code
     const branchCode = bMeta?.code || claim.branch_code
 
-    // Aggregate per item for this branch and status Posted
+    // Aggregate per item for this branch and status Posted/Delivered
     try {
-      const whereClauses = [ "o.status::text = 'Posted'", 'o.delivery_branch_id = $1' ]
+      const whereClauses = [ "o.status::text IN ('Posted','Delivered')", 'o.delivery_branch_id = $1' ]
       const params = [ Number(claim.branch_id) ]
       if (deptId) { whereClauses.push('d.id = $2'); params.push(Number(deptId)) }
 
