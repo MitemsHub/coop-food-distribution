@@ -67,6 +67,10 @@ export async function GET(request) {
           name,
           code
         ),
+        delivery:delivery_branch_id (
+          name,
+          code
+        ),
         departments (
           name
         )

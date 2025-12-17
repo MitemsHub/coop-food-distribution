@@ -13,6 +13,23 @@ function SuccessContent() {
   const [order, setOrder] = useState(null)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
+  const [shoppingOpen, setShoppingOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
+        const json = await res.json()
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load shopping status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch (e) {
+        if (!cancelled) setShoppingOpen(false)
+      }
+    }
+    loadStatus()
+    return () => { cancelled = true }
+  }, [])
 
   const currency = (n) => `₦${Number(n || 0).toLocaleString()}`
   // Use ASCII-only currency for PDF to avoid Unicode glyph issues
@@ -300,7 +317,9 @@ function SuccessContent() {
       )}
 
       <div className="flex gap-2">
-        <a href={`/shop${mid ? `?mid=${encodeURIComponent(mid)}` : ''}`} className="px-4 py-2 border rounded">Back to Shop</a>
+        {shoppingOpen && (
+          <a href={`/shop${mid ? `?mid=${encodeURIComponent(mid)}` : ''}`} className="px-4 py-2 border rounded">Back to Shop</a>
+        )}
         <button onClick={downloadPDF} className="px-4 py-2 bg-blue-600 text-white rounded" disabled={downloading}>
           {downloading ? 'Preparing…' : 'Download PDF'}
         </button>

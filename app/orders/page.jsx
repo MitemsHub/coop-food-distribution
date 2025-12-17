@@ -264,7 +264,7 @@ function OrdersPageContent() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
                       <div>
                         <div className="text-sm text-gray-600">Delivery Branch</div>
-                        <div className="font-medium">{order.branches?.name || 'N/A'}</div>
+                        <div className="font-medium">{order.delivery?.name || 'N/A'}</div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Department</div>
