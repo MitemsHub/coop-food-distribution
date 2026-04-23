@@ -17,7 +17,20 @@ DECLARE
     item_record RECORD;
     price_record RECORD;
     line_amount DECIMAL;
+    v_orders_has_cycle BOOLEAN := FALSE;
+    v_prices_has_cycle BOOLEAN := FALSE;
+    v_order_cycle_id INTEGER := NULL;
 BEGIN
+    SELECT EXISTS(
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'cycle_id'
+    ) INTO v_orders_has_cycle;
+
+    SELECT EXISTS(
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'branch_item_prices' AND column_name = 'cycle_id'
+    ) INTO v_prices_has_cycle;
+
     -- Validate order status
     IF NOT EXISTS (
         SELECT 1 FROM orders 
@@ -28,6 +41,12 @@ BEGIN
             'success', false,
             'error', 'Order not found or not in pending status'
         );
+    END IF;
+
+    IF v_orders_has_cycle THEN
+      SELECT cycle_id INTO v_order_cycle_id
+      FROM orders
+      WHERE order_id = p_order_id;
     END IF;
     
     -- Process each line in the JSON array
@@ -46,10 +65,18 @@ BEGIN
         END IF;
         
         -- Get price for this branch
-        SELECT id, price INTO price_record
-        FROM branch_item_prices
-        WHERE branch_id = p_delivery_branch_id
-        AND item_id = item_record.item_id;
+        IF v_prices_has_cycle AND v_order_cycle_id IS NOT NULL THEN
+          SELECT id, price INTO price_record
+          FROM branch_item_prices
+          WHERE branch_id = p_delivery_branch_id
+          AND item_id = item_record.item_id
+          AND cycle_id = v_order_cycle_id;
+        ELSE
+          SELECT id, price INTO price_record
+          FROM branch_item_prices
+          WHERE branch_id = p_delivery_branch_id
+          AND item_id = item_record.item_id;
+        END IF;
         
         IF price_record.id IS NULL THEN
             RETURN json_build_object(

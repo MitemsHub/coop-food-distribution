@@ -1,7 +1,6 @@
 // middleware.js
 // Comprehensive security middleware for the Coop Food Distribution System
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 // Rate limiting store (in production, use Redis or similar)
 const rateLimitStore = new Map()

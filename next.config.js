@@ -2,7 +2,11 @@
 // Comprehensive security configuration for the Coop Food Distribution System
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
+
+const createConfig = (phase) => {
+  const isDevServer = phase === PHASE_DEVELOPMENT_SERVER
+  return {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
   
@@ -141,6 +145,8 @@ const nextConfig = {
   
   // Output configuration
   output: 'standalone',
+
+  distDir: isDevServer ? '.next-dev' : '.next',
   
   // Disable x-powered-by header
   poweredByHeader: false,
@@ -185,6 +191,7 @@ const nextConfig = {
       }
     }
   })
+  }
 }
 
 // Validate required environment variables
@@ -232,4 +239,4 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-module.exports = nextConfig
+module.exports = (phase) => createConfig(phase)

@@ -5,9 +5,12 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
 import ProtectedRoute from '../components/ProtectedRoute'
+import { supabase } from '@/lib/supabaseClient'
 
 function OrdersPageContent() {
   const [orders, setOrders] = useState([])
+  const [ramOrders, setRamOrders] = useState([])
+  const [ramLocations, setRamLocations] = useState([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
   const [selectedStatus, setSelectedStatus] = useState('All')
@@ -19,6 +22,8 @@ function OrdersPageContent() {
   const searchParams = useSearchParams()
   const memberId = searchParams.get('member_id')
   const isAdmin = searchParams.get('admin') === 'true'
+  const tabParam = (searchParams.get('tab') || '').trim().toLowerCase()
+  const [activeTab, setActiveTab] = useState(tabParam === 'ram' ? 'ram' : 'food')
   const { user } = useAuth()
 
   useEffect(() => {
@@ -26,8 +31,12 @@ function OrdersPageContent() {
       router.push('/shop')
       return
     }
-    loadOrders()
+    loadAll()
   }, [memberId, router])
+
+  useEffect(() => {
+    setActiveTab(tabParam === 'ram' ? 'ram' : 'food')
+  }, [tabParam])
 
   useEffect(() => {
     let cancelled = false
@@ -50,9 +59,8 @@ function OrdersPageContent() {
     return () => { cancelled = true }
   }, [])
 
-  const loadOrders = async () => {
+  const loadFoodOrders = async () => {
     try {
-      setLoading(true)
       const res = await fetch(`/api/orders/member?member_id=${memberId}`, {
         method: 'GET',
         credentials: 'include',
@@ -70,20 +78,64 @@ function OrdersPageContent() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    }
+  }
+
+  const loadRamOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ram_orders')
+        .select(
+          'id,member_id,status,created_at,payment_option,qty,unit_price,principal_amount,interest_amount,total_amount,ram_delivery_location_id'
+        )
+        .eq('member_id', memberId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw new Error(error.message || 'Failed to load ram orders')
+      const rows = Array.isArray(data) ? data : []
+      setRamOrders(rows)
+
+      const ids = Array.from(new Set(rows.map((r) => r?.ram_delivery_location_id).filter((x) => x != null)))
+      if (ids.length === 0) {
+        setRamLocations([])
+        return
+      }
+
+      const { data: locs, error: lErr } = await supabase
+        .from('ram_delivery_locations')
+        .select('id,delivery_location,name')
+        .in('id', ids)
+
+      if (lErr) throw new Error(lErr.message || 'Failed to load ram delivery locations')
+      setRamLocations(Array.isArray(locs) ? locs : [])
+    } catch (e) {
+      setMessage({ type: 'error', text: e?.message || 'Failed to load ram orders' })
+    }
+  }
+
+  const loadAll = async () => {
+    try {
+      setLoading(true)
+      setMessage(null)
+      await Promise.all([loadFoodOrders(), loadRamOrders()])
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredOrders = selectedStatus === 'All' 
-    ? orders 
-    : orders.filter(order => order.status === selectedStatus)
+  const filteredOrders =
+    selectedStatus === 'All'
+      ? activeTab === 'ram'
+        ? ramOrders
+        : orders
+      : (activeTab === 'ram' ? ramOrders : orders).filter((order) => order.status === selectedStatus)
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'Pending': return 'bg-yellow-100 text-yellow-800'
       case 'Posted': return 'bg-blue-100 text-blue-800'
       case 'Delivered': return 'bg-green-100 text-green-800'
+      case 'Approved': return 'bg-green-100 text-green-800'
       case 'Cancelled': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -92,6 +144,12 @@ function OrdersPageContent() {
   const downloadReceipt = (orderId) => {
     window.open(`/shop/success/${orderId}?mid=${memberId}`, '_blank')
   }
+
+  const downloadRamReceipt = (orderId) => {
+    window.open(`/ram/success/${orderId}?mid=${memberId}`, '_blank')
+  }
+
+  const ramLocationMap = new Map(ramLocations.map((l) => [String(l.id), l]))
 
   if (loading) {
     return (
@@ -163,9 +221,40 @@ function OrdersPageContent() {
                   <p className="text-xs sm:text-sm text-blue-600">Member ID: {memberId}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs sm:text-sm text-blue-600">Total Orders: {orders.length}</div>
+                  <div className="text-xs sm:text-sm text-blue-600">
+                    Food: {orders.length} · Ram: {ramOrders.length}
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto mb-6">
+          <div className="bg-white rounded-xl shadow-lg p-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(`/orders?member_id=${encodeURIComponent(memberId)}${isAdmin ? '&admin=true' : ''}&tab=food`)
+                }
+                className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
+                  activeTab === 'food' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Food Orders
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(`/orders?member_id=${encodeURIComponent(memberId)}${isAdmin ? '&admin=true' : ''}&tab=ram`)
+                }
+                className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
+                  activeTab === 'ram' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Ram Orders
+              </button>
             </div>
           </div>
         </div>
@@ -182,15 +271,21 @@ function OrdersPageContent() {
                   className="border rounded-lg px-3 py-2 text-xs sm:text-sm w-full sm:w-auto"
                 >
                   <option key="all" value="All">All Orders</option>
-                      <option key="pending" value="Pending">Pending</option>
+                  <option key="pending" value="Pending">Pending</option>
+                  {activeTab === 'ram' ? (
+                    <option key="approved" value="Approved">Approved</option>
+                  ) : (
+                    <>
                       <option key="posted" value="Posted">Posted</option>
                       <option key="delivered" value="Delivered">Delivered</option>
-                      <option key="cancelled" value="Cancelled">Cancelled</option>
+                    </>
+                  )}
+                  <option key="cancelled" value="Cancelled">Cancelled</option>
                 </select>
               </div>
               <div className="flex justify-end items-end">
                 <button
-                  onClick={loadOrders}
+                  onClick={loadAll}
                   className="px-3 py-2 sm:px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap h-10"
                 >
                   <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -236,121 +331,195 @@ function OrdersPageContent() {
             ) : (
               <div className="space-y-4">
                 {filteredOrders.map((order) => (
-                  <div key={order.order_id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2 lg:mb-3">
-                      <div className="flex items-center gap-4">
+                  activeTab === 'ram' ? (
+                    <div key={order.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-2 lg:mb-3">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Ram Order #{order.id}</h3>
+                            <p className="text-xs sm:text-sm text-gray-600">
+                              {new Date(order.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                          <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
+                          <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
                         <div>
-                          <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
-                          <p className="text-xs sm:text-sm text-gray-600">
-                            {new Date(order.created_at).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
+                          <div className="text-sm text-gray-600">Vendor</div>
+                          <div className="font-medium">{ramLocationMap.get(String(order.ram_delivery_location_id))?.name || 'N/A'}</div>
                         </div>
-                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
-                        <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
-                      <div>
-                        <div className="text-sm text-gray-600">Delivery Branch</div>
-                        <div className="font-medium">{order.delivery?.name || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-600">Department</div>
-                        <div className="font-medium">{order.departments?.name || order.department || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-600">Items</div>
-                        <div className="font-medium">{order.order_lines?.length || 0} items</div>
-                      </div>
-                    </div>
-                    
-                    {/* Order Items */}
-                    {order.order_lines && order.order_lines.length > 0 && (
-                      <div className="mb-2 lg:mb-3">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Items:</div>
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="space-y-2">
-                            {order.order_lines.map((line, index) => (
-                              <div key={`${order.order_id}-${line.sku || line.item_id || index}`} className="flex justify-between items-center text-sm">
-                                <div>
-                                  <span className="font-medium">{line.items?.name || 'Unknown Item'}</span>
-                                  <span className="text-gray-600 ml-2">x{line.qty}</span>
-                                </div>
-                                <div className="font-medium">₦{Number(line.amount || 0).toLocaleString()}</div>
-                              </div>
-                            ))}
+                        <div>
+                          <div className="text-sm text-gray-600">Delivery Location</div>
+                          <div className="font-medium">
+                            {ramLocationMap.get(String(order.ram_delivery_location_id))?.delivery_location || 'N/A'}
                           </div>
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Payment Breakdown for Loan Orders */}
-                    {order.payment_option === 'Loan' && (
-                      <div className="mb-2 lg:mb-3">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Payment Breakdown:</div>
-                        <div className="bg-blue-50 rounded-lg p-3">
-                          <div className="space-y-1">
-                            {/* Principal is the sum of line amounts */}
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="text-gray-600">Principal Amount:</span>
-                              <span className="font-medium">₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))).toLocaleString()}</span>
-                            </div>
-                            {/* Interest is 13% of principal */}
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="text-gray-600">Interest (13%):</span>
-                              <span className="font-medium text-orange-600">₦{Number(Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}</span>
-                            </div>
-                            <div className="border-t pt-1 mt-1">
-                              <div className="flex justify-between items-center text-sm font-semibold">
-                                <span>Total (incl. Interest):</span>
-                                <span>₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}</span>
-                              </div>
-                            </div>
-                          </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Quantity</div>
+                          <div className="font-medium">{Number(order.qty || 0)} ram(s)</div>
                         </div>
                       </div>
-                    )}
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        {order.posted_at && (
-                          <span>Posted: {new Date(order.posted_at).toLocaleDateString()}</span>
-                        )}
-                        {order.delivered_at && (
-                          <span>Delivered: {new Date(order.delivered_at).toLocaleDateString()}</span>
-                        )}
-                        {order.cancelled_at && (
-                          <span>Cancelled: {new Date(order.cancelled_at).toLocaleDateString()}</span>
-                        )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
+                        <div>
+                          <div className="text-sm text-gray-600">Unit Price</div>
+                          <div className="font-medium">₦{Number(order.unit_price || 0).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Principal</div>
+                          <div className="font-medium">₦{Number(order.principal_amount || 0).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Interest</div>
+                          <div className="font-medium">₦{Number(order.interest_amount || 0).toLocaleString()}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end">
+                        <button
+                          onClick={() => downloadRamReceipt(order.id)}
+                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center"
+                        >
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Receipt
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={order.order_id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-2 lg:mb-3">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
+                            <p className="text-xs sm:text-sm text-gray-600">
+                              {new Date(order.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                          <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
+                          <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
+                        </div>
                       </div>
                       
-                      <div className="flex gap-2">
-                        {(order.status === 'Delivered' || order.status === 'Posted') && (
-                          <button
-                            onClick={() => downloadReceipt(order.order_id)}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center"
-                          >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Receipt
-                          </button>
-                        )}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
+                        <div>
+                          <div className="text-sm text-gray-600">Delivery Branch</div>
+                          <div className="font-medium">{order.delivery?.name || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Department</div>
+                          <div className="font-medium">{order.departments?.name || order.department || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Items</div>
+                          <div className="font-medium">{order.order_lines?.length || 0} items</div>
+                        </div>
+                      </div>
+                      
+                      {order.order_lines && order.order_lines.length > 0 && (
+                        <div className="mb-2 lg:mb-3">
+                          <div className="text-sm font-medium text-gray-700 mb-2">Items:</div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="space-y-2">
+                              {order.order_lines.map((line, index) => (
+                                <div key={`${order.order_id}-${line.sku || line.item_id || index}`} className="flex justify-between items-center text-sm">
+                                  <div>
+                                    <span className="font-medium">{line.items?.name || 'Unknown Item'}</span>
+                                    <span className="text-gray-600 ml-2">x{line.qty}</span>
+                                  </div>
+                                  <div className="font-medium">₦{Number(line.amount || 0).toLocaleString()}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {order.payment_option === 'Loan' && (
+                        <div className="mb-2 lg:mb-3">
+                          <div className="text-sm font-medium text-gray-700 mb-2">Payment Breakdown:</div>
+                          <div className="bg-blue-50 rounded-lg p-3">
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-600">Principal Amount:</span>
+                                <span className="font-medium">
+                                  ₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-600">Interest (13%):</span>
+                                <span className="font-medium text-orange-600">
+                                  ₦{Number(Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="border-t pt-1 mt-1">
+                                <div className="flex justify-between items-center text-sm font-semibold">
+                                  <span>Total (incl. Interest):</span>
+                                  <span>
+                                    ₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          {order.posted_at && (
+                            <span>Posted: {new Date(order.posted_at).toLocaleDateString()}</span>
+                          )}
+                          {order.delivered_at && (
+                            <span>Delivered: {new Date(order.delivered_at).toLocaleDateString()}</span>
+                          )}
+                          {order.cancelled_at && (
+                            <span>Cancelled: {new Date(order.cancelled_at).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {(order.status === 'Delivered' || order.status === 'Posted') && (
+                            <button
+                              onClick={() => downloadReceipt(order.order_id)}
+                              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Receipt
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )
                 ))}
               </div>
             )}

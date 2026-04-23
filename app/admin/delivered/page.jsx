@@ -1,7 +1,7 @@
 // app/admin/delivered/page.jsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
 
 function DeliveredPageContent() {
@@ -11,6 +11,8 @@ function DeliveredPageContent() {
   const [payment, setPayment] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [pageSize, setPageSize] = useState(50)
+  const [page, setPage] = useState(1)
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -22,7 +24,7 @@ function DeliveredPageContent() {
   const fetchOrders = async () => {
     const qs = new URLSearchParams({
       status: 'Delivered',
-      limit: '200',
+      limit: '800',
       ...(term ? { term } : {}),
       ...(payment ? { payment } : {}),
       ...(branch ? { branch } : {}),
@@ -33,10 +35,8 @@ function DeliveredPageContent() {
       const res = await fetch(`/api/admin/orders/list?${qs}`, { headers:{ 'Accept':'application/json' }, cache:'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/orders/list (delivered)')
       if (json.ok) {
-        let rows = json.orders || []
-        if (from) rows = rows.filter(r => new Date(r.posted_at || r.created_at) >= new Date(from))
-        if (to) rows = rows.filter(r => new Date(r.posted_at || r.created_at) <= new Date(to + 'T23:59:59'))
-        setOrders(rows)
+        setOrders(json.orders || [])
+        setPage(1)
       }
     } catch (e) {
       setOrders([])
@@ -48,8 +48,24 @@ function DeliveredPageContent() {
 
   useEffect(() => { fetchOrders() }, [])
 
+  const filteredOrders = useMemo(() => {
+    let rows = orders || []
+    if (from) rows = rows.filter(r => new Date(r.posted_at || r.created_at) >= new Date(from))
+    if (to) rows = rows.filter(r => new Date(r.posted_at || r.created_at) <= new Date(to + 'T23:59:59'))
+    return rows
+  }, [orders, from, to])
+
+  const pageCount = useMemo(() => Math.max(1, Math.ceil((filteredOrders?.length || 0) / Math.max(1, pageSize))), [filteredOrders, pageSize])
+  const safePage = Math.min(Math.max(1, page), pageCount)
+  const startIndex = (safePage - 1) * pageSize
+  const pagedOrders = useMemo(() => (filteredOrders || []).slice(startIndex, startIndex + pageSize), [filteredOrders, startIndex, pageSize])
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage)
+  }, [page, safePage])
+
   const exportCSV = () => {
-    const rows = orders.flatMap(o => (o.order_lines || []).map(l => ({
+    const rows = filteredOrders.flatMap(o => (o.order_lines || []).map(l => ({
       order_id: o.order_id,
       posted_at: o.posted_at,
       member_id: o.member_id,
@@ -73,7 +89,7 @@ function DeliveredPageContent() {
   }
 
   const exportPDF = async () => {
-    if (!orders.length) { alert('No rows to export') ; return }
+    if (!filteredOrders.length) { alert('No rows to export') ; return }
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF()
     let y = 12
@@ -82,7 +98,7 @@ function DeliveredPageContent() {
     const header = ['Order','Member','Dept','Pay','SKU','Item','Qty','Unit Price','Amount']
     doc.text(header.join(' | '), 10, y); y += 4
     doc.line(10, y, 200, y); y += 4
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       (o.order_lines || []).forEach(l => {
         const line = [
           String(o.order_id),
@@ -141,16 +157,55 @@ function DeliveredPageContent() {
           Refresh
         </button>
         <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>
-          Export CSV
+          Download CSV
         </button>
         <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>
-          Export PDF
+          Download PDF
         </button>
       </div>
 
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+        <div className="text-xs sm:text-sm text-gray-700">
+          Showing {filteredOrders.length ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, filteredOrders.length)} of {filteredOrders.length}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value) || 50)
+              setPage(1)
+            }}
+          >
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage <= 1}
+          >
+            Prev
+          </button>
+          <div className="text-xs sm:text-sm text-gray-700">
+            Page {safePage} / {pageCount}
+          </div>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            disabled={safePage >= pageCount}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
       <div className="divide-y border rounded">
-        {orders.length === 0 && <div className="p-4 text-gray-600">No Delivered orders.</div>}
-        {orders.map(o => (
+        {filteredOrders.length === 0 && <div className="p-4 text-gray-600">No Delivered orders.</div>}
+        {pagedOrders.map(o => (
           <div key={o.order_id} className="p-2 sm:p-3 md:p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 sm:gap-2 md:gap-3 mb-2 sm:mb-3">
               <div className="font-medium text-xs sm:text-sm md:text-base">#{o.order_id}</div>

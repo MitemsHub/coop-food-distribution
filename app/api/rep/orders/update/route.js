@@ -25,13 +25,18 @@ export async function PUT(request) {
 
     const supabase = await createSupabaseServerClient()
 
+    const { error: ordersColErr } = await supabase.from('orders').select('cycle_id').limit(1)
+    const { error: pricesColErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const ordersHasCycle = !ordersColErr
+    const pricesHasCycle = !pricesColErr
+
     // Check if order exists and belongs to the rep's branch
-    const { data: order, error: orderError } = await supabase
+    let orderQuery = supabase
       .from('orders')
-      .select('order_id, status, delivery_branch_id')
+      .select(ordersHasCycle ? 'order_id, status, delivery_branch_id, cycle_id' : 'order_id, status, delivery_branch_id')
       .eq('order_id', orderId)
       .eq('delivery_branch_id', branch_id)
-      .single()
+    const { data: order, error: orderError } = await orderQuery.single()
 
     if (orderError || !order) {
       return NextResponse.json({ ok: false, error: 'Order not found or access denied' }, { status: 404 })
@@ -39,6 +44,27 @@ export async function PUT(request) {
 
     if (order.status !== 'Pending') {
       return NextResponse.json({ ok: false, error: 'Only pending orders can be edited' }, { status: 400 })
+    }
+
+    let activeCycleId = null
+    if (pricesHasCycle) {
+      if (ordersHasCycle && order.cycle_id) {
+        activeCycleId = order.cycle_id
+      } else {
+        const { data: activeCycle, error: cycleErr } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle()
+        if (cycleErr) {
+          console.error('Active cycle fetch error:', cycleErr)
+          return NextResponse.json({ ok: false, error: 'Failed to load active cycle' }, { status: 500 })
+        }
+        if (!activeCycle?.id) {
+          return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+        }
+        activeCycleId = activeCycle.id
+      }
     }
 
     // Validate order lines against branch_item_prices
@@ -62,12 +88,14 @@ export async function PUT(request) {
       }
 
       // Validate that price exists for this item in this branch
-      const { data: priceRow, error: priceError } = await supabase
+      let priceQuery = supabase
         .from('branch_item_prices')
         .select('id, price')
         .eq('branch_id', branch_id)
         .eq('item_id', line.item_id)
-        .single()
+      if (pricesHasCycle) priceQuery = priceQuery.eq('cycle_id', activeCycleId)
+
+      const { data: priceRow, error: priceError } = await priceQuery.single()
 
       if (priceError || !priceRow) {
         return NextResponse.json({ ok: false, error: `No price for ${item.sku} in this branch` }, { status: 400 })

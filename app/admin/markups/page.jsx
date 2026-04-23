@@ -4,13 +4,22 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export default function AdminMarkupsPage() {
   const [branches, setBranches] = useState([])
-  const [selectedBranchCode, setSelectedBranchCode] = useState('')
+  const [priceBranchCode, setPriceBranchCode] = useState('')
+  const [markupBranchCode, setMarkupBranchCode] = useState('')
   const [loadingBranches, setLoadingBranches] = useState(true)
+
+  const [cycles, setCycles] = useState([])
+  const [selectedCycleId, setSelectedCycleId] = useState(null)
+  const [loadingCycles, setLoadingCycles] = useState(false)
 
   const [sku, setSku] = useState('')
   const [amount, setAmount] = useState(500)
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
+
+  const [priceSku, setPriceSku] = useState('')
+  const [basePrice, setBasePrice] = useState(0)
+  const [savingPrice, setSavingPrice] = useState(false)
 
   const [markups, setMarkups] = useState([])
   const [loadingMarkups, setLoadingMarkups] = useState(false)
@@ -38,7 +47,8 @@ export default function AdminMarkupsPage() {
         if (error) throw error
         setBranches(data || [])
         if (data && data.length > 0) {
-          setSelectedBranchCode(data[0].code)
+          setPriceBranchCode(data[0].code)
+          setMarkupBranchCode(data[0].code)
         }
       } catch (err) {
         setMessage(`Failed to load branches: ${err.message}`)
@@ -50,12 +60,35 @@ export default function AdminMarkupsPage() {
   }, [supabase])
 
   useEffect(() => {
-    if (!selectedBranchCode) return
+    async function loadCycles() {
+      try {
+        setLoadingCycles(true)
+        const res = await fetch('/api/admin/cycles', { cache: 'no-store', credentials: 'same-origin' })
+        const json = await res.json()
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load cycles')
+        setCycles(json.cycles || [])
+        setSelectedCycleId(prev => {
+          if (prev != null) return prev
+          if (json.active_cycle_id != null) return json.active_cycle_id
+          if ((json.cycles || []).length > 0) return json.cycles[0].id
+          return null
+        })
+      } catch (e) {
+        setMessage(`Failed to load cycles: ${e.message}`)
+      } finally {
+        setLoadingCycles(false)
+      }
+    }
+    loadCycles()
+  }, [])
+
+  useEffect(() => {
+    if (!markupBranchCode) return
     async function loadMarkups() {
       try {
         setLoadingMarkups(true)
         setMessage('')
-        const res = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(selectedBranchCode)}`)
+        const res = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
         const json = await res.json()
         if (!json.ok) throw new Error(json.error || 'Failed to fetch markups')
         setMarkups(json.markups || [])
@@ -66,7 +99,33 @@ export default function AdminMarkupsPage() {
       }
     }
     loadMarkups()
-  }, [selectedBranchCode])
+  }, [markupBranchCode])
+
+  async function updateBasePrice(e) {
+    e.preventDefault()
+    try {
+      setSavingPrice(true)
+      setMessage('')
+      const res = await fetch('/api/admin/markups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          branch_code: priceBranchCode,
+          sku: priceSku.trim(),
+          price: Number(basePrice),
+          cycle_id: selectedCycleId
+        })
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to update price')
+      setMessage(json.message || 'Price updated')
+    } catch (err) {
+      setMessage(`Price update failed: ${err.message}`)
+    } finally {
+      setSavingPrice(false)
+    }
+  }
 
   async function upsertMarkup(e) {
     e.preventDefault()
@@ -76,13 +135,13 @@ export default function AdminMarkupsPage() {
       const res = await fetch('/api/admin/markups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_code: selectedBranchCode, sku: sku.trim(), amount: Number(amount) })
+        body: JSON.stringify({ branch_code: markupBranchCode, sku: sku.trim(), amount: Number(amount) })
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Failed to save markup')
       setMessage(json.message || 'Markup saved')
       // Refresh list
-      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(selectedBranchCode)}`)
+      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
       const listJson = await listRes.json()
       setMarkups(listJson.markups || [])
     } catch (err) {
@@ -99,7 +158,7 @@ export default function AdminMarkupsPage() {
       const res = await fetch('/api/admin/markups', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_code: selectedBranchCode, sku: itemSku })
+        body: JSON.stringify({ branch_code: markupBranchCode, sku: itemSku })
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Failed to remove markup')
@@ -131,7 +190,7 @@ export default function AdminMarkupsPage() {
   useEffect(() => {
     // Reset to first page when filters change
     setCurrentPage(1)
-  }, [searchTerm, activeFilter, selectedBranchCode])
+  }, [searchTerm, activeFilter, markupBranchCode])
 
   // Export CSV for filtered markups
   const exportMarkupsCSV = () => {
@@ -140,7 +199,7 @@ export default function AdminMarkupsPage() {
       headers.join(','),
       ...filteredMarkups.map(m => {
         const row = [
-          selectedBranchCode,
+          markupBranchCode,
           m.items?.sku || '',
           m.items?.name || '',
           m.items?.category || '',
@@ -155,7 +214,7 @@ export default function AdminMarkupsPage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `markups_${selectedBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `markups_${markupBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -173,9 +232,9 @@ export default function AdminMarkupsPage() {
       const { default: autoTable } = await import('jspdf-autotable')
       const doc = new jsPDF('l', 'mm', 'a4')
       doc.setFontSize(16)
-      doc.text('Branch Item Markups', 14, 15)
+      doc.text('Branch Prices & Markups', 14, 15)
       doc.setFontSize(10)
-      let filterText = `Branch: ${selectedBranchCode || 'N/A'}`
+      let filterText = `Branch: ${markupBranchCode || 'N/A'}`
       if (searchTerm) filterText += ` | Search: ${searchTerm}`
       if (activeFilter !== 'all') filterText += ` | Active: ${activeFilter}`
       doc.text(filterText, 14, 22)
@@ -203,7 +262,7 @@ export default function AdminMarkupsPage() {
         }
       })
 
-      doc.save(`markups_${selectedBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.pdf`)
+      doc.save(`markups_${markupBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (error) {
       console.error('PDF export error:', error)
       alert('PDF export failed. Please try again.')
@@ -242,7 +301,7 @@ export default function AdminMarkupsPage() {
       if (!res.ok || !json.ok) throw new Error(json.error || `Upload failed with status ${res.status}`)
       setUploadLog(JSON.stringify(json, null, 2))
       // Refresh current branch markups
-      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(selectedBranchCode)}`)
+      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
       const listJson = await listRes.json()
       if (listJson.ok) setMarkups(listJson.markups || [])
     } catch (e) {
@@ -255,18 +314,90 @@ export default function AdminMarkupsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin: Branch Item Markups</h1>
+      <h1 className="text-2xl font-semibold mb-4">Admin: Branch Prices Update</h1>
       <p className="text-sm text-gray-600 mb-6">Set fixed markups (e.g., ₦500) per item per branch. Prices in the Shop and Checkout will include these markups.</p>
 
       {message && (
         <div className="mb-4 p-3 rounded border border-gray-300 bg-gray-50">{message}</div>
       )}
 
+      <div className="mb-8 border rounded-lg p-4">
+        <h2 className="text-lg font-semibold mb-2">Update Base Price (Per Cycle)</h2>
+        <p className="text-sm text-gray-600 mb-3">Updates branch base price for a specific cycle. Existing orders for that branch/item will reprice automatically.</p>
+        <form onSubmit={updateBasePrice} className="flex gap-4 items-end flex-wrap">
+          <div>
+            <label className="block text-sm font-medium mb-1">Branch</label>
+            <select
+              value={priceBranchCode}
+              onChange={e => setPriceBranchCode(e.target.value)}
+              className="border rounded px-3 py-2 w-72"
+              disabled={loadingBranches}
+              required
+            >
+              {branches.map(b => (
+                <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Cycle</label>
+            <select
+              value={selectedCycleId ?? ''}
+              onChange={e => setSelectedCycleId(e.target.value ? Number(e.target.value) : null)}
+              className="border rounded px-3 py-2 w-72"
+              disabled={loadingCycles || cycles.length === 0}
+              required
+            >
+              {cycles.length === 0 ? (
+                <option value="">No cycles found</option>
+              ) : (
+                cycles.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code}){c.is_active ? ' — Active' : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">SKU</label>
+            <input
+              type="text"
+              value={priceSku}
+              onChange={e => setPriceSku(e.target.value)}
+              placeholder="e.g., RICE-25KG"
+              className="border rounded px-3 py-2 w-64"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Base Price (₦)</label>
+            <input
+              type="number"
+              value={basePrice}
+              onChange={e => setBasePrice(e.target.value)}
+              min={0}
+              step={1}
+              className="border rounded px-3 py-2 w-40"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-60"
+            disabled={savingPrice || !priceBranchCode}
+          >
+            {savingPrice ? 'Updating…' : 'Update Price'}
+          </button>
+        </form>
+      </div>
+
+      <h2 className="text-2xl font-semibold mb-4">Admin: Branch Items Markups</h2>
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-1">Branch</label>
+        <label className="block text-sm font-medium mb-1">Branch (for Markups)</label>
         <select
-          value={selectedBranchCode}
-          onChange={e => setSelectedBranchCode(e.target.value)}
+          value={markupBranchCode}
+          onChange={e => setMarkupBranchCode(e.target.value)}
           className="border rounded px-3 py-2 w-64"
           disabled={loadingBranches}
         >
@@ -370,12 +501,12 @@ export default function AdminMarkupsPage() {
               type="button"
               onClick={exportMarkupsCSV}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded"
-            >Export CSV</button>
+            >Download CSV</button>
             <button
               type="button"
               onClick={exportMarkupsPDF}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded"
-            >Export PDF</button>
+            >Download PDF</button>
           </div>
         </div>
         {loadingMarkups ? (

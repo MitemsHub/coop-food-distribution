@@ -5,9 +5,28 @@ import { createSupabaseServerClient } from '../../../../lib/supabaseServer'
 export async function GET() {
   try {
     const supabase = await createSupabaseServerClient()
+
+    const { error: colErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const pricesHasCycle = !colErr
+    let activeCycleId = null
+    if (pricesHasCycle) {
+      const { data: activeCycle, error: cycleErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (cycleErr) {
+        console.error('Error fetching active cycle:', cycleErr)
+        return NextResponse.json({ ok: false, error: 'Failed to load active cycle' }, { status: 500 })
+      }
+      if (!activeCycle?.id) {
+        return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+      }
+      activeCycleId = activeCycle.id
+    }
     
     // Get all items with prices from branch_item_prices (distinct items only)
-    const { data: itemsWithPrices, error } = await supabase
+    let query = supabase
       .from('branch_item_prices')
       .select(`
         price,
@@ -20,6 +39,10 @@ export async function GET() {
         )
       `)
       .order('name', { foreignTable: 'items' })
+
+    if (pricesHasCycle) query = query.eq('cycle_id', activeCycleId)
+
+    const { data: itemsWithPrices, error } = await query
     
     if (error) {
       console.error('Error fetching items:', error)

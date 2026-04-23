@@ -8,14 +8,16 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Fallback aggregator using Supabase tables when direct DB URL isn't available
-async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
+async function aggregateViaTablesForRep(supabase, { branchId, departmentId, ordersHasCycle, pricesHasCycle, activeCycleId }) {
   // Load orders for this rep's branch and status Posted/Delivered (do NOT filter by department here;
   // we'll filter per-line using either order.department_id or item.department_id to avoid misses)
-  const { data: orders, error: oErr } = await supabase
+  let ordersQ = supabase
     .from('orders')
     .select('order_id, delivery_branch_id, department_id, status')
     .in('status', ['Posted', 'Delivered'])
     .eq('delivery_branch_id', Number(branchId))
+  if (ordersHasCycle) ordersQ = ordersQ.eq('cycle_id', activeCycleId)
+  const { data: orders, error: oErr } = await ordersQ
   if (oErr) throw new Error(oErr.message)
   if (!orders?.length) return []
 
@@ -44,8 +46,15 @@ async function aggregateViaTablesForRep(supabase, { branchId, departmentId }) {
   let priceMap = new Map()
   let markupMap = new Map()
   if (itemIdsSet.length) {
+    let bipQ = supabase
+      .from('branch_item_prices')
+      .select('branch_id, item_id, price')
+      .eq('branch_id', Number(branchId))
+      .in('item_id', itemIdsSet)
+    if (pricesHasCycle) bipQ = bipQ.eq('cycle_id', activeCycleId)
+
     const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([
-      supabase.from('branch_item_prices').select('branch_id, item_id, price').eq('branch_id', Number(branchId)).in('item_id', itemIdsSet),
+      bipQ,
       supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').eq('branch_id', Number(branchId)).in('item_id', itemIdsSet)
     ])
     if (bipErr) throw new Error(bipErr.message)
@@ -107,6 +116,25 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url)
     const deptName = (searchParams.get('dept') || '').trim()
 
+    const { error: ordersColErr } = await supabase.from('orders').select('cycle_id').limit(1)
+    const { error: pricesColErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const ordersHasCycle = !ordersColErr
+    const pricesHasCycle = !pricesColErr
+
+    let activeCycleId = null
+    if (ordersHasCycle || pricesHasCycle) {
+      const { data: activeCycle, error: cycleErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (cycleErr) throw new Error(cycleErr.message)
+      if (!activeCycle?.id) {
+        return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+      }
+      activeCycleId = activeCycle.id
+    }
+
     // Resolve department id if deptName provided
     let deptId = null
     if (deptName) {
@@ -125,7 +153,8 @@ export async function GET(req) {
     try {
       const whereClauses = [ "o.status::text IN ('Posted','Delivered')", 'o.delivery_branch_id = $1' ]
       const params = [ Number(claim.branch_id) ]
-      if (deptId) { whereClauses.push('d.id = $2'); params.push(Number(deptId)) }
+      if (deptId) { whereClauses.push(`d.id = $${params.length + 1}`); params.push(Number(deptId)) }
+      if (ordersHasCycle) { whereClauses.push(`o.cycle_id = $${params.length + 1}`); params.push(Number(activeCycleId)) }
 
       const sql = `
         SELECT 
@@ -140,12 +169,14 @@ export async function GET(req) {
         JOIN items i ON i.item_id = ol.item_id
         LEFT JOIN departments d ON d.id = COALESCE(o.department_id, i.department_id)
         LEFT JOIN branch_item_prices bip ON bip.branch_id = o.delivery_branch_id AND bip.item_id = i.item_id
+          ${pricesHasCycle ? `AND bip.cycle_id = $${params.length + 1}` : ''}
         LEFT JOIN branch_item_markups bim ON bim.branch_id = o.delivery_branch_id AND bim.item_id = i.item_id
         WHERE ${whereClauses.join(' AND ')}
         GROUP BY i.item_id, i.name, i.category
         ORDER BY i.category, i.name
       `
 
+      if (pricesHasCycle) params.push(Number(activeCycleId))
       const result = await queryDirect(sql, params)
       const rows = (result.rows || []).map(r => ({
         items: r.item_name,
@@ -160,11 +191,11 @@ export async function GET(req) {
       }
 
       // If direct path returns no rows, still fallback for consistency
-      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId })
+      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, branch: { code: branchCode, name: branchName }, rows: fbRows })
     } catch (err) {
       // Fallback when direct DB URL isn't available or query fails
-      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId })
+      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, branch: { code: branchCode, name: branchName }, rows: fbRows })
     }
   } catch (e) {

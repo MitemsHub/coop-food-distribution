@@ -800,7 +800,7 @@ function RepPostedPageContent() {
           {itemsPackLoading ? (
             <>
               <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Exporting…</span>
+              <span>Downloading…</span>
             </>
           ) : (
             'Items Pack'
@@ -816,10 +816,10 @@ function RepPostedPageContent() {
           {excelLoading ? (
             <>
               <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Exporting…</span>
+              <span>Downloading…</span>
             </>
           ) : (
-            'Export Excel'
+            'Download Excel'
           )}
         </button>
         <button
@@ -831,10 +831,10 @@ function RepPostedPageContent() {
           {pdfLoading ? (
             <>
               <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Exporting…</span>
+              <span>Downloading…</span>
             </>
           ) : (
-            'Export PDF'
+            'Download PDF'
           )}
         </button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>

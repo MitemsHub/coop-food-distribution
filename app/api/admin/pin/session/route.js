@@ -28,6 +28,18 @@ export async function POST(req) {
   }
 }
 
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true })
+  res.cookies.set('admin_token', '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+    secure: false,
+  })
+  return res
+}
+
 // middleware.js (only the admin guard part shown)
 
 export async function middleware(req) {

@@ -15,6 +15,104 @@ function DataManagementPageContent() {
   const [processingAction, setProcessingAction] = useState(null)
   const router = useRouter()
 
+  const [cycles, setCycles] = useState([])
+  const [loadingCycles, setLoadingCycles] = useState(false)
+  const [activeCycleId, setActiveCycleId] = useState(null)
+  const [selectedCycleId, setSelectedCycleId] = useState(null)
+
+  const [newCycleCode, setNewCycleCode] = useState('')
+  const [newCycleName, setNewCycleName] = useState('')
+  const [newCycleStartsAt, setNewCycleStartsAt] = useState('')
+  const [newCycleEndsAt, setNewCycleEndsAt] = useState('')
+  const [newCycleMakeActive, setNewCycleMakeActive] = useState(true)
+  const [creatingCycle, setCreatingCycle] = useState(false)
+  const [activatingCycle, setActivatingCycle] = useState(false)
+
+  const loadCycles = async () => {
+    try {
+      setLoadingCycles(true)
+      const res = await fetch('/api/admin/cycles', { cache: 'no-store', credentials: 'same-origin' })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load cycles')
+      setCycles(json.cycles || [])
+      setActiveCycleId(json.active_cycle_id ?? null)
+      setSelectedCycleId(prev => {
+        if (prev != null) return prev
+        if (json.active_cycle_id != null) return json.active_cycle_id
+        if ((json.cycles || []).length > 0) return json.cycles[0].id
+        return null
+      })
+    } catch (e) {
+      setMessage(`Error: ${e.message}`)
+    } finally {
+      setLoadingCycles(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCycles()
+  }, [])
+
+  const createCycle = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (creatingCycle) return
+    setCreatingCycle(true)
+    setMessage('')
+    try {
+      const payload = {
+        code: newCycleCode.trim(),
+        name: newCycleName.trim(),
+        make_active: !!newCycleMakeActive
+      }
+      if (newCycleStartsAt) payload.starts_at = newCycleStartsAt
+      if (newCycleEndsAt) payload.ends_at = newCycleEndsAt
+
+      const res = await fetch('/api/admin/cycles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to create cycle')
+      setMessage(`Cycle created: ${json.cycle?.name || json.cycle?.code || 'New cycle'}`)
+      setNewCycleCode('')
+      setNewCycleName('')
+      setNewCycleStartsAt('')
+      setNewCycleEndsAt('')
+      await loadCycles()
+      if (json.active_cycle_id != null) setSelectedCycleId(json.active_cycle_id)
+    } catch (e2) {
+      setMessage(`Error: ${e2.message}`)
+    } finally {
+      setCreatingCycle(false)
+    }
+  }
+
+  const setActiveCycle = async () => {
+    if (activatingCycle) return
+    if (selectedCycleId == null) return
+    setActivatingCycle(true)
+    setMessage('')
+    try {
+      const res = await fetch('/api/admin/cycles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ id: selectedCycleId })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to set active cycle')
+      setMessage('Active cycle updated successfully')
+      await loadCycles()
+    } catch (e) {
+      setMessage(`Error: ${e.message}`)
+    } finally {
+      setActivatingCycle(false)
+    }
+  }
+
   const clearAllOrders = async (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -24,19 +122,21 @@ function DataManagementPageContent() {
       return
     }
     
-    if (confirmClearAll !== 'CLEAR ALL DATA') {
-      setMessage('Please type "CLEAR ALL DATA" to confirm')
+    if (confirmClearAll !== 'CLEAR CYCLE ORDERS') {
+      setMessage('Please type "CLEAR CYCLE ORDERS" to confirm')
       return
     }
 
     setLoading(true)
     setProcessingAction('clearAll')
-    setMessage('Clearing all orders...')
+    setMessage('Clearing orders for selected cycle...')
 
     try {
       const response = await fetch('/api/admin/data-management/clear-orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: selectedCycleId != null ? JSON.stringify({ cycle_id: selectedCycleId }) : undefined
       })
       
       const result = await response.json()
@@ -76,7 +176,9 @@ function DataManagementPageContent() {
     try {
       const response = await fetch('/api/admin/data-management/clear-delivered', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: selectedCycleId != null ? JSON.stringify({ cycle_id: selectedCycleId }) : undefined
       })
       
       const result = await response.json()
@@ -116,7 +218,9 @@ function DataManagementPageContent() {
     try {
       const response = await fetch('/api/admin/data-management/reset-inventory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: selectedCycleId != null ? JSON.stringify({ cycle_id: selectedCycleId }) : undefined
       })
       
       const result = await response.json()
@@ -149,16 +253,19 @@ function DataManagementPageContent() {
     setMessage('Creating backup...')
 
     try {
-      const response = await fetch('/api/admin/data-management/export-backup')
+      const exportUrl = selectedCycleId != null
+        ? `/api/admin/data-management/export-backup?cycle_id=${encodeURIComponent(String(selectedCycleId))}`
+        : '/api/admin/data-management/export-backup'
+      const response = await fetch(exportUrl, { credentials: 'same-origin' })
       
       if (response.ok) {
         const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
+        const downloadUrl = URL.createObjectURL(blob)
         const a = document.createElement('a')
-        a.href = url
+        a.href = downloadUrl
         a.download = `coop-backup-${new Date().toISOString().split('T')[0]}.xlsx`
         a.click()
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(downloadUrl)
         setMessage('Backup exported successfully as Excel file with multiple sheets')
       } else {
         const result = await response.json()
@@ -312,11 +419,112 @@ function DataManagementPageContent() {
           <ItemManagement />
         </div>
 
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 lg:p-3 xl:p-4">
+          <h2 className="text-base sm:text-lg font-medium text-purple-900 mb-2 sm:mb-3">🗓️ Cycles</h2>
+          <p className="text-sm sm:text-base text-purple-700 mb-3 sm:mb-4">
+            Cycles isolate quarterly/seasonal sales data. New uploads automatically attach to the currently active cycle.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="bg-white/60 border border-purple-200 rounded p-3">
+              <div className="text-sm font-medium text-purple-900 mb-2">Select Cycle for Admin Actions</div>
+              <select
+                value={selectedCycleId ?? ''}
+                onChange={(e) => setSelectedCycleId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                disabled={loadingCycles || cycles.length === 0}
+              >
+                {cycles.length === 0 ? (
+                  <option value="">No cycles found</option>
+                ) : (
+                  cycles.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.code}){c.is_active ? ' — Active' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+              <div className="mt-2 flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={setActiveCycle}
+                  disabled={selectedCycleId == null || activatingCycle}
+                  className="px-3 py-2 rounded text-white text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {activatingCycle ? 'Setting…' : 'Set Selected as Active'}
+                </button>
+                <button
+                  type="button"
+                  onClick={loadCycles}
+                  disabled={loadingCycles}
+                  className="px-3 py-2 rounded text-sm bg-white border border-purple-200 hover:bg-purple-50 disabled:opacity-50"
+                >
+                  {loadingCycles ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
+              <div className="mt-2 text-xs sm:text-sm text-purple-800">
+                Active cycle id: {activeCycleId ?? '—'}
+              </div>
+            </div>
+
+            <form onSubmit={createCycle} className="bg-white/60 border border-purple-200 rounded p-3">
+              <div className="text-sm font-medium text-purple-900 mb-2">Create New Cycle</div>
+              <div className="grid gap-2">
+                <input
+                  type="text"
+                  value={newCycleCode}
+                  onChange={(e) => setNewCycleCode(e.target.value)}
+                  placeholder="Code (e.g., 2026-Q2)"
+                  className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  required
+                />
+                <input
+                  type="text"
+                  value={newCycleName}
+                  onChange={(e) => setNewCycleName(e.target.value)}
+                  placeholder="Name (e.g., Fresh Food Q2 2026)"
+                  className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  required
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={newCycleStartsAt}
+                    onChange={(e) => setNewCycleStartsAt(e.target.value)}
+                    className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  />
+                  <input
+                    type="date"
+                    value={newCycleEndsAt}
+                    onChange={(e) => setNewCycleEndsAt(e.target.value)}
+                    className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-purple-900">
+                  <input
+                    type="checkbox"
+                    checked={newCycleMakeActive}
+                    onChange={(e) => setNewCycleMakeActive(e.target.checked)}
+                  />
+                  Make this cycle active immediately
+                </label>
+                <button
+                  type="submit"
+                  disabled={creatingCycle}
+                  className="w-full sm:w-auto px-4 py-2 bg-purple-600 text-white text-sm sm:text-base rounded hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {creatingCycle ? 'Creating…' : 'Create Cycle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         {/* Backup Data */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>
           <p className="text-sm sm:text-base text-blue-700 mb-3 sm:mb-4">
-            Export all current data (orders, members, inventory) as an Excel file with separate sheets for each data type.
+            Download data for the selected cycle as an Excel file with separate sheets for each data type.
           </p>
           <button
               type="button"
@@ -324,7 +532,7 @@ function DataManagementPageContent() {
               disabled={processingAction !== null}
               className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm sm:text-base rounded hover:bg-blue-700 disabled:opacity-50"
             >
-            {processingAction === 'exportBackup' ? 'Exporting...' : 'Export Backup'}
+            {processingAction === 'exportBackup' ? 'Downloading...' : 'Download Backup'}
           </button>
         </div>
 
@@ -332,7 +540,7 @@ function DataManagementPageContent() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-yellow-900 mb-2 sm:mb-3">🗑️ Clear Delivered Orders</h2>
           <p className="text-sm sm:text-base text-yellow-700 mb-3 sm:mb-4">
-            Remove all delivered orders to clean up the system. This is useful at the end of each year.
+            Remove delivered orders for the selected cycle only.
           </p>
           <div className="space-y-3">
             <input
@@ -357,7 +565,7 @@ function DataManagementPageContent() {
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-orange-900 mb-2 sm:mb-3">🔄 Reset Inventory</h2>
           <p className="text-sm sm:text-base text-orange-700 mb-3 sm:mb-4">
-            Reset all inventory quantities to zero. Use this to start fresh for a new year.
+            Reset inventory movements for the selected cycle only.
           </p>
           <div className="space-y-3">
             <input
@@ -380,15 +588,15 @@ function DataManagementPageContent() {
 
         {/* Clear All Orders */}
         <div className="bg-red-50 border border-red-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-red-900 mb-2 sm:mb-3">⚠️ Clear All Orders</h2>
+          <h2 className="text-base sm:text-lg font-medium text-red-900 mb-2 sm:mb-3">⚠️ Clear Orders (Selected Cycle)</h2>
           <p className="text-sm sm:text-base text-red-700 mb-3 sm:mb-4">
-            <strong>DANGER:</strong> This will permanently delete ALL orders (pending, posted, and delivered). 
-            Use this to completely reset the system for a new year.
+            <strong>DANGER:</strong> This will permanently delete orders in the selected cycle (pending, posted, and delivered).
+            Use this only after exporting a backup for that cycle.
           </p>
           <div className="space-y-3">
             <input
               type="text"
-              placeholder='Type "CLEAR ALL DATA" to confirm'
+              placeholder='Type "CLEAR CYCLE ORDERS" to confirm'
               value={confirmClearAll}
               onChange={(e) => setConfirmClearAll(e.target.value)}
               className="w-full px-3 py-2 text-sm sm:text-base border rounded"
@@ -396,23 +604,22 @@ function DataManagementPageContent() {
             <button
               type="button"
               onClick={clearAllOrders}
-              disabled={processingAction !== null || confirmClearAll !== 'CLEAR ALL DATA'}
+              disabled={processingAction !== null || confirmClearAll !== 'CLEAR CYCLE ORDERS'}
               className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white text-sm sm:text-base rounded hover:bg-red-700 disabled:opacity-50"
             >
-              {processingAction === 'clearAll' ? 'Clearing...' : 'Clear All Orders'}
+              {processingAction === 'clearAll' ? 'Clearing...' : 'Clear Cycle Orders'}
             </button>
           </div>
         </div>
       </div>
 
       <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-sm sm:text-base font-medium text-gray-900 mb-2">💡 Recommended Workflow for New Year:</h3>
+        <h3 className="text-sm sm:text-base font-medium text-gray-900 mb-2">💡 Recommended Workflow for a New Cycle:</h3>
         <ol className="list-decimal list-inside space-y-1 text-xs sm:text-sm text-gray-700">
-          <li>Export a backup of all current data</li>
-          <li>Clear delivered orders to remove test/old data</li>
-          <li>Reset inventory quantities to start fresh</li>
-          <li>Import new member data and pricing if needed</li>
-          <li>Update any system settings for the new year</li>
+          <li>Create the new cycle and set it as Active</li>
+          <li>Upload your new items/prices/inventory for the active cycle</li>
+          <li>Use cycle-specific Backup any time you want an export snapshot</li>
+          <li>Only use Clear/Reset actions when you are intentionally cleaning a specific cycle</li>
         </ol>
       </div>
     </div>

@@ -7,6 +7,138 @@ import { validateSession, validateBranchCode, validateSku, validateNumber } from
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function installRepricer() {
+  if (!process.env.SUPABASE_DB_URL) {
+    throw new Error('Database repair requires SUPABASE_DB_URL (Supabase pooler connection string). Add it to your server env and redeploy, then retry.')
+  }
+  const sql = `
+    BEGIN;
+    CREATE OR REPLACE FUNCTION public.reprice_orders_for_branch_item(
+      p_branch_id BIGINT,
+      p_item_id   BIGINT
+    )
+    RETURNS JSON
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      updated_lines_count INTEGER := 0;
+      has_cycle BOOLEAN := false;
+      orders_has_cycle BOOLEAN := false;
+    BEGIN
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'branch_item_prices' AND column_name = 'cycle_id'
+      ) INTO has_cycle;
+
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'cycle_id'
+      ) INTO orders_has_cycle;
+
+      IF has_cycle AND orders_has_cycle THEN
+        UPDATE public.order_lines AS ol
+        SET
+          unit_price = bip.price + COALESCE((
+            SELECT bim.amount FROM public.branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+          ), 0),
+          branch_item_price_id = bip.id,
+          amount = (bip.price + COALESCE((
+            SELECT bim.amount FROM public.branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+          ), 0)) * ol.qty
+        FROM public.orders AS o
+        JOIN public.branch_item_prices AS bip
+          ON bip.branch_id = o.delivery_branch_id AND bip.cycle_id = o.cycle_id
+        WHERE ol.order_id = o.order_id
+          AND bip.item_id = ol.item_id
+          AND o.delivery_branch_id = p_branch_id
+          AND ol.item_id = p_item_id
+          AND o.status::text IN ('Pending','Posted','Delivered');
+      ELSE
+        UPDATE public.order_lines AS ol
+        SET
+          unit_price = bip.price + COALESCE((
+            SELECT bim.amount FROM public.branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+          ), 0),
+          branch_item_price_id = bip.id,
+          amount = (bip.price + COALESCE((
+            SELECT bim.amount FROM public.branch_item_markups bim
+            WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+          ), 0)) * ol.qty
+        FROM public.orders AS o
+        JOIN public.branch_item_prices AS bip
+          ON bip.branch_id = o.delivery_branch_id
+        WHERE ol.order_id = o.order_id
+          AND bip.item_id = ol.item_id
+          AND o.delivery_branch_id = p_branch_id
+          AND ol.item_id = p_item_id
+          AND o.status::text IN ('Pending','Posted','Delivered');
+      END IF;
+
+      GET DIAGNOSTICS updated_lines_count = ROW_COUNT;
+
+      WITH s AS (
+        SELECT ol.order_id, SUM(ol.amount) AS principal
+        FROM public.order_lines AS ol
+        GROUP BY ol.order_id
+      )
+      UPDATE public.orders AS o
+      SET
+        total_amount = COALESCE(s.principal, 0)
+                     + CASE WHEN o.payment_option = 'Loan'
+                            THEN ROUND(COALESCE(s.principal, 0) * 0.13)
+                            ELSE 0
+                       END,
+        updated_at = NOW()
+      FROM s
+      WHERE o.delivery_branch_id = p_branch_id
+        AND o.status::text IN ('Pending','Posted','Delivered')
+        AND s.order_id = o.order_id
+        AND EXISTS (
+          SELECT 1 FROM public.order_lines AS ol2
+          WHERE ol2.order_id = o.order_id AND ol2.item_id = p_item_id
+        );
+
+      RETURN json_build_object('success', true, 'updated_lines', updated_lines_count);
+    EXCEPTION WHEN OTHERS THEN
+      RETURN json_build_object('success', false, 'error', SQLERRM);
+    END;
+    $$;
+
+    ALTER FUNCTION public.reprice_orders_for_branch_item(BIGINT, BIGINT) SET search_path = public;
+
+    CREATE OR REPLACE FUNCTION public.on_branch_item_markups_changed()
+    RETURNS TRIGGER
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM public.reprice_orders_for_branch_item(NEW.branch_id, NEW.item_id);
+      RETURN NEW;
+    END;$$;
+
+    DROP TRIGGER IF EXISTS trg_reprice_orders_on_bim_change ON public.branch_item_markups;
+    CREATE TRIGGER trg_reprice_orders_on_bim_change
+    AFTER INSERT OR UPDATE OF amount, active ON public.branch_item_markups
+    FOR EACH ROW EXECUTE FUNCTION public.on_branch_item_markups_changed();
+
+    CREATE OR REPLACE FUNCTION public.on_branch_item_prices_changed()
+    RETURNS TRIGGER
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM public.reprice_orders_for_branch_item(NEW.branch_id, NEW.item_id);
+      RETURN NEW;
+    END;$$;
+
+    DROP TRIGGER IF EXISTS trg_reprice_orders_on_bip_change ON public.branch_item_prices;
+    CREATE TRIGGER trg_reprice_orders_on_bip_change
+    AFTER INSERT OR UPDATE OF price ON public.branch_item_prices
+    FOR EACH ROW EXECUTE FUNCTION public.on_branch_item_prices_changed();
+    COMMIT;
+  `
+  await queryDirect(sql)
+}
+
 // List markups for a branch (optionally filter by sku)
 export async function GET(request) {
   try {
@@ -100,146 +232,8 @@ export async function POST(request) {
 
     // Self-heal if trigger calls missing repricer function due to BIGINT signature mismatch
     if (upErr && /reprice_orders_for_branch_item\(bigint,\s*bigint\) does not exist/i.test(upErr.message || '')) {
-      // If direct DB URL isn't available, return a helpful error immediately
-      if (!process.env.SUPABASE_DB_URL) {
-        return NextResponse.json({
-          ok: false,
-          error: 'Database repair requires SUPABASE_DB_URL (Supabase pooler connection string). Add it to your server env and redeploy, then retry Save Markup.'
-        }, { status: 500 })
-      }
       try {
-        const sql = `
-          BEGIN;
-          -- Ensure function is created in public schema with BIGINT params
-          CREATE OR REPLACE FUNCTION public.reprice_orders_for_branch_item(
-            p_branch_id BIGINT,
-            p_item_id   BIGINT
-          )
-          RETURNS JSON
-          LANGUAGE plpgsql
-          AS $$
-          DECLARE
-            updated_lines_count INTEGER := 0;
-            has_cycle BOOLEAN := false;
-            orders_has_cycle BOOLEAN := false;
-          BEGIN
-            -- Detect whether branch_item_prices has a cycle_id column
-            SELECT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_schema = 'public' AND table_name = 'branch_item_prices' AND column_name = 'cycle_id'
-            ) INTO has_cycle;
-
-            -- Detect whether orders has a cycle_id column
-            SELECT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'cycle_id'
-            ) INTO orders_has_cycle;
-
-            IF has_cycle AND orders_has_cycle THEN
-              UPDATE public.order_lines AS ol
-              SET
-                unit_price = bip.price + COALESCE((
-                  SELECT bim.amount FROM public.branch_item_markups bim
-                  WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
-                ), 0),
-                branch_item_price_id = bip.id,
-                amount = (bip.price + COALESCE((
-                  SELECT bim.amount FROM public.branch_item_markups bim
-                  WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
-                ), 0)) * ol.qty
-              FROM public.orders AS o
-              JOIN public.branch_item_prices AS bip
-                ON bip.branch_id = o.delivery_branch_id AND bip.cycle_id = o.cycle_id
-              WHERE ol.order_id = o.order_id
-                AND bip.item_id = ol.item_id
-                AND o.delivery_branch_id = p_branch_id
-                AND ol.item_id = p_item_id
-                AND o.status::text IN ('Pending','Posted','Delivered');
-            ELSE
-              UPDATE public.order_lines AS ol
-              SET
-                unit_price = bip.price + COALESCE((
-                  SELECT bim.amount FROM public.branch_item_markups bim
-                  WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
-                ), 0),
-                branch_item_price_id = bip.id,
-                amount = (bip.price + COALESCE((
-                  SELECT bim.amount FROM public.branch_item_markups bim
-                  WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
-                ), 0)) * ol.qty
-              FROM public.orders AS o
-              JOIN public.branch_item_prices AS bip
-                ON bip.branch_id = o.delivery_branch_id
-              WHERE ol.order_id = o.order_id
-                AND bip.item_id = ol.item_id
-                AND o.delivery_branch_id = p_branch_id
-                AND ol.item_id = p_item_id
-                AND o.status::text IN ('Pending','Posted','Delivered');
-            END IF;
-
-            GET DIAGNOSTICS updated_lines_count = ROW_COUNT;
-
-            -- Recompute order totals; include 13% interest for Loan
-            WITH s AS (
-              SELECT ol.order_id, SUM(ol.amount) AS principal
-              FROM public.order_lines AS ol
-              GROUP BY ol.order_id
-            )
-            UPDATE public.orders AS o
-            SET
-              total_amount = COALESCE(s.principal, 0)
-                           + CASE WHEN o.payment_option = 'Loan'
-                                  THEN ROUND(COALESCE(s.principal, 0) * 0.13)
-                                  ELSE 0
-                             END,
-              updated_at = NOW()
-            FROM s
-            WHERE o.delivery_branch_id = p_branch_id
-              AND o.status::text IN ('Pending','Posted','Delivered')
-              AND s.order_id = o.order_id
-              AND EXISTS (
-                SELECT 1 FROM public.order_lines AS ol2
-                WHERE ol2.order_id = o.order_id AND ol2.item_id = p_item_id
-              );
-
-            RETURN json_build_object('success', true, 'updated_lines', updated_lines_count);
-          EXCEPTION WHEN OTHERS THEN
-            RETURN json_build_object('success', false, 'error', SQLERRM);
-          END;
-          $$;
-
-          ALTER FUNCTION public.reprice_orders_for_branch_item(BIGINT, BIGINT) SET search_path = public;
-
-          -- Ensure triggers reference public schema
-          CREATE OR REPLACE FUNCTION public.on_branch_item_markups_changed()
-          RETURNS TRIGGER
-          LANGUAGE plpgsql AS $$
-          BEGIN
-            PERFORM public.reprice_orders_for_branch_item(NEW.branch_id, NEW.item_id);
-            RETURN NEW;
-          END;$$;
-
-          DROP TRIGGER IF EXISTS trg_reprice_orders_on_bim_change ON public.branch_item_markups;
-          CREATE TRIGGER trg_reprice_orders_on_bim_change
-          AFTER INSERT OR UPDATE OF amount, active ON public.branch_item_markups
-          FOR EACH ROW EXECUTE FUNCTION public.on_branch_item_markups_changed();
-
-          -- Also ensure branch_item_prices trigger uses public schema
-          CREATE OR REPLACE FUNCTION public.on_branch_item_prices_changed()
-          RETURNS TRIGGER
-          LANGUAGE plpgsql AS $$
-          BEGIN
-            PERFORM public.reprice_orders_for_branch_item(NEW.branch_id, NEW.item_id);
-            RETURN NEW;
-          END;$$;
-
-          DROP TRIGGER IF EXISTS trg_reprice_orders_on_bip_change ON public.branch_item_prices;
-          CREATE TRIGGER trg_reprice_orders_on_bip_change
-          AFTER INSERT OR UPDATE OF price ON public.branch_item_prices
-          FOR EACH ROW EXECUTE FUNCTION public.on_branch_item_prices_changed();
-          COMMIT;
-        `
-        await queryDirect(sql)
+        await installRepricer()
 
         // Retry upsert after installing function/trigger
         const retry = await supabase
@@ -256,6 +250,98 @@ export async function POST(request) {
     return NextResponse.json({ ok: true, message: `Markup set to ₦${amount} for ${sku} in ${branchCode}` })
   } catch (error) {
     console.error('Markups POST error:', error)
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const session = await validateSession(request, 'admin')
+    if (!session.valid) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = createClient()
+    const body = await request.json()
+
+    const branchCodeRes = validateBranchCode(body.branch_code)
+    const skuRes = validateSku(body.sku)
+    const priceRes = validateNumber(body.price, { min: 0, max: 100000000, integer: true })
+
+    if (!branchCodeRes.isValid) return NextResponse.json({ ok: false, error: branchCodeRes.error }, { status: 400 })
+    if (!skuRes.isValid)        return NextResponse.json({ ok: false, error: skuRes.error }, { status: 400 })
+    if (!priceRes.isValid)      return NextResponse.json({ ok: false, error: priceRes.error }, { status: 400 })
+
+    const cycleIdParam = body.cycle_id != null ? Number(body.cycle_id) : null
+    if (cycleIdParam != null && !Number.isFinite(cycleIdParam)) {
+      return NextResponse.json({ ok: false, error: 'Invalid cycle_id' }, { status: 400 })
+    }
+
+    const branchCode = branchCodeRes.sanitized
+    const sku = skuRes.sanitized
+    const price = priceRes.value
+
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+    const pricesHasCycle = await hasColumn('branch_item_prices', 'cycle_id')
+    const cyclesOk = await hasColumn('cycles', 'id')
+
+    let cycleId = cycleIdParam
+    if (pricesHasCycle && cyclesOk && !cycleId) {
+      const { data: active, error: activeErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (activeErr) return NextResponse.json({ ok: false, error: activeErr.message }, { status: 500 })
+      if (!active?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+      cycleId = active.id
+    }
+
+    const { data: branch, error: brErr } = await supabase
+      .from('branches')
+      .select('id, code')
+      .eq('code', branchCode)
+      .single()
+    if (brErr || !branch) return NextResponse.json({ ok: false, error: 'Branch not found' }, { status: 404 })
+
+    const { data: item, error: iErr } = await supabase
+      .from('items')
+      .select('item_id, sku')
+      .eq('sku', sku)
+      .single()
+    if (iErr || !item) return NextResponse.json({ ok: false, error: 'Item not found' }, { status: 404 })
+
+    const payload = { branch_id: branch.id, item_id: item.item_id, price }
+    const onConflict = pricesHasCycle ? 'branch_id,item_id,cycle_id' : 'branch_id,item_id'
+    if (pricesHasCycle) payload.cycle_id = cycleId
+
+    let { error: upErr } = await supabase
+      .from('branch_item_prices')
+      .upsert(payload, { onConflict })
+
+    if (upErr && /reprice_orders_for_branch_item\(bigint,\s*bigint\) does not exist/i.test(upErr.message || '')) {
+      try {
+        await installRepricer()
+        const retry = await supabase
+          .from('branch_item_prices')
+          .upsert(payload, { onConflict })
+        upErr = retry.error || null
+      } catch (installErr) {
+        return NextResponse.json({ ok: false, error: installErr?.message || 'Failed to install repricer function' }, { status: 500 })
+      }
+    }
+
+    if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 })
+
+    return NextResponse.json({
+      ok: true,
+      message: pricesHasCycle ? `Price updated to ₦${price} for ${sku} in ${branchCode} (cycle_id=${cycleId})` : `Price updated to ₦${price} for ${sku} in ${branchCode}`
+    })
+  } catch (error) {
+    console.error('Markups PATCH error:', error)
     return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
   }
 }

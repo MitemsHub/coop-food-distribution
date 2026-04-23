@@ -16,7 +16,8 @@ export default function MemberLauncher() {
   const [isCheckingDatabase, setIsCheckingDatabase] = useState(false)
   const [memberExists, setMemberExists] = useState(null) // null = not checked, true = exists, false = doesn't exist
   const [pinStatus, setPinStatus] = useState(null) // null = not checked, true = has PIN, false = no PIN
-  const [currentStep, setCurrentStep] = useState('member_id') // 'member_id', 'pin_setup'
+  const [currentStep, setCurrentStep] = useState('member_id') // 'member_id', 'pin_setup', 'module_picker'
+  const [authenticatedMemberId, setAuthenticatedMemberId] = useState('')
   const [pinError, setPinError] = useState('')
   // Shopping availability state
   const [shoppingOpen, setShoppingOpen] = useState(true)
@@ -224,7 +225,7 @@ export default function MemberLauncher() {
 
         if (response.ok && data.success) {
           // PIN verified, proceed to shop
-          proceedToShop(mid)
+          proceedToModulePicker(mid)
         } else {
           setPinError(data.error || 'Incorrect PIN')
           setIsLoading(false)
@@ -238,10 +239,10 @@ export default function MemberLauncher() {
     }
     
     // If we're here, either no PIN required or PIN was verified, proceed to shop
-    proceedToShop(mid)
+    proceedToModulePicker(mid)
   }
 
-  const proceedToShop = async (mid) => {
+  const proceedToModulePicker = async (mid) => {
     setIsLoading(true)
     
     try {
@@ -254,8 +255,10 @@ export default function MemberLauncher() {
       
       // Add a small delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 500))
-      
-      router.push(`/shop?mid=${encodeURIComponent(mid)}`)
+
+      setAuthenticatedMemberId(mid)
+      setCurrentStep('module_picker')
+      setIsLoading(false)
     } catch (error) {
       console.error('Navigation error:', error)
       setIsLoading(false)
@@ -327,11 +330,11 @@ export default function MemberLauncher() {
 
   const handlePinSet = () => {
     setPinStatus(true)
-    setCurrentStep('member_id')
+    proceedToModulePicker(memberId.trim().toUpperCase())
   }
 
   const handleSkipPin = () => {
-    proceedToShop(memberId.trim().toUpperCase())
+    proceedToModulePicker(memberId.trim().toUpperCase())
   }
 
   const handleBackToMemberId = () => {
@@ -481,9 +484,9 @@ export default function MemberLauncher() {
           
           <button 
             type="submit"
-            disabled={isLoading || !validation.isValid || memberExists !== true || isCheckingDatabase || (pinStatus === true && !pin.trim()) || !shoppingOpen}
+            disabled={isLoading || !validation.isValid || memberExists !== true || isCheckingDatabase || (pinStatus === true && !pin.trim())}
             className={`w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
-              validation.isValid && !isLoading && memberExists === true && !isCheckingDatabase && (pinStatus !== true || pin.trim()) && shoppingOpen
+              validation.isValid && !isLoading && memberExists === true && !isCheckingDatabase && (pinStatus !== true || pin.trim())
                 ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700'
                 : 'bg-gray-400 cursor-not-allowed'
             }`}
@@ -498,7 +501,7 @@ export default function MemberLauncher() {
                 <svg className="w-4 h-4 md:w-5 md:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
                 </svg>
-                {!shoppingOpen ? 'Shopping Closed' : (pinStatus === true ? 'Start Shopping' : pinStatus === false ? 'Set Up PIN' : 'Start Shopping')}
+                {pinStatus === true ? 'Continue' : pinStatus === false ? 'Set Up PIN' : 'Continue'}
               </>
             )}
           </button>
@@ -539,6 +542,49 @@ export default function MemberLauncher() {
           onPinSet={handlePinSet}
           onCancel={handleSkipPin}
         />
+      )}
+
+      {currentStep === 'module_picker' && (
+        <div className="space-y-3 md:space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
+            <div className="text-sm md:text-base font-semibold text-gray-800">Choose what you want to do</div>
+            <div className="text-xs md:text-sm text-gray-600 mt-1">
+              Signed in as <span className="font-semibold">{authenticatedMemberId}</span>
+            </div>
+            {!!shoppingStatusError && (
+              <div className="text-xs md:text-sm text-red-600 mt-2">{shoppingStatusError}</div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push(`/shop?mid=${encodeURIComponent(authenticatedMemberId)}`)}
+            disabled={!shoppingOpen}
+            className={`w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
+              shoppingOpen
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {shoppingOpen ? 'Food Distribution' : 'Food Distribution (Closed)'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(authenticatedMemberId)}`)}
+            className="w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+          >
+            Ram Sales (Sallah)
+          </button>
+
+          <button
+            type="button"
+            onClick={handleBackToMemberId}
+            className="w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-gray-700 text-sm md:text-base font-semibold rounded-xl transition-all duration-200 border border-gray-300 hover:bg-gray-50"
+          >
+            Back
+          </button>
+        </div>
       )}
     </div>
   )

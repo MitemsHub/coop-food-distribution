@@ -1708,7 +1708,7 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
                 <>
                   <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                   <span>
-                    Exporting… {itemsPackProgress.total > 0 ? `${itemsPackProgress.current}/${itemsPackProgress.total}` : ''}
+                    Downloading… {itemsPackProgress.total > 0 ? `${itemsPackProgress.current}/${itemsPackProgress.total}` : ''}
                   </span>
                 </>
               ) : (
@@ -1721,20 +1721,20 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
               className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700" 
               onClick={onExportExcel}
             >
-              Export Excel
+              Download Excel
             </button>
           )}
           <button 
             className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700" 
             onClick={onExportPDF}
           >
-            Export PDF
+            Download PDF
           </button>
           <button 
             className="px-3 py-1 bg-gray-700 text-white text-sm rounded hover:bg-gray-800" 
             onClick={onExportCSV}
           >
-            Export CSV
+            Download CSV
           </button>
         </div>
       </div>
@@ -1787,13 +1787,13 @@ function Section({ title, onExportCSV, onExportPDF, children }) {
             className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700" 
             onClick={onExportPDF}
           >
-            Export PDF
+            Download PDF
           </button>
           <button 
             className="px-3 py-1 bg-gray-700 text-white text-sm rounded hover:bg-gray-800" 
             onClick={onExportCSV}
           >
-            Export CSV
+            Download CSV
           </button>
         </div>
       </div>

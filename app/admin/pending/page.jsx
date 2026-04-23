@@ -11,6 +11,11 @@ function PendingAdminPageContent() {
   const [branch, setBranch] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [pageSize, setPageSize] = useState(50)
+  const [cursorStack, setCursorStack] = useState([null])
+  const [pageIndex, setPageIndex] = useState(0)
+  const [nextCursor, setNextCursor] = useState(null)
+  const [summary, setSummary] = useState(null)
   const [postingOrder, setPostingOrder] = useState(null) // Track which order is being posted
   const [postingBulk, setPostingBulk] = useState(false) // Track bulk posting
   const [savingEdit, setSavingEdit] = useState(false) // Track edit saving
@@ -29,23 +34,28 @@ function PendingAdminPageContent() {
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (cursorOverride) => {
     setLoading(true); setMsg(null)
     try {
       if (fetchCtl.current) fetchCtl.current.abort()
       const ctl = new AbortController()
       fetchCtl.current = ctl
+      const cursor = cursorOverride !== undefined ? cursorOverride : cursorStack[pageIndex] || null
       const qs = new URLSearchParams({
         status: 'Pending',
-        limit: '200',
+        limit: String(pageSize),
         ...(term ? { term } : {}),
         ...(payment ? { payment } : {}),
         ...(branch ? { branch } : {}),
       })
+      if (cursor) qs.set('cursor', String(cursor))
       const res = await fetch(`/api/admin/orders/list?${qs.toString()}`, { cache:'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/orders/list')
       if (!json.ok) throw new Error(json.error || 'Failed to load')
       setOrders(json.orders || [])
+      setNextCursor(json.nextCursor || null)
+      setSummary(json.summary || null)
+      setSelected(new Set())
     } catch (e) {
       if (e.name === 'AbortError') {
         // Ignore aborted fetches triggered by navigation or refresh
@@ -57,7 +67,13 @@ function PendingAdminPageContent() {
     }
   }
 
-  useEffect(() => { fetchOrders() }, []) // first load
+  useEffect(() => { fetchOrders(null) }, []) // first load
+
+  const resetPagination = () => {
+    setCursorStack([null])
+    setPageIndex(0)
+    setNextCursor(null)
+  }
 
   const toggleSelect = (id) => {
     setSelected(prev => {
@@ -77,7 +93,8 @@ function PendingAdminPageContent() {
   }
 
   const handleSearch = () => {
-    fetchOrders()
+    resetPagination()
+    fetchOrders(null)
   }
 
   const handleKeyPress = (e) => {
@@ -338,7 +355,7 @@ function PendingAdminPageContent() {
       </div>
 
       <div className="grid grid-cols-5 gap-3 mb-4">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm hover:bg-blue-700 transition-colors shadow-sm" onClick={() => fetchOrders()}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>{selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}</button>
         <button 
           className={`px-4 py-2 rounded-lg text-xs sm:text-sm transition-all duration-200 shadow-sm ${
@@ -361,8 +378,70 @@ function PendingAdminPageContent() {
             `Post Selected (${selected.size})`
           )}
         </button>
-        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>Export CSV</button>
-        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>Export PDF</button>
+        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm hover:bg-gray-700 transition-colors shadow-sm" onClick={exportCSV}>Download CSV</button>
+        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>Download PDF</button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+        <div className="text-xs sm:text-sm text-gray-700">
+          {summary?.count != null ? (
+            <>
+              Showing {summary.count ? pageIndex * pageSize + 1 : 0}–{Math.min(pageIndex * pageSize + (orders?.length || 0), summary.count)} of {summary.count}
+            </>
+          ) : (
+            <>
+              Showing {orders.length} order(s)
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
+            value={pageSize}
+            onChange={(e) => {
+              const next = Number(e.target.value) || 50
+              setPageSize(next)
+              resetPagination()
+              fetchOrders(null)
+            }}
+          >
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => {
+              if (pageIndex <= 0) return
+              const nextIndex = pageIndex - 1
+              const prevCursor = cursorStack[nextIndex] || null
+              setPageIndex(nextIndex)
+              setSelected(new Set())
+              fetchOrders(prevCursor)
+            }}
+            disabled={pageIndex <= 0 || loading}
+          >
+            Prev
+          </button>
+          <div className="text-xs sm:text-sm text-gray-700">Page {pageIndex + 1}</div>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => {
+              if (!nextCursor) return
+              const nextIndex = pageIndex + 1
+              const nextStack = cursorStack.slice(0, pageIndex + 1).concat([nextCursor])
+              setCursorStack(nextStack)
+              setPageIndex(nextIndex)
+              setSelected(new Set())
+              fetchOrders(nextCursor)
+            }}
+            disabled={!nextCursor || loading}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {msg && <div className={`mb-3 text-sm ${msg.type==='success'?'text-green-700':'text-red-700'}`}>{msg.text}</div>}

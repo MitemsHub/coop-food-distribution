@@ -125,6 +125,25 @@ export async function POST(req) {
         return errorResponse('Department not found', 404, 'DEPARTMENT_NOT_FOUND')
       }
 
+      const hasColumn = async (table, column) => {
+        const { error } = await supabase.from(table).select(column).limit(1)
+        return !error
+      }
+
+      const { data: activeCycle, error: cycleErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+        .abortSignal(AbortSignal.timeout(5000))
+      if (cycleErr) return errorResponse(cycleErr.message, 500, 'DATABASE_ERROR')
+      if (!activeCycle?.id) return errorResponse('No active cycle found', 400, 'NO_ACTIVE_CYCLE')
+
+      const [ordersHasCycle, pricesHasCycle] = await Promise.all([
+        hasColumn('orders', 'cycle_id'),
+        hasColumn('branch_item_prices', 'cycle_id'),
+      ])
+
       // Calculate exposure with proper error handling
       const statuses = ['Pending', 'Posted', 'Delivered']
       const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
@@ -188,11 +207,14 @@ export async function POST(req) {
         }
 
         // Fetch price
-        const { data: bip, error: pErr } = await supabase
+        let priceQuery = supabase
           .from('branch_item_prices')
           .select('id, price')
           .eq('branch_id', deliveryBranch.id)
           .eq('item_id', item.item_id)
+        if (pricesHasCycle) priceQuery = priceQuery.eq('cycle_id', activeCycle.id)
+
+        const { data: bip, error: pErr } = await priceQuery
           .single()
           .abortSignal(AbortSignal.timeout(5000))
 
@@ -237,19 +259,22 @@ export async function POST(req) {
       }
 
       // Insert order with transaction
+      const orderInsert = {
+        member_id: member.member_id,
+        member_name_snapshot: member.full_name,
+        member_category_snapshot: member.category,
+        branch_id: member.branch_id,
+        delivery_branch_id: deliveryBranch.id,
+        department_id: deptRow.id,
+        payment_option: paymentValidation.sanitized,
+        total_amount: total,
+        status: 'Pending'
+      }
+      if (ordersHasCycle) orderInsert.cycle_id = activeCycle.id
+
       const { data: order, error: oErr } = await supabase
         .from('orders')
-        .insert({
-          member_id: member.member_id,
-          member_name_snapshot: member.full_name,
-          member_category_snapshot: member.category,
-          branch_id: member.branch_id,
-          delivery_branch_id: deliveryBranch.id,
-          department_id: deptRow.id,
-          payment_option: paymentValidation.sanitized,
-          total_amount: total,
-          status: 'Pending'
-        })
+        .insert(orderInsert)
         .select('order_id')
         .single()
         .abortSignal(AbortSignal.timeout(10000))

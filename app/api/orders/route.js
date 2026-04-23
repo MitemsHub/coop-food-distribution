@@ -14,6 +14,11 @@ export async function POST(req) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const supabase = createClient(url, serviceKey)
+
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
     
     const body = await req.json()
     const { memberId, deliveryBranchCode, departmentName, paymentOption, lines } = body || {}
@@ -21,6 +26,19 @@ export async function POST(req) {
     if (!memberId || !deliveryBranchCode || !departmentName || !paymentOption || !Array.isArray(lines) || lines.length === 0) {
       return NextResponse.json({ ok: false, error: 'Missing required fields' }, { status: 400 })
     }
+
+    const { data: activeCycle, error: cycleErr } = await supabase
+      .from('cycles')
+      .select('id')
+      .eq('is_active', true)
+      .maybeSingle()
+    if (cycleErr) return NextResponse.json({ ok: false, error: cycleErr.message }, { status: 500 })
+    if (!activeCycle?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+
+    const [ordersHasCycle, pricesHasCycle] = await Promise.all([
+      hasColumn('orders', 'cycle_id'),
+      hasColumn('branch_item_prices', 'cycle_id'),
+    ])
 
     // Member (home branch + balances)
     const { data: member, error: mErr } = await supabase
@@ -100,11 +118,14 @@ export async function POST(req) {
       const { data: item, error: iErr } = await supabase.from('items').select('item_id, sku').eq('sku', sku).single()
       if (iErr || !item) return NextResponse.json({ ok:false, error:`Item not found: ${sku}` }, { status:400 })
 
-      const { data: bip, error: pErr } = await supabase
-        .from('branch_item_prices').select('id, price')
+      let priceQuery = supabase
+        .from('branch_item_prices')
+        .select('id, price')
         .eq('branch_id', deliveryBranch.id)
         .eq('item_id', item.item_id)
-        .single()
+      if (pricesHasCycle) priceQuery = priceQuery.eq('cycle_id', activeCycle.id)
+
+      const { data: bip, error: pErr } = await priceQuery.single()
       if (pErr || !bip) return NextResponse.json({ ok:false, error:`No price for ${sku} in this branch` }, { status:400 })
 
       // Add branch-specific markup if configured
@@ -141,19 +162,22 @@ export async function POST(req) {
     }
 
     // Insert order (home + delivery branches)
+    const orderInsert = {
+      member_id: member.member_id,
+      member_name_snapshot: member.full_name,
+      member_category_snapshot: member.category,
+      branch_id: member.branch_id,
+      delivery_branch_id: deliveryBranch.id,
+      department_id: deptRow.id,
+      payment_option: paymentOption,
+      total_amount: paymentOption === 'Loan' ? totalWithInterest : total,
+      status: 'Pending'
+    }
+    if (ordersHasCycle) orderInsert.cycle_id = activeCycle.id
+
     const { data: order, error: oErr } = await supabase
       .from('orders')
-      .insert({
-        member_id: member.member_id,
-        member_name_snapshot: member.full_name,
-        member_category_snapshot: member.category,
-        branch_id: member.branch_id,                 // member/home branch
-        delivery_branch_id: deliveryBranch.id,       // delivery location
-        department_id: deptRow.id,
-        payment_option: paymentOption,
-        total_amount: paymentOption === 'Loan' ? totalWithInterest : total,
-        status: 'Pending'
-      })
+      .insert(orderInsert)
       .select('order_id')
       .single()
     if (oErr || !order) return NextResponse.json({ ok:false, error:oErr?.message || 'Insert failed' }, { status:500 })

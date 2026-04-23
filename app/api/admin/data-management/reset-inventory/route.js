@@ -1,16 +1,52 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { createClient } from '../../../../../lib/supabaseServer'
+import { validateSession } from '../../../../../lib/validation'
 
 export async function POST(request) {
   try {
+    const session = await validateSession(request, 'admin')
+    if (!session.valid) {
+      return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = createClient()
+    const body = await request.json().catch(() => ({}))
+
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+
+    const movementsHasCycle = await hasColumn('inventory_movements', 'cycle_id')
+    const pricesHasCycle = await hasColumn('branch_item_prices', 'cycle_id')
+    let activeCycleId = null
+    if (movementsHasCycle || pricesHasCycle) {
+      const requestedCycleId = body.cycle_id != null ? Number(body.cycle_id) : null
+      if (requestedCycleId != null && !Number.isFinite(requestedCycleId)) {
+        return Response.json({ ok: false, error: 'Invalid cycle_id' }, { status: 400 })
+      }
+      if (requestedCycleId) {
+        activeCycleId = requestedCycleId
+      } else {
+        const { data: activeCycle, error: cycleErr } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle()
+        if (cycleErr) {
+          console.error('Error fetching active cycle:', cycleErr)
+          return Response.json({ ok: false, error: cycleErr.message }, { status: 500 })
+        }
+        if (!activeCycle?.id) {
+          return Response.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+        }
+        activeCycleId = activeCycle.id
+      }
+    }
+
     // First get all branch_item_prices to count them
-    const { data: branchItems, error: fetchError } = await supabase
-      .from('branch_item_prices')
-      .select('id')
+    let countQuery = supabase.from('branch_item_prices').select('id')
+    if (pricesHasCycle) countQuery = countQuery.eq('cycle_id', activeCycleId)
+    const { data: branchItems, error: fetchError } = await countQuery
 
     if (fetchError) {
       console.error('Error fetching branch items:', fetchError)
@@ -26,10 +62,9 @@ export async function POST(request) {
     }
 
     // Reset inventory by clearing all inventory movements (stock is derived from movements)
-    const { error: movementsError } = await supabase
-      .from('inventory_movements')
-      .delete()
-      .neq('id', 0)
+    let movementsQuery = supabase.from('inventory_movements').delete().neq('id', 0)
+    if (movementsHasCycle) movementsQuery = movementsQuery.eq('cycle_id', activeCycleId)
+    const { error: movementsError } = await movementsQuery
 
     if (movementsError) {
       console.error('Error clearing inventory movements:', movementsError)
@@ -39,7 +74,7 @@ export async function POST(request) {
     return Response.json({ 
       ok: true, 
       updatedCount: branchItems.length,
-      message: 'Inventory quantities reset to zero successfully'
+      message: activeCycleId ? `Inventory quantities reset for cycle_id=${activeCycleId}` : 'Inventory quantities reset to zero successfully'
     })
   } catch (error) {
     console.error('Error in reset-inventory:', error)

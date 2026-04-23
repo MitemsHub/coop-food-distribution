@@ -200,10 +200,11 @@ function ShopPageContent() {
           .from('cycles')
           .select('id')
           .eq('is_active', true)
-          .single()
-        
-
-        
+          .maybeSingle()
+        if (cycleError) {
+          setItems([])
+          return
+        }
         if (!activeCycle) {
           setItems([])
           return
@@ -211,25 +212,35 @@ function ShopPageContent() {
 
         // Get items with demand tracking data from inventory status view (fallback to branch_item_prices if view doesn't exist)
         // Filter out zero-price items
-        let { data: rows, error } = await supabase
-          .from('v_inventory_status')
-          .select(`
-            sku,
-            item_id,
-            item_name,
-            unit,
-            category,
-            image_url,
-            price,
-            demand_tracking_mode,
-            total_demand,
-            pending_demand,
-            confirmed_demand,
-            delivered_demand
-          `)
-          .eq('branch_code', deliveryBranchCode)
-          .gt('price', 0)
-          .order('item_name')
+        let rows = null
+        let error = null
+        const runInventoryQuery = async (withCycle) => {
+          let q = supabase
+            .from('v_inventory_status')
+            .select(`
+              sku,
+              item_id,
+              item_name,
+              unit,
+              category,
+              image_url,
+              price,
+              demand_tracking_mode,
+              total_demand,
+              pending_demand,
+              confirmed_demand,
+              delivered_demand
+            `)
+            .eq('branch_code', deliveryBranchCode)
+            .gt('price', 0)
+          if (withCycle) q = q.eq('cycle_id', activeCycle.id)
+          return await q.order('item_name')
+        }
+
+        ;({ data: rows, error } = await runInventoryQuery(true))
+        if (error && error.message && error.message.includes('cycle_id')) {
+          ;({ data: rows, error } = await runInventoryQuery(false))
+        }
         
 
         
@@ -247,23 +258,32 @@ function ShopPageContent() {
 
         // Fallback to original query if view doesn't exist
         if (error && error.message.includes('does not exist')) {
+          let fallbackRows = null
+          let fallbackError = null
+          const runFallback = async (withCycle) => {
+            let q = supabase
+              .from('branch_item_prices')
+              .select(`
+                price,
+                items:item_id(
+                  item_id,
+                  name, 
+                  sku, 
+                  unit, 
+                  category,
+                  image_url
+                )
+              `)
+              .eq('branch_id', br.id)
+              .gt('price', 0)
+            if (withCycle) q = q.eq('cycle_id', activeCycle.id)
+            return await q.order('name', { foreignTable: 'items' })
+          }
 
-          const { data: fallbackRows, error: fallbackError } = await supabase
-            .from('branch_item_prices')
-            .select(`
-              price,
-              items:item_id(
-                item_id,
-                name, 
-                sku, 
-                unit, 
-                category,
-                image_url
-              )
-            `)
-            .eq('branch_id', br.id)
-            .gt('price', 0)
-            .order('name', { foreignTable: 'items' })
+          ;({ data: fallbackRows, error: fallbackError } = await runFallback(true))
+          if (fallbackError && fallbackError.message && fallbackError.message.includes('cycle_id')) {
+            ;({ data: fallbackRows, error: fallbackError } = await runFallback(false))
+          }
           
           rows = fallbackRows
           error = fallbackError

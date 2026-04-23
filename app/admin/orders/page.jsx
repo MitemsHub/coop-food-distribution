@@ -115,10 +115,6 @@ function AdminOrdersPageContent() {
             <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-2 break-words">Admin — All Member Orders</h1>
             <p className="text-sm sm:text-base text-gray-600">View and manage all member orders across the system</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-            <a href="/admin/pending" className="px-3 py-2 sm:px-4 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-center text-sm sm:text-base whitespace-nowrap">Pending</a>
-            <a href="/admin/posted" className="px-3 py-2 sm:px-4 bg-green-600 text-white rounded hover:bg-green-700 text-center text-sm sm:text-base whitespace-nowrap">Posted</a>
-          </div>
         </div>
 
         {message && (

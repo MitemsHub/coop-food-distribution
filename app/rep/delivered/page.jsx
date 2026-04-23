@@ -174,8 +174,8 @@ function RepDeliveredPageContent() {
           />
           <button className="px-2 py-2 border rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>setSearch(searchInput.trim())}>Search</button>
         </div>
-        <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Export CSV</button>
-        <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Export PDF</button>
+        <button className="px-2 py-2 bg-gray-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportCSV}>Download CSV</button>
+        <button className="px-2 py-2 bg-emerald-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={exportPDF}>Download PDF</button>
         <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
 

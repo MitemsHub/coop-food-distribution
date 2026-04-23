@@ -28,7 +28,27 @@ export async function GET(request) {
 
     // Try direct DB first for performance; fallback to Supabase client
     try {
-      const result = await queryDirect(`
+      const hasCycleRes = await queryDirect(
+        `SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'branch_item_prices'
+            AND column_name = 'cycle_id'
+        ) AS has_cycle;`
+      )
+      const pricesHasCycle = Boolean(hasCycleRes.rows?.[0]?.has_cycle)
+      let activeCycleId = null
+      if (pricesHasCycle) {
+        const activeCycleRes = await queryDirect(`SELECT id FROM cycles WHERE is_active = TRUE LIMIT 1;`)
+        activeCycleId = activeCycleRes.rows?.[0]?.id ?? null
+        if (!activeCycleId) {
+          return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+        }
+      }
+
+      const result = await queryDirect(
+        `
         SELECT 
           b.code AS branch_code,
           b.name AS branch_name,
@@ -43,8 +63,11 @@ export async function GET(request) {
         JOIN items i ON i.item_id = bip.item_id
         LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id AND bim.active = TRUE
         WHERE bip.price IS NOT NULL
+        ${pricesHasCycle ? 'AND bip.cycle_id = $1' : ''}
         ORDER BY b.name, i.name
-      `)
+      `,
+        pricesHasCycle ? [activeCycleId] : []
+      )
 
       const rows = result.rows || []
       const branchesMap = new Map()
@@ -64,10 +87,24 @@ export async function GET(request) {
       // Fallback to Supabase client when direct DB fails
       const supabase = createClient()
 
+      const { error: colErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+      const pricesHasCycle = !colErr
+      let activeCycleId = null
+      if (pricesHasCycle) {
+        const { data: activeCycle, error: cycleErr } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle()
+        if (cycleErr) return NextResponse.json({ ok: false, error: cycleErr.message }, { status: 500 })
+        if (!activeCycle?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+        activeCycleId = activeCycle.id
+      }
+
       // Fetch base branch-item prices
-      const { data: bipData, error: bipErr } = await supabase
-        .from('branch_item_prices')
-        .select('branch_id, item_id, price')
+      let bipQuery = supabase.from('branch_item_prices').select('branch_id, item_id, price')
+      if (pricesHasCycle) bipQuery = bipQuery.eq('cycle_id', activeCycleId)
+      const { data: bipData, error: bipErr } = await bipQuery
       if (bipErr) return NextResponse.json({ ok: false, error: bipErr.message }, { status: 500 })
 
       const branchIds = [...new Set((bipData || []).map(r => r.branch_id).filter(Boolean))]

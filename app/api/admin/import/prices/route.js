@@ -93,12 +93,21 @@ export async function POST(req) {
     if (fiErr) return NextResponse.json({ ok: false, error: fiErr.message }, { status: 500 })
     const itemIdBySku = new Map(itemsAll.map(i => [String(i.sku).trim().toUpperCase(), i.item_id]))
 
-    // Get active cycle for inventory movements
-    const { data: activeCycle } = await supabase
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+
+    // Get active cycle
+    const { data: activeCycle, error: cycleErr } = await supabase
       .from('cycles')
       .select('id')
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
+    if (cycleErr) return NextResponse.json({ ok: false, error: cycleErr.message }, { status: 500 })
+    if (!activeCycle?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+
+    const pricesHasCycle = await hasColumn('branch_item_prices', 'cycle_id')
 
     // Build branch_item_prices upserts and inventory movements
     const inventoryMovements = []
@@ -112,10 +121,12 @@ export async function POST(req) {
       console.warn('Branch item prices sequence preflight skipped:', seqErr?.message || seqErr)
     }
 
-    // Preflight: ensure unique index on (branch_id, item_id) exists for ON CONFLICT upserts
+    // Preflight: ensure unique index exists for ON CONFLICT upserts
     try {
       await queryDirect(
-        `CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_item_prices_branch_item ON public.branch_item_prices(branch_id, item_id);`
+        pricesHasCycle
+          ? `CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_item_prices_branch_item_cycle ON public.branch_item_prices(branch_id, item_id, cycle_id);`
+          : `CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_item_prices_branch_item ON public.branch_item_prices(branch_id, item_id);`
       )
     } catch (idxErr) {
       console.warn('Ensure unique index failed:', idxErr?.message || idxErr)
@@ -132,7 +143,9 @@ export async function POST(req) {
         if (!branch_id) unknownBranches.add(branch_code)
         continue
       }
-      priceUpserts.push({ branch_id, item_id, price })
+      const row = { branch_id, item_id, price }
+      if (pricesHasCycle) row.cycle_id = activeCycle.id
+      priceUpserts.push(row)
     }
 
     // Upsert prices with conflict on (branch_id, item_id) and retry on sequence error
@@ -141,7 +154,7 @@ export async function POST(req) {
       const doUpsertPrices = async () => {
         return await supabase
           .from('branch_item_prices')
-          .upsert(part, { onConflict: 'branch_id,item_id', ignoreDuplicates: false, count: 'exact' })
+          .upsert(part, { onConflict: pricesHasCycle ? 'branch_id,item_id,cycle_id' : 'branch_id,item_id', ignoreDuplicates: false, count: 'exact' })
       }
       let { error: pErr, count } = await doUpsertPrices()
       if (pErr && String(pErr.message || '').includes('duplicate key value') && String(pErr.message || '').includes('branch_item_prices_pkey')) {

@@ -1,17 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { createClient } from '../../../../../lib/supabaseServer'
+import { validateSession } from '../../../../../lib/validation'
 
 export async function POST(request) {
   try {
+    const session = await validateSession(request, 'admin')
+    if (!session.valid) {
+      return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = createClient()
+    const body = await request.json().catch(() => ({}))
+
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+
+    const ordersHasCycle = await hasColumn('orders', 'cycle_id')
+    const movementsHasCycle = await hasColumn('inventory_movements', 'cycle_id')
+    const movementsHasReferenceId = await hasColumn('inventory_movements', 'reference_id')
+
+    let cycleId = body.cycle_id != null ? Number(body.cycle_id) : null
+    if (cycleId != null && !Number.isFinite(cycleId)) {
+      return Response.json({ ok: false, error: 'Invalid cycle_id' }, { status: 400 })
+    }
+    if (!cycleId && ordersHasCycle) {
+      const { data: active, error: activeErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (activeErr) return Response.json({ ok: false, error: activeErr.message }, { status: 500 })
+      if (!active?.id) return Response.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+      cycleId = active.id
+    }
+
     // First, get all delivered order IDs
-    const { data: deliveredOrders, error: fetchError } = await supabase
+    let deliveredQuery = supabase
       .from('orders')
       .select('order_id')
       .eq('status', 'Delivered')
+    if (ordersHasCycle && cycleId) deliveredQuery = deliveredQuery.eq('cycle_id', cycleId)
+    const { data: deliveredOrders, error: fetchError } = await deliveredQuery
 
     if (fetchError) {
       console.error('Error fetching delivered orders:', fetchError)
@@ -28,16 +58,18 @@ export async function POST(request) {
 
     const orderIds = deliveredOrders.map(order => order.order_id)
 
-    // First, delete inventory movements related to these orders
-    const { error: movementsError } = await supabase
-      .from('inventory_movements')
-      .delete()
-      .in('reference_id', orderIds)
-      .eq('reference_type', 'order')
+    if (movementsHasCycle && cycleId && movementsHasReferenceId) {
+      const { error: movementsError } = await supabase
+        .from('inventory_movements')
+        .delete()
+        .eq('cycle_id', cycleId)
+        .in('reference_id', orderIds)
+        .eq('reference_type', 'order')
 
-    if (movementsError) {
-      console.error('Error deleting inventory movements:', movementsError)
-      return Response.json({ ok: false, error: movementsError.message }, { status: 500 })
+      if (movementsError) {
+        console.error('Error deleting inventory movements:', movementsError)
+        return Response.json({ ok: false, error: movementsError.message }, { status: 500 })
+      }
     }
 
     // Then, delete order lines for delivered orders
@@ -52,10 +84,12 @@ export async function POST(request) {
     }
 
     // Delete delivered orders
-    const { error: ordersError } = await supabase
+    let ordersDeleteQuery = supabase
       .from('orders')
       .delete()
       .eq('status', 'Delivered')
+    if (ordersHasCycle && cycleId) ordersDeleteQuery = ordersDeleteQuery.eq('cycle_id', cycleId)
+    const { error: ordersError } = await ordersDeleteQuery
 
     if (ordersError) {
       console.error('Error deleting delivered orders:', ordersError)
@@ -65,7 +99,7 @@ export async function POST(request) {
     return Response.json({ 
       ok: true, 
       deletedCount: deliveredOrders.length,
-      message: 'Delivered orders cleared successfully'
+      message: cycleId ? `Delivered orders cleared for cycle_id=${cycleId}` : 'Delivered orders cleared successfully'
     })
   } catch (error) {
     console.error('Error in clear-delivered:', error)

@@ -9,15 +9,36 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'orderId and lines are required' }, { status: 400 })
     }
 
+    const { error: ordersColErr } = await supabase.from('orders').select('cycle_id').limit(1)
+    const { error: pricesColErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const ordersHasCycle = !ordersColErr
+    const pricesHasCycle = !pricesColErr
+
     // Load order (must be Pending)
-    const { data: order, error: oErr } = await supabase
+    let orderQuery = supabase
       .from('orders')
-      .select('order_id, status, delivery_branch_id, payment_option, member_id')
+      .select(ordersHasCycle ? 'order_id, status, delivery_branch_id, payment_option, member_id, cycle_id' : 'order_id, status, delivery_branch_id, payment_option, member_id')
       .eq('order_id', orderId)
-      .single()
+    const { data: order, error: oErr } = await orderQuery.single()
     if (oErr || !order) return NextResponse.json({ ok: false, error: 'Order not found' }, { status: 404 })
     if (order.status !== 'Pending') {
       return NextResponse.json({ ok: false, error: 'Only Pending orders can be edited' }, { status: 400 })
+    }
+
+    let activeCycleId = null
+    if (pricesHasCycle) {
+      if (ordersHasCycle && order.cycle_id) {
+        activeCycleId = order.cycle_id
+      } else {
+        const { data: activeCycle, error: cycleErr } = await supabase
+          .from('cycles')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle()
+        if (cycleErr) return NextResponse.json({ ok: false, error: cycleErr.message }, { status: 500 })
+        if (!activeCycle?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+        activeCycleId = activeCycle.id
+      }
     }
 
     // Validate lines format
@@ -46,11 +67,14 @@ export async function POST(req) {
 
       // Fetch branch prices for these items
       const itemIds = validatedLines.map(l => skuToItem.get(l.sku))
-      const { data: prices, error: pricesErr } = await supabase
+      let pricesQuery = supabase
         .from('branch_item_prices')
         .select('id, item_id, price')
         .eq('branch_id', order.delivery_branch_id)
         .in('item_id', itemIds)
+      if (pricesHasCycle) pricesQuery = pricesQuery.eq('cycle_id', activeCycleId)
+
+      const { data: prices, error: pricesErr } = await pricesQuery
       if (pricesErr) throw new Error(pricesErr.message)
       const itemToPrice = new Map(prices.map(p => [p.item_id, { id: p.id, price: Number(p.price) }]))
 
