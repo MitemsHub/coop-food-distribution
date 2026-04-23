@@ -1,10 +1,10 @@
 {
   "/api/system/shopping/route": "app/api/system/shopping/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
   "/api/admin/system/mode/route": "app/api/admin/system/mode/route.js",
   "/api/admin/inventory/low/route": "app/api/admin/inventory/low/route.js",
   "/portal/page": "app/portal/page.js",
   "/rep/login/page": "app/rep/login/page.js",
-  "/admin/ram/reports/page": "app/admin/ram/reports/page.js",
   "/admin/ram/inventory/page": "app/admin/ram/inventory/page.js",
   "/admin/ram/data/page": "app/admin/ram/data/page.js",
   "/admin/ram/delivered/page": "app/admin/ram/delivered/page.js"
