@@ -559,9 +559,6 @@ function RamPendingContent() {
                 <td className="p-2 border text-right">{money(o.unit_price)}</td>
                 <td className="p-2 border text-right">
                   <div className="font-medium">{money(o.total_amount)}</div>
-                  {o.payment_option === 'Loan' && Number(o.loan_interest || 0) > 0 && (
-                    <div className="text-gray-600">Interest {money(o.loan_interest)}</div>
-                  )}
                 </td>
                 <td className="p-2 border">
                   <div className="flex flex-col sm:flex-row gap-2">

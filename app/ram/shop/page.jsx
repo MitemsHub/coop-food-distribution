@@ -22,6 +22,7 @@ function RamShopPageContent() {
   const [deliveryLocationId, setDeliveryLocationId] = useState('')
   const [paymentOption, setPaymentOption] = useState('')
   const [qty, setQty] = useState('')
+  const [shoppingOpen, setShoppingOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
@@ -68,6 +69,18 @@ function RamShopPageContent() {
       setLoading(true)
       setMessage(null)
       try {
+        const shoppingRes = await fetch('/api/system/ram-shopping', { cache: 'no-store' })
+        const shoppingJson = await shoppingRes.json().catch(() => null)
+        const open = !!(shoppingRes.ok && shoppingJson?.ok && shoppingJson.open)
+        if (!cancelled) setShoppingOpen(open)
+        if (!open) {
+          if (!cancelled) setMessage({ type: 'error', text: 'Ram shopping is currently closed. Please check back later.' })
+          if (!cancelled) setMember(null)
+          if (!cancelled) setEligibility(null)
+          if (!cancelled) setDeliveryLocations([])
+          return
+        }
+
         const { data: memberData, error: mErr } = await supabase
           .from('members')
           .select('member_id,full_name,grade,savings,loans,global_limit')
@@ -406,9 +419,9 @@ function RamShopPageContent() {
             <button
               type="button"
               onClick={placeOrder}
-              disabled={submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment}
+              disabled={!shoppingOpen || submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment}
               className={`mt-6 w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
-                submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment
+                !shoppingOpen || submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
               }`}

@@ -38,8 +38,8 @@ export default function AdminLayout({ children }) {
   const { logout } = useAuth()
   const isPinPage = pathname.startsWith('/admin/pin')
 
-  const [foodOpen, setFoodOpen] = useState(true)
-  const [ramOpen, setRamOpen] = useState(true)
+  const [foodOpen, setFoodOpen] = useState(false)
+  const [ramOpen, setRamOpen] = useState(false)
 
   const activeKey = useMemo(() => {
     if (pathname.startsWith('/admin/pending')) return 'food_pending'
@@ -76,14 +76,9 @@ export default function AdminLayout({ children }) {
   }, [activeKey])
 
   useEffect(() => {
-    setFoodOpen(readBool('admin.nav.foodOpen', true))
-    setRamOpen(readBool('admin.nav.ramOpen', true))
+    setFoodOpen(readBool('admin.nav.foodOpen', false))
+    setRamOpen(readBool('admin.nav.ramOpen', false))
   }, [])
-
-  useEffect(() => {
-    if (activeKey.startsWith('food_')) setFoodOpen(true)
-    if (activeKey.startsWith('ram_')) setRamOpen(true)
-  }, [activeKey])
 
   useEffect(() => {
     writeBool('admin.nav.foodOpen', foodOpen)

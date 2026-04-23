@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -9,11 +9,34 @@ function RamPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
 
   const memberId = useMemo(() => {
     const mid = (searchParams.get('mid') || '').trim().toUpperCase()
     return mid || (user?.id || '')
   }, [searchParams, user?.id])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        setShoppingStatusLoading(true)
+        const res = await fetch('/api/system/ram-shopping', { cache: 'no-store' })
+        const json = await res.json()
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load shopping status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch {
+        if (!cancelled) setShoppingOpen(false)
+      } finally {
+        if (!cancelled) setShoppingStatusLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
@@ -32,9 +55,14 @@ function RamPageContent() {
             <button
               type="button"
               onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(memberId)}`)}
-              className="w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+              disabled={!shoppingOpen || shoppingStatusLoading}
+              className={`w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
+                shoppingOpen && !shoppingStatusLoading
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
             >
-              Start Ram Shopping
+              {shoppingOpen ? 'Start Ram Shopping' : 'Ram Shopping (Closed)'}
             </button>
             <button
               type="button"

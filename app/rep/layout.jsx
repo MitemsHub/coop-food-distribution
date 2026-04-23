@@ -38,8 +38,8 @@ export default function RepLayout({ children }) {
   const { logout } = useAuth()
   const isLoginPage = pathname.startsWith('/rep/login')
 
-  const [foodOpen, setFoodOpen] = useState(true)
-  const [ramOpen, setRamOpen] = useState(true)
+  const [foodOpen, setFoodOpen] = useState(false)
+  const [ramOpen, setRamOpen] = useState(false)
 
   const activeKey = useMemo(() => {
     if (pathname.startsWith('/rep/pending')) return 'food_pending'
@@ -64,14 +64,9 @@ export default function RepLayout({ children }) {
   }, [activeKey])
 
   useEffect(() => {
-    setFoodOpen(readBool('rep.nav.foodOpen', true))
-    setRamOpen(readBool('rep.nav.ramOpen', true))
+    setFoodOpen(readBool('rep.nav.foodOpen', false))
+    setRamOpen(readBool('rep.nav.ramOpen', false))
   }, [])
-
-  useEffect(() => {
-    if (activeKey.startsWith('food_')) setFoodOpen(true)
-    if (activeKey.startsWith('ram_')) setRamOpen(true)
-  }, [activeKey])
 
   useEffect(() => {
     writeBool('rep.nav.foodOpen', foodOpen)
@@ -168,4 +163,3 @@ export default function RepLayout({ children }) {
     </div>
   )
 }
-

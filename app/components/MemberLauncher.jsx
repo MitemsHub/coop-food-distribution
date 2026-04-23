@@ -21,6 +21,7 @@ export default function MemberLauncher() {
   const [pinError, setPinError] = useState('')
   // Shopping availability state
   const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [ramShoppingOpen, setRamShoppingOpen] = useState(true)
   const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
   const [shoppingStatusError, setShoppingStatusError] = useState('')
 
@@ -30,14 +31,31 @@ export default function MemberLauncher() {
       try {
         setShoppingStatusLoading(true)
         setShoppingStatusError('')
-        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
-        const json = await res.json()
-        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load shopping status')
-        if (!cancelled) setShoppingOpen(!!json.open)
+        const [foodRes, ramRes] = await Promise.allSettled([
+          fetch('/api/system/shopping', { cache: 'no-store' }),
+          fetch('/api/system/ram-shopping', { cache: 'no-store' }),
+        ])
+
+        if (foodRes.status === 'fulfilled') {
+          const json = await foodRes.value.json()
+          if (!foodRes.value.ok || !json.ok) throw new Error(json.error || 'Failed to load shopping status')
+          if (!cancelled) setShoppingOpen(!!json.open)
+        } else {
+          throw new Error(foodRes.reason?.message || 'Failed to load shopping status')
+        }
+
+        if (ramRes.status === 'fulfilled') {
+          const json = await ramRes.value.json()
+          if (!ramRes.value.ok || !json.ok) throw new Error(json.error || 'Failed to load ram shopping status')
+          if (!cancelled) setRamShoppingOpen(!!json.open)
+        } else {
+          throw new Error(ramRes.reason?.message || 'Failed to load ram shopping status')
+        }
       } catch (e) {
         if (!cancelled) setShoppingStatusError(`Error: ${e.message}`)
         // Default closed if cannot determine
         if (!cancelled) setShoppingOpen(false)
+        if (!cancelled) setRamShoppingOpen(false)
       } finally {
         if (!cancelled) setShoppingStatusLoading(false)
       }
@@ -572,9 +590,12 @@ export default function MemberLauncher() {
           <button
             type="button"
             onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(authenticatedMemberId)}`)}
-            className="w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+            disabled={!ramShoppingOpen}
+            className={`w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
+              ramShoppingOpen ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' : 'bg-gray-400 cursor-not-allowed'
+            }`}
           >
-            Ram Sales (Sallah)
+            {ramShoppingOpen ? 'Ram Sales (Sallah)' : 'Ram Sales (Sallah) (Closed)'}
           </button>
 
           <button

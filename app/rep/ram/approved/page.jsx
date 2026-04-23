@@ -482,7 +482,6 @@ function RepRamApprovedContent() {
                   <td className="p-2 text-right">{Number(o.qty || 0).toLocaleString()}</td>
                   <td className="p-2 text-right">
                     <div className="font-medium">{money(o.total_amount)}</div>
-                    {Number(o.interest_amount || 0) > 0 ? <div className="text-gray-600">Interest {money(o.interest_amount)}</div> : null}
                   </td>
                 </tr>
               ))}

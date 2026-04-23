@@ -24,6 +24,9 @@ function RamDataContent() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingLoading, setShoppingLoading] = useState(false)
+  const [shoppingMsg, setShoppingMsg] = useState('')
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
   const fetchLocations = async () => {
@@ -45,6 +48,48 @@ function RamDataContent() {
   useEffect(() => {
     fetchLocations()
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        setShoppingLoading(true)
+        setShoppingMsg('')
+        const res = await fetch('/api/admin/system/ram-shopping', { cache: 'no-store', credentials: 'same-origin' })
+        const json = await res.json()
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch (e) {
+        if (!cancelled) setShoppingMsg(`Error: ${e?.message || 'Failed to load status'}`)
+      } finally {
+        if (!cancelled) setShoppingLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const saveShoppingStatus = async () => {
+    try {
+      setShoppingLoading(true)
+      setShoppingMsg('')
+      const res = await fetch('/api/admin/system/ram-shopping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ open: shoppingOpen }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to save')
+      setShoppingMsg('Ram shopping status saved successfully')
+    } catch (e) {
+      setShoppingMsg(`Error: ${e?.message || 'Failed to save'}`)
+    } finally {
+      setShoppingLoading(false)
+    }
+  }
 
   const onFormChange = (key, value) => setForm((p) => ({ ...p, [key]: value }))
   const onEditChange = (key, value) => setEditing((p) => ({ ...p, [key]: value }))
@@ -245,6 +290,37 @@ function RamDataContent() {
         </table>
       </div>
 
+      <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+        <div className="text-sm font-semibold text-blue-900">Ram Shopping Control</div>
+        <div className="mt-1 text-xs sm:text-sm text-blue-700">Toggle whether members can start Ram shopping from the portal.</div>
+        <div className="mt-3 flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setShoppingOpen(!shoppingOpen)}>
+            <div className={`w-12 h-6 rounded-full px-1 flex items-center ${shoppingOpen ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+              <div className="w-4 h-4 bg-white rounded-full shadow" />
+            </div>
+            <span className={`text-sm font-medium ${shoppingOpen ? 'text-green-700' : 'text-gray-600'}`}>{shoppingOpen ? 'Open' : 'Closed'}</span>
+          </label>
+          <input type="checkbox" checked={shoppingOpen} onChange={(e) => setShoppingOpen(e.target.checked)} className="hidden" />
+          <button
+            type="button"
+            onClick={saveShoppingStatus}
+            disabled={shoppingLoading}
+            className={`px-3 py-2 rounded text-white text-sm ${shoppingLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+          >
+            {shoppingLoading ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {shoppingMsg && (
+          <div
+            className={`mt-2 p-2 rounded text-sm ${
+              shoppingMsg.startsWith('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+            }`}
+          >
+            {shoppingMsg}
+          </div>
+        )}
+      </div>
+
       <DraggableModal
         open={!!editing}
         onClose={() => (saving ? null : setEditing(null))}
@@ -298,4 +374,3 @@ export default function RamDataPage() {
     </ProtectedRoute>
   )
 }
-
