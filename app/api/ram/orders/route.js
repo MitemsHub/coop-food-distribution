@@ -130,32 +130,33 @@ function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInt
 }
 
 async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, unitPrice) {
-  const statuses = ['Pending', 'Approved']
+  const foodStatuses = ['Pending', 'Posted', 'Delivered']
+  const ramStatuses = ['Pending', 'Approved']
   const [foodLoanExp, foodSavExp, ramLoanExp, ramSavExp] = await Promise.all([
     supabase
       .from('orders')
       .select('total_amount')
       .eq('member_id', memberId)
       .eq('payment_option', 'Loan')
-      .in('status', statuses),
+      .in('status', foodStatuses),
     supabase
       .from('orders')
       .select('total_amount')
       .eq('member_id', memberId)
       .eq('payment_option', 'Savings')
-      .in('status', statuses),
+      .in('status', foodStatuses),
     supabase
       .from('ram_orders')
       .select('principal_amount')
       .eq('member_id', memberId)
       .eq('payment_option', 'Loan')
-      .in('status', statuses),
+      .in('status', ramStatuses),
     supabase
       .from('ram_orders')
       .select('principal_amount')
       .eq('member_id', memberId)
       .eq('payment_option', 'Savings')
-      .in('status', statuses),
+      .in('status', ramStatuses),
   ])
 
   if (foodLoanExp.error) throw new Error(foodLoanExp.error.message)
@@ -210,7 +211,7 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
       .select('qty')
       .eq('member_id', memberId)
       .eq('payment_option', 'Loan')
-      .in('status', statuses)
+      .in('status', ramStatuses)
     if (activeRamCycleId) q = q.eq('ram_cycle_id', activeRamCycleId)
 
     const { data: loanQtyRows, error: loanQtyErr } = await q

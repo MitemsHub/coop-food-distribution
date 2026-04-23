@@ -144,32 +144,33 @@ export async function GET(req) {
       return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 404 })
     }
 
-    const statuses = ['Pending', 'Approved']
+    const foodStatuses = ['Pending', 'Posted', 'Delivered']
+    const ramStatuses = ['Pending', 'Approved']
     const [foodLoanExp, foodSavExp, ramLoanExp, ramSavExp] = await Promise.all([
       supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
-        .in('status', statuses),
+        .in('status', foodStatuses),
       supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Savings')
-        .in('status', statuses),
+        .in('status', foodStatuses),
       supabase
         .from('ram_orders')
         .select('principal_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
-        .in('status', statuses),
+        .in('status', ramStatuses),
       supabase
         .from('ram_orders')
         .select('principal_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Savings')
-        .in('status', statuses),
+        .in('status', ramStatuses),
     ])
 
     if (foodLoanExp.error) return NextResponse.json({ ok: false, error: foodLoanExp.error.message }, { status: 500 })
@@ -228,7 +229,7 @@ export async function GET(req) {
         .select('qty')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
-        .in('status', statuses)
+        .in('status', ramStatuses)
       if (activeRamCycleId) q = q.eq('ram_cycle_id', activeRamCycleId)
 
       const { data: loanQtyRows, error: loanQtyErr } = await q
