@@ -5,6 +5,12 @@ import { sign } from '@/lib/signingEdge'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true })
+  res.cookies.set('rep_token', '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 })
+  return res
+}
+
 export async function POST(req) {
   try {
     const supabase = createClient()

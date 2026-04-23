@@ -18,6 +18,8 @@ export default function Navbar() {
 
   const userType = user?.type
   const hideOnAdmin = !!pathname?.startsWith('/admin')
+  const hideOnRep = !!pathname?.startsWith('/rep')
+  const hideNavbar = hideOnAdmin || hideOnRep
 
   const isActive = (path) => {
     if (path === '/') return pathname === '/'
@@ -28,7 +30,7 @@ export default function Navbar() {
 
   // Check demand tracking mode - only for admin
   useEffect(() => {
-    if (hideOnAdmin) return
+    if (hideNavbar) return
     if (userType !== 'admin') return
     
     const checkMode = async () => {
@@ -41,11 +43,11 @@ export default function Navbar() {
       } catch {}
     }
     checkMode()
-  }, [userType, hideOnAdmin])
+  }, [userType, hideNavbar])
 
   // Low-stock poll (every 90s) - only for admin and only in stock tracking mode
   useEffect(() => {
-    if (hideOnAdmin) return
+    if (hideNavbar) return
     if (userType !== 'admin' || isDemandTrackingMode) {
       // Reset low count when in demand tracking mode or not admin
       setLowCount(0)
@@ -65,11 +67,11 @@ export default function Navbar() {
     }
     load()
     return () => t && clearTimeout(t)
-  }, [userType, isDemandTrackingMode, hideOnAdmin])
+  }, [userType, isDemandTrackingMode, hideNavbar])
 
   // Load current shopping status to control Shop button visibility for members
   useEffect(() => {
-    if (hideOnAdmin) return
+    if (hideNavbar) return
     let cancelled = false
     const loadShoppingStatus = async () => {
       try {
@@ -86,9 +88,9 @@ export default function Navbar() {
     // Only fetch for members, others don't see Shop link here
     if (userType === 'member') loadShoppingStatus()
     return () => { cancelled = true }
-  }, [userType, hideOnAdmin])
+  }, [userType, hideNavbar])
 
-  if (hideOnAdmin) return null
+  if (hideNavbar) return null
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
