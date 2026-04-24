@@ -11,6 +11,10 @@ export async function POST(req) {
     const token = req.cookies.get('rep_token')?.value
     const claim = token && verify(token)
     if (!claim || claim.role !== 'rep') return NextResponse.json({ ok:false, error:'unauthorized' }, { status:401 })
+    if (claim.module && claim.module !== 'food') return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    if (!Number.isFinite(Number(claim.branch_id)) || Number(claim.branch_id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
 
     const { orderId, deliveredBy } = await req.json()
     const { data: o } = await supabase.from('orders').select('order_id, delivery_branch_id').eq('order_id', orderId).single()

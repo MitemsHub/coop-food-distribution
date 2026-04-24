@@ -26,6 +26,12 @@ export async function GET(request) {
     if (!claim || claim.role !== 'rep') {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
+    if (claim.module && claim.module !== 'food') {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    }
+    if (!Number.isFinite(Number(claim.branch_id)) || Number(claim.branch_id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     const { branch_id } = claim
 

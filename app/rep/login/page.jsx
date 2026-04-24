@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function RepLoginPage() {
   const [code, setCode] = useState('')
@@ -9,6 +9,8 @@ export default function RepLoginPage() {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const portalModule = (searchParams.get('module') || 'food').toLowerCase() === 'ram' ? 'ram' : 'food'
 
   const submit = async () => {
     setLoading(true); setMsg('')
@@ -16,17 +18,33 @@ export default function RepLoginPage() {
       const res = await fetch('/api/rep/session', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ passcode: code.trim().toUpperCase() })
+        body: JSON.stringify({ module: portalModule, passcode: code.trim().toUpperCase() })
       })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
       
       // Set user as authenticated rep
-      login({
+      const base = {
         type: 'rep',
         id: code.trim().toUpperCase(),
         authenticated: true,
-        branchCode: code.trim().toUpperCase()
+        module: portalModule,
+      }
+      if (json.module === 'ram') {
+        login({
+          ...base,
+          vendorId: json.vendor?.id ?? null,
+          vendorName: json.vendor?.name ?? '',
+          vendorCode: json.vendor?.code ?? '',
+        })
+        router.push('/rep/ram/approved')
+        return
+      }
+      login({
+        ...base,
+        branchCode: json.branch?.code ?? code.trim().toUpperCase(),
+        branchName: json.branch?.name ?? '',
+        branchId: json.branch?.id ?? null,
       })
       
       router.push('/rep/pending')
@@ -39,7 +57,9 @@ export default function RepLoginPage() {
 
   return (
     <div className="p-2 lg:p-3 xl:p-4 max-w-md mx-auto">
-      <h1 className="text-xl sm:text-2xl font-semibold mb-2">Branch Rep Portal</h1>
+      <h1 className="text-xl sm:text-2xl font-semibold mb-2">
+        {portalModule === 'ram' ? 'Ram Sales Rep Portal' : 'Food Distribution Rep Portal'}
+      </h1>
       <p className="text-xs sm:text-sm text-gray-600 mb-4">
         Enter your passcode.
       </p>

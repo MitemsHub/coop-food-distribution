@@ -14,7 +14,7 @@ function safeJsonFactory() {
 }
 
 function emptyForm() {
-  return { delivery_location: '', name: '', phone: '', address: '', is_active: true, sort_order: '' }
+  return { delivery_location: '', name: '', phone: '', address: '', rep_code: '', is_active: true, sort_order: '' }
 }
 
 function RamDataContent() {
@@ -103,6 +103,7 @@ function RamDataContent() {
         name: form.name,
         phone: form.phone,
         address: form.address,
+        ...(String(form.rep_code).trim() ? { rep_code: String(form.rep_code).trim().toUpperCase() } : { rep_code: null }),
         is_active: !!form.is_active,
         ...(String(form.sort_order).trim() ? { sort_order: Number(form.sort_order) } : {}),
       }
@@ -134,6 +135,7 @@ function RamDataContent() {
         name: editing.name,
         phone: editing.phone,
         address: editing.address,
+        rep_code: String(editing.rep_code || '').trim() ? String(editing.rep_code || '').trim().toUpperCase() : null,
         is_active: !!editing.is_active,
         sort_order: String(editing.sort_order).trim() ? Number(editing.sort_order) : null,
       }
@@ -204,6 +206,12 @@ function RamDataContent() {
           <input className="border rounded px-3 py-2 text-xs sm:text-sm" placeholder="Contact name" value={form.name} onChange={(e) => onFormChange('name', e.target.value)} />
           <input className="border rounded px-3 py-2 text-xs sm:text-sm" placeholder="Phone" value={form.phone} onChange={(e) => onFormChange('phone', e.target.value)} />
           <input
+            className="border rounded px-3 py-2 text-xs sm:text-sm"
+            placeholder="Rep passcode (optional)"
+            value={form.rep_code}
+            onChange={(e) => onFormChange('rep_code', e.target.value)}
+          />
+          <input
             className="border rounded px-3 py-2 text-xs sm:text-sm sm:col-span-2"
             placeholder="Address"
             value={form.address}
@@ -238,6 +246,7 @@ function RamDataContent() {
               <th className="p-2 border text-left">Delivery Location</th>
               <th className="p-2 border text-left">Contact</th>
               <th className="p-2 border text-left">Phone</th>
+              <th className="p-2 border text-left">Rep Passcode</th>
               <th className="p-2 border text-left">Address</th>
               <th className="p-2 border text-right">Sort</th>
               <th className="p-2 border text-center">Active</th>
@@ -247,14 +256,14 @@ function RamDataContent() {
           <tbody>
             {loading && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={7}>
+                <td className="p-3 text-gray-600" colSpan={8}>
                   Loading...
                 </td>
               </tr>
             )}
             {!loading && locations.length === 0 && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={7}>
+                <td className="p-3 text-gray-600" colSpan={8}>
                   No delivery locations.
                 </td>
               </tr>
@@ -264,6 +273,7 @@ function RamDataContent() {
                 <td className="p-2 border font-medium">{l.delivery_location}</td>
                 <td className="p-2 border">{l.name || ''}</td>
                 <td className="p-2 border">{l.phone || ''}</td>
+                <td className="p-2 border">{l.rep_code || ''}</td>
                 <td className="p-2 border">{l.address || ''}</td>
                 <td className="p-2 border text-right">{l.sort_order ?? ''}</td>
                 <td className="p-2 border text-center">
@@ -278,7 +288,7 @@ function RamDataContent() {
                 <td className="p-2 border text-right">
                   <button
                     className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                    onClick={() => setEditing({ ...l, sort_order: l.sort_order ?? '' })}
+                    onClick={() => setEditing({ ...l, sort_order: l.sort_order ?? '', rep_code: l.rep_code || '' })}
                     disabled={saving}
                   >
                     Edit
@@ -350,6 +360,12 @@ function RamDataContent() {
           />
           <input className="border rounded px-3 py-2 text-xs sm:text-sm" placeholder="Contact name" value={editing?.name || ''} onChange={(e) => onEditChange('name', e.target.value)} />
           <input className="border rounded px-3 py-2 text-xs sm:text-sm" placeholder="Phone" value={editing?.phone || ''} onChange={(e) => onEditChange('phone', e.target.value)} />
+          <input
+            className="border rounded px-3 py-2 text-xs sm:text-sm"
+            placeholder="Rep passcode"
+            value={editing?.rep_code || ''}
+            onChange={(e) => onEditChange('rep_code', e.target.value)}
+          />
           <input className="border rounded px-3 py-2 text-xs sm:text-sm" placeholder="Sort order" value={editing?.sort_order ?? ''} onChange={(e) => onEditChange('sort_order', e.target.value)} />
           <input
             className="border rounded px-3 py-2 text-xs sm:text-sm sm:col-span-2"

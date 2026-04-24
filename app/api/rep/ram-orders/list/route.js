@@ -20,6 +20,11 @@ export async function GET(req) {
     const token = req.cookies.get('rep_token')?.value
     const claim = token && verify(token)
     if (!claim || claim.role !== 'rep') return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+    if (claim.module && claim.module !== 'ram') return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    const vendorLocationId = Number(claim.ram_delivery_location_id)
+    if (!Number.isFinite(vendorLocationId) || vendorLocationId <= 0) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const payment = (searchParams.get('payment') || '').trim()
@@ -32,7 +37,13 @@ export async function GET(req) {
 
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
 
-    let query = supabase.from('ram_orders').select('*').eq('status', 'Approved').order('created_at', { ascending: false }).limit(limit)
+    let query = supabase
+      .from('ram_orders')
+      .select('*')
+      .eq('status', 'Approved')
+      .eq('ram_delivery_location_id', vendorLocationId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
     if (payment && allowedPayment.has(payment)) query = query.eq('payment_option', payment)
     if (memberId) query = query.eq('member_id', memberId)
     if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) query = query.eq('ram_delivery_location_id', deliveryLocationId)
@@ -105,4 +116,3 @@ export async function GET(req) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error', orders: [] }, { status: 500 })
   }
 }
-

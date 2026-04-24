@@ -30,10 +30,8 @@ function RepRamApprovedContent() {
   const [term, setTerm] = useState('')
   const [payment, setPayment] = useState('')
   const [memberId, setMemberId] = useState('')
-  const [deliveryLocationId, setDeliveryLocationId] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [locations, setLocations] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
@@ -43,17 +41,6 @@ function RepRamApprovedContent() {
   const fetchCtl = useRef(null)
   const didInitRef = useRef(false)
   const safeJson = useMemo(() => safeJsonFactory(), [])
-
-  const fetchLocations = async () => {
-    try {
-      const res = await fetch('/api/ram/delivery-locations', { cache: 'no-store' })
-      const json = await safeJson(res, '/api/ram/delivery-locations')
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load delivery locations')
-      setLocations(json.locations || [])
-    } catch {
-      setLocations([])
-    }
-  }
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -67,7 +54,6 @@ function RepRamApprovedContent() {
         ...(term ? { term } : {}),
         ...(payment ? { payment } : {}),
         ...(memberId ? { member_id: memberId.toUpperCase().trim() } : {}),
-        ...(deliveryLocationId ? { delivery_location_id: deliveryLocationId } : {}),
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
       })
@@ -85,7 +71,6 @@ function RepRamApprovedContent() {
   }
 
   useEffect(() => {
-    fetchLocations()
     fetchOrders()
     didInitRef.current = true
     return () => {
@@ -97,7 +82,7 @@ function RepRamApprovedContent() {
     if (!didInitRef.current) return
     fetchOrders()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliveryLocationId, payment, from, to])
+  }, [payment, from, to])
 
   const exportExcel = async () => {
     if (!orders.length) return
@@ -126,13 +111,9 @@ function RepRamApprovedContent() {
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet('Approved')
 
-      const locLabel = deliveryLocationId
-        ? locations.find((l) => String(l.id) === String(deliveryLocationId))?.delivery_location || deliveryLocationId
-        : 'All delivery locations'
-
       ws.addRow(['Ram Sales — Approved Orders (Rep)'])
       ws.addRow([
-        `Delivery: ${locLabel} | Payment: ${payment || 'All'} | Member: ${memberId ? memberId.toUpperCase().trim() : 'All'} | Search: ${
+        `Payment: ${payment || 'All'} | Member: ${memberId ? memberId.toUpperCase().trim() : 'All'} | Search: ${
           term || 'All'
         } | From: ${from || 'Any'} | To: ${to || 'Any'}`,
       ])
@@ -166,11 +147,7 @@ function RepRamApprovedContent() {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
       const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
-      const locLabel = deliveryLocationId
-        ? locations.find((l) => String(l.id) === String(deliveryLocationId))?.delivery_location || deliveryLocationId
-        : 'All'
       const filters = [
-        `Delivery: ${locLabel}`,
         `Payment: ${payment || 'All'}`,
         `Member: ${memberId ? memberId.toUpperCase().trim() : 'All'}`,
         `Search: ${term || 'All'}`,
@@ -324,18 +301,6 @@ function RepRamApprovedContent() {
               'Search'
             )}
           </button>
-          <select
-            className="border rounded px-3 py-2 text-xs sm:text-sm w-full sm:w-64"
-            value={deliveryLocationId}
-            onChange={(e) => setDeliveryLocationId(e.target.value)}
-          >
-            <option value="">All delivery locations</option>
-            {locations.map((l) => (
-              <option key={l.id} value={String(l.id)}>
-                {l.delivery_location || l.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">

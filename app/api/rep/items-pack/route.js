@@ -112,6 +112,12 @@ export async function GET(req) {
     if (!claim || claim.role !== 'rep') {
       return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
     }
+    if (claim.module && claim.module !== 'food') {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    if (!Number.isFinite(Number(claim.branch_id)) || Number(claim.branch_id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const deptName = (searchParams.get('dept') || '').trim()

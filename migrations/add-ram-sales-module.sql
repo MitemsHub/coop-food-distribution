@@ -68,6 +68,13 @@ ADD COLUMN IF NOT EXISTS delivery_location TEXT NOT NULL DEFAULT '';
 ALTER TABLE ram_delivery_locations
 ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';
 
+ALTER TABLE ram_delivery_locations
+ADD COLUMN IF NOT EXISTS rep_code TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ram_delivery_locations_rep_code_uidx
+ON ram_delivery_locations(rep_code)
+WHERE rep_code IS NOT NULL AND rep_code <> '';
+
 DO $$
 BEGIN
   IF EXISTS (

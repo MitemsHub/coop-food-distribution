@@ -16,6 +16,10 @@ export async function GET(req) {
     const token = req.cookies.get('rep_token')?.value
     const claim = token && verify(token)
     if (!claim || claim.role !== 'rep') return NextResponse.json({ ok:false, error:'unauthorized' }, { status:401 })
+    if (claim.module && claim.module !== 'food') return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    if (!Number.isFinite(Number(claim.branch_id)) || Number(claim.branch_id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || 'Pending'

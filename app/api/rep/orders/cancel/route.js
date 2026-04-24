@@ -18,6 +18,12 @@ export async function POST(request) {
     }
 
     const { branch_id } = sessionResult.claims
+    if (sessionResult.claims?.module && sessionResult.claims.module !== 'food') {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    }
+    if (!Number.isFinite(Number(branch_id)) || Number(branch_id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     const supabase = await createSupabaseServerClient()
 

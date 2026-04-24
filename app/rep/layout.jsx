@@ -35,8 +35,9 @@ function writeBool(key, value) {
 
 export default function RepLayout({ children }) {
   const pathname = usePathname()
-  const { logout } = useAuth()
-  const isLoginPage = pathname.startsWith('/rep/login')
+  const { logout, user } = useAuth()
+  const isLoginPage = pathname.startsWith('/rep/login') || pathname.startsWith('/rep/access')
+  const portalModule = user?.module || null
 
   const [foodOpen, setFoodOpen] = useState(false)
   const [ramOpen, setRamOpen] = useState(false)
@@ -92,43 +93,49 @@ export default function RepLayout({ children }) {
       <aside className="w-60 sm:w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col">
         <div className="px-4 py-4 border-b border-gray-200 shrink-0">
           <div className="text-base font-semibold text-gray-900">Rep</div>
-          <div className="text-xs text-gray-500">Food Distribution & Ram Sales</div>
+          <div className="text-xs text-gray-500">
+            {portalModule === 'ram' ? 'Ram Sales' : portalModule === 'food' ? 'Food Distribution' : 'Food Distribution & Ram Sales'}
+          </div>
         </div>
 
         <nav className="px-3 py-4 space-y-4 flex-1 overflow-y-auto">
-          <div>
-            <button type="button" className={sectionButtonClass(foodOpen)} onClick={() => setFoodOpen((v) => !v)}>
-              <span>Food Distribution</span>
-              <span className="text-gray-500">{foodOpen ? '−' : '+'}</span>
-            </button>
-            {foodOpen && (
-              <div className="mt-2 space-y-1">
-                <Link href="/rep/pending" className={navItemClass(activeKey === 'food_pending')}>
-                  Pending
-                </Link>
-                <Link href="/rep/posted" className={navItemClass(activeKey === 'food_posted')}>
-                  Posted
-                </Link>
-                <Link href="/rep/delivered" className={navItemClass(activeKey === 'food_delivered')}>
-                  Delivered
-                </Link>
-              </div>
-            )}
-          </div>
+          {(portalModule === null || portalModule === 'food') && (
+            <div>
+              <button type="button" className={sectionButtonClass(foodOpen)} onClick={() => setFoodOpen((v) => !v)}>
+                <span>Food Distribution</span>
+                <span className="text-gray-500">{foodOpen ? '−' : '+'}</span>
+              </button>
+              {foodOpen && (
+                <div className="mt-2 space-y-1">
+                  <Link href="/rep/pending" className={navItemClass(activeKey === 'food_pending')}>
+                    Pending
+                  </Link>
+                  <Link href="/rep/posted" className={navItemClass(activeKey === 'food_posted')}>
+                    Posted
+                  </Link>
+                  <Link href="/rep/delivered" className={navItemClass(activeKey === 'food_delivered')}>
+                    Delivered
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
-          <div>
-            <button type="button" className={sectionButtonClass(ramOpen)} onClick={() => setRamOpen((v) => !v)}>
-              <span>Ram Sales</span>
-              <span className="text-gray-500">{ramOpen ? '−' : '+'}</span>
-            </button>
-            {ramOpen && (
-              <div className="mt-2 space-y-1">
-                <Link href="/rep/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
-                  Approved
-                </Link>
-              </div>
-            )}
-          </div>
+          {(portalModule === null || portalModule === 'ram') && (
+            <div>
+              <button type="button" className={sectionButtonClass(ramOpen)} onClick={() => setRamOpen((v) => !v)}>
+                <span>Ram Sales</span>
+                <span className="text-gray-500">{ramOpen ? '−' : '+'}</span>
+              </button>
+              {ramOpen && (
+                <div className="mt-2 space-y-1">
+                  <Link href="/rep/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
+                    Approved
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="pt-2 border-t border-gray-200 space-y-1">
             <Link href="/portal" className={navItemClass(false)}>

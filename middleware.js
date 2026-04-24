@@ -189,12 +189,23 @@ export async function middleware(request) {
   }
   
   if (pathname.startsWith('/rep/')) {
-    // Skip session validation for login page
-    if (!pathname.includes('/login')) {
+    // Skip session validation for public rep entry pages
+    if (!(pathname.includes('/login') || pathname.includes('/access'))) {
       const sessionValidation = await validateSession(request, 'rep')
       if (!sessionValidation.isValid) {
-        const loginUrl = new URL('/rep/login', request.url)
+        const loginUrl = new URL('/rep/access', request.url)
         return NextResponse.redirect(loginUrl)
+      }
+
+      const claim = sessionValidation.claim
+      const mod = claim?.module
+      if (mod === 'ram' && (pathname.startsWith('/rep/pending') || pathname.startsWith('/rep/posted') || pathname.startsWith('/rep/delivered'))) {
+        const dest = new URL('/rep/ram/approved', request.url)
+        return NextResponse.redirect(dest)
+      }
+      if (mod === 'food' && pathname.startsWith('/rep/ram/')) {
+        const dest = new URL('/rep/pending', request.url)
+        return NextResponse.redirect(dest)
       }
     }
   }
