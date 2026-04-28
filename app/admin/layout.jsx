@@ -51,7 +51,7 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/reports')) return 'food_reports'
     if (pathname.startsWith('/admin/data-management')) return 'food_data'
     if (pathname.startsWith('/admin/ram/pending')) return 'ram_pending'
-    if (pathname.startsWith('/admin/ram/delivered')) return 'ram_delivered'
+    if (pathname.startsWith('/admin/ram/approved')) return 'ram_approved'
     if (pathname.startsWith('/admin/ram/inventory')) return 'ram_inventory'
     if (pathname.startsWith('/admin/ram/reports')) return 'ram_reports'
     if (pathname.startsWith('/admin/ram/data')) return 'ram_data'
@@ -68,8 +68,7 @@ export default function AdminLayout({ children }) {
     }
     if (activeKey.startsWith('ram_')) {
       const rest = activeKey.replace('ram_', '')
-      const label =
-        rest === 'data' ? 'Data' : rest === 'delivered' ? 'Approved' : rest.charAt(0).toUpperCase() + rest.slice(1)
+      const label = rest === 'data' ? 'Data' : rest.charAt(0).toUpperCase() + rest.slice(1)
       return `Ram Sales — ${label}`
     }
     return 'Admin'
@@ -153,7 +152,7 @@ export default function AdminLayout({ children }) {
                 <Link href="/admin/ram/pending" className={navItemClass(activeKey === 'ram_pending')}>
                   Pending
                 </Link>
-                <Link href="/admin/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
+                <Link href="/admin/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
                   Approved
                 </Link>
                 <Link href="/admin/ram/inventory" className={navItemClass(activeKey === 'ram_inventory')}>

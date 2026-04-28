@@ -371,7 +371,7 @@ function RamApprovedContent() {
   )
 }
 
-export default function RamDeliveredPage() {
+export default function RamApprovedPage() {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <RamApprovedContent />

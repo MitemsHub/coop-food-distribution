@@ -22,10 +22,13 @@ async function hasColumn(supabase, table, column) {
 
 async function resolveRamCycleId({ supabase, cycleParam, ordersHasCycle }) {
   if (!ordersHasCycle) return { cycleId: null, activeCycleId: null }
-  if (String(cycleParam || '').toLowerCase() === 'all') return { cycleId: null, activeCycleId: null }
+  const raw = String(cycleParam ?? '').trim()
+  if (raw.toLowerCase() === 'all') return { cycleId: null, activeCycleId: null }
 
-  const parsed = cycleParam != null ? Number(cycleParam) : null
-  if (parsed != null && Number.isFinite(parsed)) return { cycleId: Math.trunc(parsed), activeCycleId: null }
+  if (raw) {
+    if (/^\d+$/.test(raw)) return { cycleId: Math.trunc(Number(raw)), activeCycleId: null }
+    return { cycleId: raw, activeCycleId: null }
+  }
 
   const { data: active, error: aErr } = await supabase
     .from('ram_cycles')
