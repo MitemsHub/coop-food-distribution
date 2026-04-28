@@ -19,7 +19,9 @@ export default function Navbar() {
   const userType = user?.type
   const hideOnAdmin = !!pathname?.startsWith('/admin')
   const hideOnRep = !!pathname?.startsWith('/rep')
-  const hideNavbar = hideOnAdmin || hideOnRep
+  const hideOnLanding = pathname === '/' || pathname === '/portal'
+  const hideOnPrivileged = userType === 'admin' || userType === 'rep'
+  const hideNavbar = hideOnAdmin || hideOnRep || hideOnLanding || hideOnPrivileged
 
   const isActive = (path) => {
     if (path === '/') return pathname === '/'
