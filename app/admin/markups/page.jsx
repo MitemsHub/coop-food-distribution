@@ -36,6 +36,10 @@ export default function AdminMarkupsPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadLog, setUploadLog] = useState('')
 
+  const [editingRowKey, setEditingRowKey] = useState(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editActive, setEditActive] = useState(true)
+
   useEffect(() => {
     async function loadBranches() {
       try {
@@ -88,7 +92,8 @@ export default function AdminMarkupsPage() {
       try {
         setLoadingMarkups(true)
         setMessage('')
-        const res = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
+        const cycleQuery = selectedCycleId != null ? `&cycle_id=${encodeURIComponent(selectedCycleId)}` : ''
+        const res = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}${cycleQuery}`)
         const json = await res.json()
         if (!json.ok) throw new Error(json.error || 'Failed to fetch markups')
         setMarkups(json.markups || [])
@@ -99,7 +104,7 @@ export default function AdminMarkupsPage() {
       }
     }
     loadMarkups()
-  }, [markupBranchCode])
+  }, [markupBranchCode, selectedCycleId])
 
   async function updateBasePrice(e) {
     e.preventDefault()
@@ -135,13 +140,14 @@ export default function AdminMarkupsPage() {
       const res = await fetch('/api/admin/markups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_code: markupBranchCode, sku: sku.trim(), amount: Number(amount) })
+        body: JSON.stringify({ branch_code: markupBranchCode, sku: sku.trim(), amount: Number(amount), cycle_id: selectedCycleId })
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Failed to save markup')
       setMessage(json.message || 'Markup saved')
       // Refresh list
-      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
+      const cycleQuery = selectedCycleId != null ? `&cycle_id=${encodeURIComponent(selectedCycleId)}` : ''
+      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}${cycleQuery}`)
       const listJson = await listRes.json()
       setMarkups(listJson.markups || [])
     } catch (err) {
@@ -158,7 +164,7 @@ export default function AdminMarkupsPage() {
       const res = await fetch('/api/admin/markups', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_code: markupBranchCode, sku: itemSku })
+        body: JSON.stringify({ branch_code: markupBranchCode, sku: itemSku, cycle_id: selectedCycleId })
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Failed to remove markup')
@@ -168,6 +174,61 @@ export default function AdminMarkupsPage() {
       setMessage(`Remove failed: ${err.message}`)
     } finally {
       setRemoving(false)
+    }
+  }
+
+  const startEditRow = (m) => {
+    const rowKey = `${m.item_id}:${m.cycle_id || ''}`
+    setEditingRowKey(rowKey)
+    setEditAmount(String(Number(m.amount || 0)))
+    setEditActive(!!m.active)
+  }
+
+  const cancelEditRow = () => {
+    setEditingRowKey(null)
+    setEditAmount('')
+    setEditActive(true)
+  }
+
+  const saveEditRow = async (m) => {
+    try {
+      const sku = String(m.items?.sku || '').trim()
+      if (!sku) throw new Error('Missing SKU')
+      const amt = Number(editAmount)
+      if (!Number.isFinite(amt) || amt < 0) throw new Error('Invalid markup amount')
+
+      setSaving(true)
+      setMessage('')
+
+      const res = await fetch('/api/admin/markups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          branch_code: markupBranchCode,
+          sku,
+          amount: Math.trunc(amt),
+          active: !!editActive,
+          cycle_id: selectedCycleId
+        })
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Failed to save markup')
+      setMessage(json.message || 'Markup updated')
+
+      setMarkups(prev =>
+        (prev || []).map(x => {
+          const xKey = `${x.item_id}:${x.cycle_id || ''}`
+          const mKey = `${m.item_id}:${m.cycle_id || ''}`
+          if (xKey !== mKey) return x
+          return { ...x, amount: Math.trunc(amt), active: !!editActive }
+        })
+      )
+      cancelEditRow()
+    } catch (err) {
+      setMessage(`Update failed: ${err.message}`)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -214,7 +275,7 @@ export default function AdminMarkupsPage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `markups_${markupBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `markups_${markupBranchCode || 'branch'}_${selectedCycleId || 'cycle'}_${new Date().toISOString().split('T')[0]}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -262,7 +323,7 @@ export default function AdminMarkupsPage() {
         }
       })
 
-      doc.save(`markups_${markupBranchCode || 'branch'}_${new Date().toISOString().split('T')[0]}.pdf`)
+      doc.save(`markups_${markupBranchCode || 'branch'}_${selectedCycleId || 'cycle'}_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (error) {
       console.error('PDF export error:', error)
       alert('PDF export failed. Please try again.')
@@ -280,6 +341,7 @@ export default function AdminMarkupsPage() {
   const downloadMarkupsTemplate = () => {
     dlCSV('Markups_Template.csv', [{
       branch_code: 'DUTSE',
+      cycle_id: selectedCycleId || '',
       sku: 'RICE50KG',
       amount: 500,
       active: 'TRUE'
@@ -296,12 +358,14 @@ export default function AdminMarkupsPage() {
       }
       const fd = new FormData()
       fd.append('file', uploadFile)
+      if (selectedCycleId != null) fd.append('cycle_id', String(selectedCycleId))
       const res = await fetch('/api/admin/import/markups', { method: 'POST', body: fd })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || `Upload failed with status ${res.status}`)
       setUploadLog(JSON.stringify(json, null, 2))
       // Refresh current branch markups
-      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}`)
+      const cycleQuery = selectedCycleId != null ? `&cycle_id=${encodeURIComponent(selectedCycleId)}` : ''
+      const listRes = await fetch(`/api/admin/markups?branch_code=${encodeURIComponent(markupBranchCode)}${cycleQuery}`)
       const listJson = await listRes.json()
       if (listJson.ok) setMarkups(listJson.markups || [])
     } catch (e) {
@@ -392,19 +456,41 @@ export default function AdminMarkupsPage() {
         </form>
       </div>
 
-      <h2 className="text-2xl font-semibold mb-4">Admin: Branch Items Markups</h2>
-      <div className="mb-6">
-        <label className="block text-sm font-medium mb-1">Branch (for Markups)</label>
-        <select
-          value={markupBranchCode}
-          onChange={e => setMarkupBranchCode(e.target.value)}
-          className="border rounded px-3 py-2 w-64"
-          disabled={loadingBranches}
-        >
-          {branches.map(b => (
-            <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
-          ))}
-        </select>
+      <h2 className="text-2xl font-semibold mb-4">Admin: Branch Items Markups (Per Cycle)</h2>
+      <div className="mb-6 flex gap-4 items-end flex-wrap">
+        <div>
+          <label className="block text-sm font-medium mb-1">Branch (for Markups)</label>
+          <select
+            value={markupBranchCode}
+            onChange={e => setMarkupBranchCode(e.target.value)}
+            className="border rounded px-3 py-2 w-64"
+            disabled={loadingBranches}
+          >
+            {branches.map(b => (
+              <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Cycle (for Markups)</label>
+          <select
+            value={selectedCycleId ?? ''}
+            onChange={e => setSelectedCycleId(e.target.value ? Number(e.target.value) : null)}
+            className="border rounded px-3 py-2 w-64"
+            disabled={loadingCycles || cycles.length === 0}
+            required
+          >
+            {cycles.length === 0 ? (
+              <option value="">No cycles found</option>
+            ) : (
+              cycles.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.code}){c.is_active ? ' — Active' : ''}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
       </div>
 
       <form onSubmit={upsertMarkup} className="mb-8">
@@ -445,7 +531,7 @@ export default function AdminMarkupsPage() {
       {/* Bulk Upload Section */}
       <div className="mb-8 border rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-2">Bulk Upload Markups (.xlsx/.csv)</h2>
-        <p className="text-sm text-gray-600 mb-3">Expected columns: branch_code, sku, amount, active</p>
+        <p className="text-sm text-gray-600 mb-3">Expected columns: branch_code, cycle_id, sku, amount, active</p>
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <input
             type="file"
@@ -528,19 +614,73 @@ export default function AdminMarkupsPage() {
             </thead>
             <tbody>
               {paginatedMarkups.map(m => (
-                <tr key={`${m.item_id}`} className="odd:bg-white even:bg-gray-50">
+                <tr key={`${m.item_id}:${m.cycle_id || ''}`} className="odd:bg-white even:bg-gray-50">
                   <td className="p-2 border-b">{m.items?.sku || '—'}</td>
                   <td className="p-2 border-b">{m.items?.name || '—'}</td>
                   <td className="p-2 border-b">{m.items?.category || '—'}</td>
                   <td className="p-2 border-b">{m.items?.unit || '—'}</td>
-                  <td className="p-2 border-b">{Number(m.amount || 0)}</td>
-                  <td className="p-2 border-b">{m.active ? 'Yes' : 'No'}</td>
                   <td className="p-2 border-b">
-                    <button
-                      className="text-red-600 hover:underline disabled:opacity-60"
-                      onClick={() => removeMarkup(m.items?.sku || '')}
-                      disabled={removing}
-                    >Remove</button>
+                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                      <input
+                        type="number"
+                        className="border rounded px-2 py-1 w-28"
+                        min={0}
+                        step={1}
+                        value={editAmount}
+                        onChange={(e) => setEditAmount(e.target.value)}
+                      />
+                    ) : (
+                      Number(m.amount || 0)
+                    )}
+                  </td>
+                  <td className="p-2 border-b">
+                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                      <label className="inline-flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={!!editActive} onChange={(e) => setEditActive(e.target.checked)} />
+                        Active
+                      </label>
+                    ) : (
+                      m.active ? 'Yes' : 'No'
+                    )}
+                  </td>
+                  <td className="p-2 border-b">
+                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                      <div className="flex gap-3">
+                        <button
+                          className="text-blue-600 hover:underline disabled:opacity-60"
+                          onClick={() => saveEditRow(m)}
+                          disabled={saving}
+                          type="button"
+                        >
+                          Save
+                        </button>
+                        <button className="text-gray-600 hover:underline" onClick={cancelEditRow} type="button">
+                          Cancel
+                        </button>
+                        <button
+                          className="text-red-600 hover:underline disabled:opacity-60"
+                          onClick={() => removeMarkup(m.items?.sku || '')}
+                          disabled={removing}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-3">
+                        <button className="text-blue-600 hover:underline" onClick={() => startEditRow(m)} type="button">
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:underline disabled:opacity-60"
+                          onClick={() => removeMarkup(m.items?.sku || '')}
+                          disabled={removing}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

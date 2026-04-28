@@ -20,6 +20,28 @@ const parseBool = (val) => {
   return true
 }
 
+const hasColumn = async (supabase, table, column) => {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+const resolveCycleId = async (supabase, cycleIdParam) => {
+  if (cycleIdParam != null && Number.isFinite(Number(cycleIdParam))) return Number(cycleIdParam)
+
+  let { data: active, error: activeErr } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (activeErr) {
+    const msg = String(activeErr?.message || '')
+    if (!/is_active/i.test(msg)) throw activeErr
+    active = null
+  }
+  if (active?.id) return active.id
+
+  const { data: latest, error: latestErr } = await supabase.from('cycles').select('id').order('id', { ascending: false }).limit(1).maybeSingle()
+  if (latestErr) throw latestErr
+  if (!latest?.id) throw new Error('No cycle found')
+  return latest.id
+}
+
 export async function POST(req) {
   try {
     const supabase = createClient()
@@ -33,8 +55,12 @@ export async function POST(req) {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
 
     // Expected headers:
-    // branch_code, sku, amount, active
+    // branch_code, cycle_id, sku, amount, active
     if (!rows.length) return NextResponse.json({ ok: false, error: 'No rows found' }, { status: 400 })
+
+    const markupsHasCycle = await hasColumn(supabase, 'branch_item_markups', 'cycle_id')
+    const formCycleIdParam = formData.get('cycle_id')
+    const defaultCycleId = markupsHasCycle ? await resolveCycleId(supabase, formCycleIdParam) : null
 
     // Fetch branches and items maps
     const { data: branches, error: bErr } = await supabase.from('branches').select('id,code')
@@ -51,6 +77,7 @@ export async function POST(req) {
 
     for (const r of rows) {
       const branch_code = String(r.branch_code || '').trim().toUpperCase()
+      const rowCycleId = markupsHasCycle ? (Number(String(r.cycle_id || '').trim()) || null) : null
       const sku = String(r.sku || '').trim().toUpperCase()
       const amount = Number(String(r.amount || '0').replace(/[, ]/g, '')) || 0
       const active = parseBool(r.active)
@@ -61,35 +88,18 @@ export async function POST(req) {
       if (!item_id) missingSkus.add(sku)
       if (!branch_id || !item_id) continue
 
-      upserts.push({ branch_id, item_id, amount, active })
+      const payload = { branch_id, item_id, amount, active }
+      if (markupsHasCycle) payload.cycle_id = rowCycleId || defaultCycleId
+      upserts.push(payload)
     }
 
     let affected = 0
     for (const part of chunk(upserts, 500)) {
-      for (const data of part) {
-        // Check existing record
-        const { data: existing } = await supabase
-          .from('branch_item_markups')
-          .select('id')
-          .eq('branch_id', data.branch_id)
-          .eq('item_id', data.item_id)
-          .single()
-
-        if (existing) {
-          const { error: uErr } = await supabase
-            .from('branch_item_markups')
-            .update({ amount: data.amount, active: data.active })
-            .eq('branch_id', data.branch_id)
-            .eq('item_id', data.item_id)
-          if (uErr) return NextResponse.json({ ok: false, error: uErr.message }, { status: 500 })
-        } else {
-          const { error: iErr2 } = await supabase
-            .from('branch_item_markups')
-            .insert(data)
-          if (iErr2) return NextResponse.json({ ok: false, error: iErr2.message }, { status: 500 })
-        }
-        affected++
-      }
+      const { error: upErr } = await supabase
+        .from('branch_item_markups')
+        .upsert(part, { onConflict: markupsHasCycle ? 'branch_id,item_id,cycle_id' : 'branch_id,item_id' })
+      if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 })
+      affected += part.length
     }
 
     return NextResponse.json({ 

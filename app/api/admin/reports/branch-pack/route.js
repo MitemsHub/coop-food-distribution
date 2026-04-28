@@ -14,6 +14,25 @@ export async function GET(req) {
     const from   = searchParams.get('from') || ''
     const to     = searchParams.get('to')   || ''
 
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+
+    const masterHasCycle = await hasColumn('v_master_sheet', 'cycle_id')
+    const markupsHasCycle = await hasColumn('branch_item_markups', 'cycle_id')
+    let effectiveCycleId = null
+    if (markupsHasCycle && !masterHasCycle) {
+      const { data: activeCycle, error: cycleErr } = await supabase
+        .from('cycles')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (cycleErr) throw new Error(cycleErr.message)
+      if (!activeCycle?.id) throw new Error('No active cycle found')
+      effectiveCycleId = activeCycle.id
+    }
+
     // v_master_sheet now exposes:
     // branch_code/branch_name           => DELIVERY branch
     // member_branch_code/_name          => MEMBER (home) branch
@@ -24,6 +43,7 @@ export async function GET(req) {
       payment_option,
       member_id,
       member_name,
+      ${masterHasCycle ? 'cycle_id,' : ''}
       branch_code,
       branch_name,
       member_branch_code,
@@ -96,6 +116,9 @@ export async function GET(req) {
 
     // Build enrichment maps for Markup using item names joined from markups
     const branchCodes = [...new Set((allData || []).map(r => r.branch_code))].filter(Boolean)
+    const cycleIds = masterHasCycle
+      ? [...new Set((allData || []).map(r => r.cycle_id).filter(v => v != null))]
+      : (effectiveCycleId != null ? [effectiveCycleId] : [])
 
     // Fetch branches map: code -> id
     const { data: branchesData, error: branchesErr } = await supabase
@@ -113,17 +136,19 @@ export async function GET(req) {
       const batchSize = 1000
       let start = 0
       while (true) {
-        const { data: page, error: pageErr } = await supabase
+        let mq = supabase
           .from('branch_item_markups')
-          .select('branch_id, amount, active, items(name)')
+          .select(markupsHasCycle ? 'branch_id, cycle_id, amount, active, items(name)' : 'branch_id, amount, active, items(name)')
           .in('branch_id', branchIds)
+        if (markupsHasCycle && cycleIds.length) mq = mq.in('cycle_id', cycleIds)
+        const { data: page, error: pageErr } = await mq
           .order('branch_id', { ascending: true })
           .range(start, start + batchSize - 1)
         if (pageErr) throw new Error(pageErr.message)
         if (!page || page.length === 0) break
         for (const m of page) {
           if (!m.active) continue
-          const key = `${m.branch_id}:${norm(m.items?.name)}`
+          const key = markupsHasCycle ? `${m.branch_id}:${m.cycle_id}:${norm(m.items?.name)}` : `${m.branch_id}:${norm(m.items?.name)}`
           markupByBranchAndName.set(key, Number(m.amount) || 0)
         }
         if (page.length < batchSize) break
@@ -134,9 +159,12 @@ export async function GET(req) {
     // Enrich rows with OriginalPrice, Markup, Interest
     const rows = baseRows.map((r, idx) => {
       const code = (allData[idx] || {}).branch_code
+      const cycleId = masterHasCycle ? (allData[idx] || {}).cycle_id : effectiveCycleId
       const itemName = r.Item
       const branchId = branchIdByCode.get(code)
-      const key2 = branchId ? `${branchId}:${norm(itemName)}` : null
+      const key2 = branchId
+        ? (markupsHasCycle ? `${branchId}:${cycleId}:${norm(itemName)}` : `${branchId}:${norm(itemName)}`)
+        : null
       const markup = key2 ? (markupByBranchAndName.get(key2) || 0) : 0
       const basePrice = Number(r.Price) - Number(markup)
       const interest = r.Payment === 'Loan' ? Math.round(r.Amount * 0.13) : 0

@@ -16,8 +16,33 @@ export async function GET(req) {
       return NextResponse.json({ ok: false, error: 'Branch parameter is required' }, { status: 400 })
     }
     
-    // Cache key for branch inventory prices
-    const cacheKey = `items-prices:${branchCode}`
+    const hasColumn = async (table, column) => {
+      const { error } = await supabase.from(table).select(column).limit(1)
+      return !error
+    }
+
+    const [markupsHasCycle, viewHasCycle] = await Promise.all([
+      hasColumn('branch_item_markups', 'cycle_id'),
+      hasColumn('v_inventory_status', 'cycle_id')
+    ])
+
+    let activeCycleId = null
+    if (markupsHasCycle || viewHasCycle) {
+      let { data: active, error: activeErr } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+      if (activeErr) {
+        const msg = String(activeErr?.message || '')
+        if (!/is_active/i.test(msg)) throw activeErr
+        active = null
+      }
+      if (active?.id) activeCycleId = active.id
+      if (!activeCycleId) {
+        const { data: latest, error: latestErr } = await supabase.from('cycles').select('id').order('id', { ascending: false }).limit(1).maybeSingle()
+        if (latestErr) throw latestErr
+        activeCycleId = latest?.id ?? null
+      }
+    }
+
+    const cacheKey = activeCycleId ? `items-prices:${branchCode}:${activeCycleId}` : `items-prices:${branchCode}`
 
     const items = await getCached(cacheKey, async () => {
       // Resolve branch id for markup lookup
@@ -31,7 +56,7 @@ export async function GET(req) {
       }
 
       // Fetch items with prices and demand data from optimized inventory view
-      const { data: itemsWithPrices, error } = await supabase
+      let itemsQuery = supabase
         .from('v_inventory_status')
         .select(`
           price,
@@ -48,6 +73,9 @@ export async function GET(req) {
         .eq('branch_code', branchCode)
         .gt('price', 0)
         .order('item_name')
+      if (viewHasCycle && activeCycleId) itemsQuery = itemsQuery.eq('cycle_id', activeCycleId)
+
+      const { data: itemsWithPrices, error } = await itemsQuery
       
       if (error) {
         console.error('Error fetching items with prices:', error)
@@ -55,10 +83,12 @@ export async function GET(req) {
       }
 
       // Load markups for this branch and map by item_id
-      const { data: markups, error: muErr } = await supabase
+      let markupsQuery = supabase
         .from('branch_item_markups')
         .select('item_id, amount, active')
         .eq('branch_id', branch.id)
+      if (markupsHasCycle && activeCycleId) markupsQuery = markupsQuery.eq('cycle_id', activeCycleId)
+      const { data: markups, error: muErr } = await markupsQuery
       if (muErr) {
         console.warn('Markups fetch error:', muErr.message)
       }

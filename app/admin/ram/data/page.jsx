@@ -29,6 +29,40 @@ function RamDataContent() {
   const [shoppingMsg, setShoppingMsg] = useState('')
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
+  const [cycles, setCycles] = useState([])
+  const [loadingCycles, setLoadingCycles] = useState(false)
+  const [activeCycleId, setActiveCycleId] = useState(null)
+  const [selectedCycleId, setSelectedCycleId] = useState(null)
+
+  const [newCycleCode, setNewCycleCode] = useState('')
+  const [newCycleName, setNewCycleName] = useState('')
+  const [newCycleStartsAt, setNewCycleStartsAt] = useState('')
+  const [newCycleEndsAt, setNewCycleEndsAt] = useState('')
+  const [newCycleMakeActive, setNewCycleMakeActive] = useState(true)
+  const [creatingCycle, setCreatingCycle] = useState(false)
+  const [activatingCycle, setActivatingCycle] = useState(false)
+
+  const loadCycles = async () => {
+    try {
+      setLoadingCycles(true)
+      const res = await fetch('/api/admin/ram/cycles', { cache: 'no-store', credentials: 'same-origin' })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load cycles')
+      setCycles(json.cycles || [])
+      setActiveCycleId(json.active_cycle_id ?? null)
+      setSelectedCycleId(prev => {
+        if (prev != null) return prev
+        if (json.active_cycle_id != null) return json.active_cycle_id
+        if ((json.cycles || []).length > 0) return json.cycles[0].id
+        return null
+      })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Failed to load cycles' })
+    } finally {
+      setLoadingCycles(false)
+    }
+  }
+
   const fetchLocations = async () => {
     setLoading(true)
     setMsg(null)
@@ -46,6 +80,7 @@ function RamDataContent() {
   }
 
   useEffect(() => {
+    loadCycles()
     fetchLocations()
   }, [])
 
@@ -88,6 +123,66 @@ function RamDataContent() {
       setShoppingMsg(`Error: ${e?.message || 'Failed to save'}`)
     } finally {
       setShoppingLoading(false)
+    }
+  }
+
+  const createCycle = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (creatingCycle) return
+    setCreatingCycle(true)
+    setMsg(null)
+    try {
+      const payload = {
+        code: newCycleCode.trim(),
+        name: newCycleName.trim(),
+        make_active: !!newCycleMakeActive
+      }
+      if (newCycleStartsAt) payload.starts_at = newCycleStartsAt
+      if (newCycleEndsAt) payload.ends_at = newCycleEndsAt
+
+      const res = await fetch('/api/admin/ram/cycles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to create cycle')
+      setMsg({ type: 'success', text: `Cycle created: ${json.cycle?.name || json.cycle?.code || 'New cycle'}` })
+      setNewCycleCode('')
+      setNewCycleName('')
+      setNewCycleStartsAt('')
+      setNewCycleEndsAt('')
+      await loadCycles()
+      if (json.active_cycle_id != null) setSelectedCycleId(json.active_cycle_id)
+    } catch (e2) {
+      setMsg({ type: 'error', text: e2?.message || 'Failed to create cycle' })
+    } finally {
+      setCreatingCycle(false)
+    }
+  }
+
+  const setActiveCycle = async () => {
+    if (activatingCycle) return
+    if (selectedCycleId == null) return
+    setActivatingCycle(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/ram/cycles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ id: selectedCycleId })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to set active cycle')
+      setMsg({ type: 'success', text: 'Active cycle updated successfully' })
+      await loadCycles()
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Failed to set active cycle' })
+    } finally {
+      setActivatingCycle(false)
     }
   }
 
@@ -193,6 +288,89 @@ function RamDataContent() {
           {msg.text}
         </div>
       )}
+
+      <div className="bg-white border rounded-lg p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">Ram Cycles</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-gray-600 mb-2">Set Active Cycle</div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Cycle</label>
+                <select
+                  className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
+                  value={selectedCycleId ?? ''}
+                  onChange={(e) => setSelectedCycleId(e.target.value ? Number(e.target.value) : null)}
+                  disabled={loadingCycles || cycles.length === 0}
+                >
+                  {cycles.length === 0 ? (
+                    <option value="">No cycles found</option>
+                  ) : (
+                    cycles.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.code}){c.is_active ? ' — Active' : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                onClick={setActiveCycle}
+                disabled={activatingCycle || selectedCycleId == null || selectedCycleId === activeCycleId}
+              >
+                {activatingCycle ? 'Updating...' : 'Set Active'}
+              </button>
+            </div>
+          </div>
+
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-gray-600 mb-2">Create New Cycle</div>
+            <form onSubmit={createCycle} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                className="border rounded px-3 py-2 text-xs sm:text-sm"
+                placeholder="Code (e.g. RAM-APR-2026)"
+                value={newCycleCode}
+                onChange={(e) => setNewCycleCode(e.target.value)}
+                required
+              />
+              <input
+                className="border rounded px-3 py-2 text-xs sm:text-sm"
+                placeholder="Name (e.g. April 2026)"
+                value={newCycleName}
+                onChange={(e) => setNewCycleName(e.target.value)}
+                required
+              />
+              <input
+                type="datetime-local"
+                className="border rounded px-3 py-2 text-xs sm:text-sm"
+                value={newCycleStartsAt}
+                onChange={(e) => setNewCycleStartsAt(e.target.value)}
+              />
+              <input
+                type="datetime-local"
+                className="border rounded px-3 py-2 text-xs sm:text-sm"
+                value={newCycleEndsAt}
+                onChange={(e) => setNewCycleEndsAt(e.target.value)}
+              />
+              <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                <input type="checkbox" checked={!!newCycleMakeActive} onChange={(e) => setNewCycleMakeActive(e.target.checked)} />
+                Make active
+              </label>
+              <div className="sm:col-span-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50"
+                  disabled={creatingCycle}
+                >
+                  {creatingCycle ? 'Creating...' : 'Create Cycle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white border rounded-lg p-4 mb-4">
         <div className="text-sm font-medium mb-3">Add Delivery Location</div>

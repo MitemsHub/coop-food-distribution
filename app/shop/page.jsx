@@ -247,10 +247,20 @@ function ShopPageContent() {
         // Load per-branch markups to adjust displayed prices
         let markupByItemId = new Map()
         try {
-          const { data: markups } = await supabase
-            .from('branch_item_markups')
-            .select('item_id, amount, active')
-            .eq('branch_id', br.id)
+          const runMarkupsQuery = async (withCycle) => {
+            let q = supabase
+              .from('branch_item_markups')
+              .select('item_id, amount, active')
+              .eq('branch_id', br.id)
+            if (withCycle) q = q.eq('cycle_id', activeCycle.id)
+            return await q
+          }
+
+          let markupsRes = await runMarkupsQuery(true)
+          if (markupsRes.error && String(markupsRes.error.message || '').includes('cycle_id')) {
+            markupsRes = await runMarkupsQuery(false)
+          }
+          const markups = markupsRes.data
           markupByItemId = new Map((markups || []).filter(m => m.active).map(m => [m.item_id, Number(m.amount || 0)]))
         } catch (mkErr) {
           console.warn('Markups fetch warn:', mkErr?.message)

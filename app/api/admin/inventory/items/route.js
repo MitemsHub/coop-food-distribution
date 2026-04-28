@@ -4,6 +4,24 @@ import { NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function resolveCycleId(supabase, searchParams, ordersHasCycle) {
+  if (!ordersHasCycle) return null
+  const raw = searchParams.get('cycle_id')
+  if (raw != null && raw !== '') {
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) throw new Error('Invalid cycle_id')
+    return parsed
+  }
+  const { data, error } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
 export async function GET(request) {
   try {
     const supabase = createClient()
@@ -12,17 +30,24 @@ export async function GET(request) {
     const pageParam = Number(searchParams.get('page') || 1)
     const pageSizeParam = Number(searchParams.get('pageSize') || 25)
     const hasPaging = searchParams.has('pageSize') || searchParams.has('page')
+    const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
+    const cycleId = await resolveCycleId(supabase, searchParams, ordersHasCycle)
+    if (ordersHasCycle && !cycleId) {
+      return NextResponse.json({ ok: false, error: 'No active cycle found', data: [] }, { status: 200 })
+    }
 
     // Try primary view first
-    const { data: viewRows, error: viewError } = await supabase
-      .from('v_inventory_status')
-      .select('*')
-      .order('item_name', { ascending: true })
+    const viewHasCycle = ordersHasCycle && (await hasColumn(supabase, 'v_inventory_status', 'cycle_id'))
+    let viewQ = supabase.from('v_inventory_status').select('*').order('item_name', { ascending: true })
+    if (viewHasCycle) viewQ = viewQ.eq('cycle_id', cycleId)
+    const { data: viewRows, error: viewError } = await viewQ
 
-    if (viewError || !viewRows || viewRows.length === 0) {
+    if (viewError || !viewRows || viewRows.length === 0 || (ordersHasCycle && !viewHasCycle)) {
       // Fallback aggregation from base tables to avoid hard failures or empty views
+      let ordersQ = supabase.from('orders').select('order_id, status').in('status', ['Pending', 'Posted', 'Delivered'])
+      if (ordersHasCycle) ordersQ = ordersQ.eq('cycle_id', cycleId)
       const [ordersRes, linesRes, itemsRes] = await Promise.all([
-        supabase.from('orders').select('order_id, status').in('status', ['Pending', 'Posted', 'Delivered']),
+        ordersQ,
         supabase.from('order_lines').select('order_id, item_id, qty'),
         supabase.from('items').select('item_id, sku, name')
       ])

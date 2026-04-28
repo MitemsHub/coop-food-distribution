@@ -112,6 +112,11 @@ function isMissingTable(error, tableName) {
   return msg.includes('does not exist') || msg.includes('could not find the table')
 }
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
 function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInterest }) {
   const price = Number(unitPrice || 0)
   const eligible = Number(eligibleAmount || 0)
@@ -371,6 +376,17 @@ export async function POST(req) {
       )
     }
 
+    const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
+    let ramCycleId = ordersHasCycle ? eligibility.activeRamCycleId : null
+    if (ordersHasCycle && ramCycleId == null) {
+      const { data: latest, error: lErr } = await supabase
+        .from('ram_cycles')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .maybeSingle()
+      if (!lErr && latest?.id) ramCycleId = latest.id
+    }
+
     const { data: inserted, error: insErr } = await supabase
       .from('ram_orders')
       .insert({
@@ -385,6 +401,7 @@ export async function POST(req) {
         interest_amount: interestAmount,
         total_amount: totalAmount,
         ram_delivery_location_id: deliveryLocation.id,
+        ...(ordersHasCycle && ramCycleId != null ? { ram_cycle_id: ramCycleId } : {})
       })
       .select('id,total_amount,payment_option,qty,member_category,created_at')
       .single()

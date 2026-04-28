@@ -35,9 +35,10 @@ export async function POST(req) {
     if (cycleErr) return NextResponse.json({ ok: false, error: cycleErr.message }, { status: 500 })
     if (!activeCycle?.id) return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
 
-    const [ordersHasCycle, pricesHasCycle] = await Promise.all([
+    const [ordersHasCycle, pricesHasCycle, markupsHasCycle] = await Promise.all([
       hasColumn('orders', 'cycle_id'),
       hasColumn('branch_item_prices', 'cycle_id'),
+      hasColumn('branch_item_markups', 'cycle_id'),
     ])
 
     // Member (home branch + balances)
@@ -130,12 +131,13 @@ export async function POST(req) {
 
       // Add branch-specific markup if configured
       let markupAmount = 0
-      const { data: mk, error: mkErr } = await supabase
+      let mkQuery = supabase
         .from('branch_item_markups')
         .select('amount, active')
         .eq('branch_id', deliveryBranch.id)
         .eq('item_id', item.item_id)
-        .single()
+      if (markupsHasCycle) mkQuery = mkQuery.eq('cycle_id', activeCycle.id)
+      const { data: mk, error: mkErr } = await mkQuery.single()
       if (!mkErr && mk && mk.active) {
         markupAmount = Number(mk.amount || 0)
       }

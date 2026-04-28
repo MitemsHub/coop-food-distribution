@@ -4,15 +4,42 @@ import { createClient } from '../../../../../lib/supabaseServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function resolveCycleId(supabase, searchParams, ordersHasCycle) {
+  if (!ordersHasCycle) return null
+  const raw = searchParams.get('cycle_id')
+  if (raw != null && raw !== '') {
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) throw new Error('Invalid cycle_id')
+    return parsed
+  }
+  const { data, error } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
 export async function GET(request) {
   try {
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const branch = searchParams.get('branch')
     const department = searchParams.get('department')
+
+    const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
+    const cycleId = await resolveCycleId(supabase, searchParams, ordersHasCycle)
+    if (ordersHasCycle && !cycleId) {
+      return NextResponse.json({ data: [], error: 'No active cycle found' }, { status: 200 })
+    }
+
     // Always aggregate using orders.department_id and orders.delivery_branch_id
+    let ordersQ = supabase.from('orders').select('order_id, status, delivery_branch_id, department_id')
+    if (ordersHasCycle) ordersQ = ordersQ.eq('cycle_id', cycleId)
     const [ordersRes, linesRes, itemsRes, deptsRes, branchesRes] = await Promise.all([
-      supabase.from('orders').select('order_id, status, branch_id, department_id'),
+      ordersQ,
       supabase.from('order_lines').select('order_id, item_id, qty'),
       supabase.from('items').select('item_id, sku, name'),
       supabase.from('departments').select('id, name'),
@@ -22,7 +49,7 @@ export async function GET(request) {
       const msg = ordersRes.error?.message || linesRes.error?.message || itemsRes.error?.message || deptsRes.error?.message || branchesRes.error?.message || 'Aggregation failed'
       return NextResponse.json({ data: [], error: msg }, { status: 200 })
     }
-    const orderInfo = new Map(ordersRes.data.map(o => [o.order_id, { status: o.status, branch_id: o.branch_id, department_id: o.department_id }]))
+    const orderInfo = new Map(ordersRes.data.map(o => [o.order_id, { status: o.status, branch_id: o.delivery_branch_id, department_id: o.department_id }]))
     const deptMap = new Map(deptsRes.data.map(d => [d.id, d.name]))
     const branchMap = new Map(branchesRes.data.map(b => [b.id, { code: b.code, name: b.name }]))
     const itemMeta = new Map(itemsRes.data.map(i => [i.item_id, i]))

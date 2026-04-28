@@ -5,6 +5,17 @@ import { verify } from '@/lib/signing'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function getActiveCycleId(supabase) {
+  const { data, error } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
 async function deptId(supabase, name) {
   const { data } = await supabase.from('departments').select('id').eq('name', name).single()
   return data?.id || -1
@@ -27,6 +38,11 @@ export async function GET(req) {
     const limit = Number(searchParams.get('limit') || 50)
     const cursor = searchParams.get('cursor') // order_id
     const direction = searchParams.get('dir') || 'next' // next|prev
+    const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
+    const cycleId = ordersHasCycle ? await getActiveCycleId(supabase) : null
+    if (ordersHasCycle && !cycleId) {
+      return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+    }
 
     const selectCols = `
       order_id, created_at, posted_at, status, payment_option, total_amount,
@@ -43,6 +59,7 @@ export async function GET(req) {
       .eq('status', status)
       .order('order_id', { ascending: false })
 
+    if (ordersHasCycle) q = q.eq('cycle_id', cycleId)
     if (dept) q = q.eq('department_id', (await deptId(supabase, dept)))
     if (cursor) {
       q = direction === 'next'

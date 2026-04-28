@@ -38,14 +38,31 @@ export async function GET(request) {
         ) AS has_cycle;`
       )
       const pricesHasCycle = Boolean(hasCycleRes.rows?.[0]?.has_cycle)
+
+      const hasMarkupCycleRes = await queryDirect(
+        `SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'branch_item_markups'
+            AND column_name = 'cycle_id'
+        ) AS has_cycle;`
+      )
+      const markupsHasCycle = Boolean(hasMarkupCycleRes.rows?.[0]?.has_cycle)
       let activeCycleId = null
-      if (pricesHasCycle) {
+      if (pricesHasCycle || markupsHasCycle) {
         const activeCycleRes = await queryDirect(`SELECT id FROM cycles WHERE is_active = TRUE LIMIT 1;`)
         activeCycleId = activeCycleRes.rows?.[0]?.id ?? null
         if (!activeCycleId) {
           return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
         }
       }
+
+      const params = []
+      if (pricesHasCycle) params.push(activeCycleId)
+      if (markupsHasCycle) params.push(activeCycleId)
+      const pricesCycleIdx = pricesHasCycle ? 1 : null
+      const markupsCycleIdx = markupsHasCycle ? (pricesHasCycle ? 2 : 1) : null
 
       const result = await queryDirect(
         `
@@ -61,12 +78,16 @@ export async function GET(request) {
         FROM branches b
         JOIN branch_item_prices bip ON bip.branch_id = b.id
         JOIN items i ON i.item_id = bip.item_id
-        LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id AND bim.active = TRUE
+        LEFT JOIN branch_item_markups bim
+          ON bim.branch_id = b.id
+         AND bim.item_id = i.item_id
+         AND bim.active = TRUE
+         ${markupsHasCycle ? `AND bim.cycle_id = $${markupsCycleIdx}` : ''}
         WHERE bip.price IS NOT NULL
-        ${pricesHasCycle ? 'AND bip.cycle_id = $1' : ''}
+        ${pricesHasCycle ? `AND bip.cycle_id = $${pricesCycleIdx}` : ''}
         ORDER BY b.name, i.name
       `,
-        pricesHasCycle ? [activeCycleId] : []
+        params
       )
 
       const rows = result.rows || []
@@ -89,8 +110,10 @@ export async function GET(request) {
 
       const { error: colErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
       const pricesHasCycle = !colErr
+      const { error: markupColErr } = await supabase.from('branch_item_markups').select('cycle_id').limit(1)
+      const markupsHasCycle = !markupColErr
       let activeCycleId = null
-      if (pricesHasCycle) {
+      if (pricesHasCycle || markupsHasCycle) {
         const { data: activeCycle, error: cycleErr } = await supabase
           .from('cycles')
           .select('id')
@@ -122,11 +145,13 @@ export async function GET(request) {
       const itemById = new Map((itemsData || []).map(i => [i.item_id, { item_id: i.item_id, sku: i.sku, name: i.name, category: i.category }]))
 
       // Fetch markups separately (active only)
-      const { data: markupsData, error: markupsErr } = await supabase
+      let markupsQuery = supabase
         .from('branch_item_markups')
         .select('branch_id, item_id, amount, active')
         .in('branch_id', branchIds)
         .in('item_id', itemIds)
+      if (markupsHasCycle) markupsQuery = markupsQuery.eq('cycle_id', activeCycleId)
+      const { data: markupsData, error: markupsErr } = await markupsQuery
       if (markupsErr) return NextResponse.json({ ok: false, error: markupsErr.message }, { status: 500 })
       const markupMap = new Map((markupsData || []).filter(m => !!m.active).map(m => [`${m.branch_id}:${m.item_id}`, Number(m.amount)]))
 

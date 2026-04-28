@@ -95,11 +95,27 @@ export default function ItemManagement() {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
   }
 
+  const getPageItems = (total, current) => {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+    const points = new Set([1, total, current - 1, current, current + 1])
+    const nums = Array.from(points).filter(n => n >= 1 && n <= total).sort((a, b) => a - b)
+    const out = []
+    let prev = null
+    for (const n of nums) {
+      if (prev != null && n - prev > 1) out.push('…')
+      out.push(n)
+      prev = n
+    }
+    return out
+  }
+
+  const pageItems = getPageItems(totalPages, currentPage)
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-gray-900">Item Image Management</h2>
-        <div className="flex items-center gap-4">
+    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Item Image Management</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={() => {
               fetchItems()
@@ -110,7 +126,7 @@ export default function ItemManagement() {
           >
             Refresh
           </button>
-          <div className="text-sm text-gray-600">
+          <div className="text-xs sm:text-sm text-gray-600 whitespace-normal break-words min-w-0">
             {items.length} items total • Page {currentPage} of {totalPages} • Showing {currentItems.length} items
           </div>
         </div>
@@ -127,12 +143,12 @@ export default function ItemManagement() {
       )}
 
       {/* Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
         {currentItems.map(item => (
-          <div key={item.item_id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+          <div key={item.item_id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow overflow-hidden">
             {/* Item Image */}
             <div className="mb-3">
-              <div className="relative w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
+              <div className="relative w-full h-28 bg-gray-100 rounded-lg overflow-hidden">
                 {item.image_url ? (
                   <Image
                     key={refreshKey}
@@ -187,7 +203,7 @@ export default function ItemManagement() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-6">
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-6">
           <button
             onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage === 1}
@@ -196,20 +212,27 @@ export default function ItemManagement() {
             Previous
           </button>
           
-          <div className="flex items-center gap-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                onClick={() => goToPage(page)}
-                className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                  currentPage === page
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            {pageItems.map((page, idx) =>
+              page === '…' ? (
+                <span key={`ellipsis-${idx}`} className="px-2 py-2 text-sm text-gray-500 select-none">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={page}
+                  onClick={() => goToPage(page)}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {page}
+                </button>
+              )
+            )}
           </div>
           
           <button

@@ -5,6 +5,24 @@ import { createClient } from '../../../../../lib/supabaseServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function resolveCycleId(supabase, searchParams, ordersHasCycle) {
+  if (!ordersHasCycle) return null
+  const raw = searchParams.get('cycle_id')
+  if (raw != null && raw !== '') {
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) throw new Error('Invalid cycle_id')
+    return parsed
+  }
+  const { data, error } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
 export async function GET(req) {
   try {
     const supabase = createClient()
@@ -16,6 +34,11 @@ export async function GET(req) {
     const limit = Number(searchParams.get('limit') || 50)
     const cursor = searchParams.get('cursor') // order_id
     const dir = (searchParams.get('dir') || 'next').toLowerCase() // next|prev
+    const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
+    const cycleId = await resolveCycleId(supabase, searchParams, ordersHasCycle)
+    if (ordersHasCycle && !cycleId) {
+      return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
+    }
 
     // resolve delivery branch id if provided
     let deliveryBranchId = null
@@ -39,6 +62,7 @@ export async function GET(req) {
       .eq('status', status)
       .order('order_id', { ascending: false })
 
+    if (ordersHasCycle) q = q.eq('cycle_id', cycleId)
     if (deliveryBranchId) q = q.eq('delivery_branch_id', deliveryBranchId)
     if (payment) q = q.eq('payment_option', payment)
     if (term) q = q.or('member_id.ilike.%' + term + '%,member_name_snapshot.ilike.%' + term + '%')
@@ -62,6 +86,7 @@ export async function GET(req) {
     let totalAmount = 0
     {
       let qs = supabase.from('orders').select('total_amount', { count: 'exact' }).eq('status', status)
+      if (ordersHasCycle) qs = qs.eq('cycle_id', cycleId)
       if (deliveryBranchId) qs = qs.eq('delivery_branch_id', deliveryBranchId)
       if (payment) qs = qs.eq('payment_option', payment)
       if (term) qs = qs.or('member_id.ilike.%' + term + '%,member_name_snapshot.ilike.%' + term + '%')

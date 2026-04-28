@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Fallback aggregator using Supabase tables when direct DB URL isn't available
-async function aggregateViaTablesForRep(supabase, { branchId, departmentId, ordersHasCycle, pricesHasCycle, activeCycleId }) {
+async function aggregateViaTablesForRep(supabase, { branchId, departmentId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId }) {
   // Load orders for this rep's branch and status Posted/Delivered (do NOT filter by department here;
   // we'll filter per-line using either order.department_id or item.department_id to avoid misses)
   let ordersQ = supabase
@@ -53,10 +53,14 @@ async function aggregateViaTablesForRep(supabase, { branchId, departmentId, orde
       .in('item_id', itemIdsSet)
     if (pricesHasCycle) bipQ = bipQ.eq('cycle_id', activeCycleId)
 
-    const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([
-      bipQ,
-      supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').eq('branch_id', Number(branchId)).in('item_id', itemIdsSet)
-    ])
+    let bimQ = supabase
+      .from('branch_item_markups')
+      .select('branch_id, item_id, amount, active')
+      .eq('branch_id', Number(branchId))
+      .in('item_id', itemIdsSet)
+    if (markupsHasCycle) bimQ = bimQ.eq('cycle_id', activeCycleId)
+
+    const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([bipQ, bimQ])
     if (bipErr) throw new Error(bipErr.message)
     if (bimErr) throw new Error(bimErr.message)
     priceMap = new Map((bipData || []).map(p => [p.item_id, Number(p.price || 0)]))
@@ -124,11 +128,13 @@ export async function GET(req) {
 
     const { error: ordersColErr } = await supabase.from('orders').select('cycle_id').limit(1)
     const { error: pricesColErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const { error: markupsColErr } = await supabase.from('branch_item_markups').select('cycle_id').limit(1)
     const ordersHasCycle = !ordersColErr
     const pricesHasCycle = !pricesColErr
+    const markupsHasCycle = !markupsColErr
 
     let activeCycleId = null
-    if (ordersHasCycle || pricesHasCycle) {
+    if (ordersHasCycle || pricesHasCycle || markupsHasCycle) {
       const { data: activeCycle, error: cycleErr } = await supabase
         .from('cycles')
         .select('id')
@@ -162,6 +168,9 @@ export async function GET(req) {
       if (deptId) { whereClauses.push(`d.id = $${params.length + 1}`); params.push(Number(deptId)) }
       if (ordersHasCycle) { whereClauses.push(`o.cycle_id = $${params.length + 1}`); params.push(Number(activeCycleId)) }
 
+      const pricesCycleIdx = pricesHasCycle ? params.length + 1 : null
+      const markupsCycleIdx = markupsHasCycle ? params.length + (pricesHasCycle ? 2 : 1) : null
+
       const sql = `
         SELECT 
           i.item_id AS item_id,
@@ -175,14 +184,16 @@ export async function GET(req) {
         JOIN items i ON i.item_id = ol.item_id
         LEFT JOIN departments d ON d.id = COALESCE(o.department_id, i.department_id)
         LEFT JOIN branch_item_prices bip ON bip.branch_id = o.delivery_branch_id AND bip.item_id = i.item_id
-          ${pricesHasCycle ? `AND bip.cycle_id = $${params.length + 1}` : ''}
+          ${pricesHasCycle ? `AND bip.cycle_id = $${pricesCycleIdx}` : ''}
         LEFT JOIN branch_item_markups bim ON bim.branch_id = o.delivery_branch_id AND bim.item_id = i.item_id
+          ${markupsHasCycle ? `AND bim.cycle_id = $${markupsCycleIdx}` : ''}
         WHERE ${whereClauses.join(' AND ')}
         GROUP BY i.item_id, i.name, i.category
         ORDER BY i.category, i.name
       `
 
       if (pricesHasCycle) params.push(Number(activeCycleId))
+      if (markupsHasCycle) params.push(Number(activeCycleId))
       const result = await queryDirect(sql, params)
       const rows = (result.rows || []).map(r => ({
         items: r.item_name,
@@ -197,11 +208,11 @@ export async function GET(req) {
       }
 
       // If direct path returns no rows, still fallback for consistency
-      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, activeCycleId })
+      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, branch: { code: branchCode, name: branchName }, rows: fbRows })
     } catch (err) {
       // Fallback when direct DB URL isn't available or query fails
-      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, activeCycleId })
+      const fbRows = await aggregateViaTablesForRep(supabase, { branchId: claim.branch_id, departmentId: deptId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, branch: { code: branchCode, name: branchName }, rows: fbRows })
     }
   } catch (e) {

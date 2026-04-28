@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Helper: Supabase-based aggregation using core tables (orders + order_lines)
-async function aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, activeCycleId }) {
+async function aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId }) {
   const statuses = ['Pending', 'Posted', 'Delivered']
 
   // Resolve delivery branch filter to ids (if provided)
@@ -68,10 +68,14 @@ async function aggregateViaTables(supabase, { branchCode, departmentId, ordersHa
       .in('item_id', itemIdsSet)
     if (pricesHasCycle) bipQ = bipQ.eq('cycle_id', activeCycleId)
 
-    const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([
-      bipQ,
-      supabase.from('branch_item_markups').select('branch_id, item_id, amount, active').in('branch_id', branchIdsInOrders).in('item_id', itemIdsSet)
-    ])
+    let bimQ = supabase
+      .from('branch_item_markups')
+      .select('branch_id, item_id, amount, active')
+      .in('branch_id', branchIdsInOrders)
+      .in('item_id', itemIdsSet)
+    if (markupsHasCycle) bimQ = bimQ.eq('cycle_id', activeCycleId)
+
+    const [{ data: bipData, error: bipErr }, { data: bimData, error: bimErr }] = await Promise.all([bipQ, bimQ])
     if (bipErr) throw new Error(bipErr.message)
     if (bimErr) throw new Error(bimErr.message)
     priceMap = new Map((bipData || []).map(p => [`${p.branch_id}:${p.item_id}`, Number(p.price || 0)]))
@@ -197,11 +201,13 @@ export async function GET(req) {
 
     const { error: ordersColErr } = await supabase.from('orders').select('cycle_id').limit(1)
     const { error: pricesColErr } = await supabase.from('branch_item_prices').select('cycle_id').limit(1)
+    const { error: markupsColErr } = await supabase.from('branch_item_markups').select('cycle_id').limit(1)
     const ordersHasCycle = !ordersColErr
     const pricesHasCycle = !pricesColErr
+    const markupsHasCycle = !markupsColErr
 
     let activeCycleId = null
-    if (ordersHasCycle || pricesHasCycle) {
+    if (ordersHasCycle || pricesHasCycle || markupsHasCycle) {
       const { data: activeCycle, error: cycleErr } = await supabase
         .from('cycles')
         .select('id')
@@ -244,12 +250,14 @@ export async function GET(req) {
         LEFT JOIN branch_item_prices bip ON bip.branch_id = b.id AND bip.item_id = i.item_id
           ${pricesHasCycle ? `AND bip.cycle_id = $${params.length + 1}` : ''}
         LEFT JOIN branch_item_markups bim ON bim.branch_id = b.id AND bim.item_id = i.item_id
+          ${markupsHasCycle ? `AND bim.cycle_id = $${pricesHasCycle ? params.length + 2 : params.length + 1}` : ''}
         ${whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : ''}
         GROUP BY ${groupByDept ? 'b.code, b.name, d.id, d.name,' : ''} i.item_id, i.name, i.category
         ORDER BY i.category, i.name
       `
 
       if (pricesHasCycle) params.push(Number(activeCycleId))
+      if (markupsHasCycle) params.push(Number(activeCycleId))
       const result = await queryDirect(sql, params)
       const rows = (result.rows || []).map(r => ({
         items: r.item_name,
@@ -271,11 +279,11 @@ export async function GET(req) {
       }
 
       // Fallback: aggregate via Supabase tables
-      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, activeCycleId })
+      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, rows: fallbackRows })
     } catch (err) {
       // Fallback if direct SQL fails
-      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, activeCycleId })
+      const fallbackRows = await aggregateViaTables(supabase, { branchCode, departmentId, ordersHasCycle, pricesHasCycle, markupsHasCycle, activeCycleId })
       return NextResponse.json({ ok: true, rows: fallbackRows })
     }
   } catch (e) {

@@ -12,6 +12,8 @@ function DataManagementPageContent() {
   const [confirmClearAll, setConfirmClearAll] = useState('')
   const [confirmClearDelivered, setConfirmClearDelivered] = useState('')
   const [confirmResetInventory, setConfirmResetInventory] = useState('')
+  const [confirmResetPins, setConfirmResetPins] = useState('')
+  const [confirmRepriceOrders, setConfirmRepriceOrders] = useState('')
   const [processingAction, setProcessingAction] = useState(null)
   const router = useRouter()
 
@@ -239,6 +241,78 @@ function DataManagementPageContent() {
     setProcessingAction(null)
   }
 
+  const resetMemberPins = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (loading || processingAction) return
+    if (confirmResetPins !== 'RESET PINS') {
+      setMessage('Please type "RESET PINS" to confirm')
+      return
+    }
+
+    setLoading(true)
+    setProcessingAction('resetPins')
+    setMessage('Resetting all member PINs...')
+
+    try {
+      const response = await fetch('/api/admin/data-management/reset-member-pins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin'
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setMessage(`Error: ${result.error || 'Failed to reset PINs'}`)
+      } else {
+        setMessage(`Successfully reset ${result.updatedCount} member PINs`)
+        setConfirmResetPins('')
+      }
+    } catch (error) {
+      setMessage(`Error: ${error.message}`)
+    }
+
+    setLoading(false)
+    setProcessingAction(null)
+  }
+
+  const repriceFoodOrders = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (loading || processingAction) return
+    if (confirmRepriceOrders !== 'REPRICE ORDERS') {
+      setMessage('Please type "REPRICE ORDERS" to confirm')
+      return
+    }
+
+    setLoading(true)
+    setProcessingAction('repriceOrders')
+    setMessage('Repricing orders using current prices...')
+
+    try {
+      const response = await fetch('/api/admin/data-management/reprice-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: selectedCycleId != null ? JSON.stringify({ cycle_id: selectedCycleId }) : JSON.stringify({})
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setMessage(`Error: ${result.error || 'Failed to reprice orders'}`)
+      } else {
+        const cycleLabel = result.cycle_id != null ? ` (cycle_id=${result.cycle_id})` : ''
+        setMessage(`Repriced ${result.updated_lines} order lines and ${result.updated_orders} orders${cycleLabel}`)
+        setConfirmRepriceOrders('')
+      }
+    } catch (error) {
+      setMessage(`Error: ${error.message}`)
+    }
+
+    setLoading(false)
+    setProcessingAction(null)
+  }
+
   const exportBackup = async (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -373,8 +447,57 @@ function DataManagementPageContent() {
       )}
 
       <div className="grid gap-2 lg:gap-3 xl:gap-4">
-        {/* Database Migration */}
         <DatabaseMigration />
+
+        <div className="grid gap-2 lg:gap-3 xl:gap-4 sm:grid-cols-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 lg:p-3 xl:p-4">
+            <h2 className="text-base sm:text-lg font-medium text-amber-900 mb-2 sm:mb-3">🔐 Reset Member PINs</h2>
+            <p className="text-sm sm:text-base text-amber-700 mb-3">
+              Clears all member PINs so everyone must set a new PIN.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={confirmResetPins}
+                onChange={(e) => setConfirmResetPins(e.target.value)}
+                placeholder='Type "RESET PINS"'
+                className="flex-1 px-3 py-2 text-sm sm:text-base border rounded"
+                disabled={loading || !!processingAction}
+              />
+              <button
+                type="button"
+                onClick={resetMemberPins}
+                disabled={loading || !!processingAction}
+                className="px-3 py-2 rounded text-white text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+              >
+                {processingAction === 'resetPins' ? 'Resetting…' : 'Reset PINs'}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-sky-50 border border-sky-200 rounded-lg p-2 lg:p-3 xl:p-4">
+            <h2 className="text-base sm:text-lg font-medium text-sky-900 mb-2 sm:mb-3">💱 Food Price Repricer</h2>
+            <p className="text-sm sm:text-base text-sky-700 mb-3">
+              Recomputes order line prices and order totals using the latest branch prices and markups.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={confirmRepriceOrders}
+                onChange={(e) => setConfirmRepriceOrders(e.target.value)}
+                placeholder='Type "REPRICE ORDERS"'
+                className="flex-1 px-3 py-2 text-sm sm:text-base border rounded"
+                disabled={loading || !!processingAction}
+              />
+              <button
+                type="button"
+                onClick={repriceFoodOrders}
+                disabled={loading || !!processingAction}
+                className="px-3 py-2 rounded text-white text-sm bg-sky-600 hover:bg-sky-700 disabled:opacity-50"
+              >
+                {processingAction === 'repriceOrders' ? 'Repricing…' : 'Reprice Orders'}
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Shopping Control */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">

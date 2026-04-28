@@ -7,6 +7,28 @@ import { validateSession, validateBranchCode, validateSku, validateNumber } from
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function resolveCycleId(supabase, cycleIdParam) {
+  if (cycleIdParam != null && Number.isFinite(Number(cycleIdParam))) return Number(cycleIdParam)
+
+  let { data: active, error: activeErr } = await supabase.from('cycles').select('id').eq('is_active', true).maybeSingle()
+  if (activeErr) {
+    const msg = String(activeErr?.message || '')
+    if (!/is_active/i.test(msg)) throw activeErr
+    active = null
+  }
+  if (active?.id) return active.id
+
+  const { data: latest, error: latestErr } = await supabase.from('cycles').select('id').order('id', { ascending: false }).limit(1).maybeSingle()
+  if (latestErr) throw latestErr
+  if (!latest?.id) throw new Error('No cycle found')
+  return latest.id
+}
+
 async function installRepricer() {
   if (!process.env.SUPABASE_DB_URL) {
     throw new Error('Database repair requires SUPABASE_DB_URL (Supabase pooler connection string). Add it to your server env and redeploy, then retry.')
@@ -24,6 +46,7 @@ async function installRepricer() {
       updated_lines_count INTEGER := 0;
       has_cycle BOOLEAN := false;
       orders_has_cycle BOOLEAN := false;
+      markups_has_cycle BOOLEAN := false;
     BEGIN
       SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -35,17 +58,24 @@ async function installRepricer() {
         WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'cycle_id'
       ) INTO orders_has_cycle;
 
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'branch_item_markups' AND column_name = 'cycle_id'
+      ) INTO markups_has_cycle;
+
       IF has_cycle AND orders_has_cycle THEN
         UPDATE public.order_lines AS ol
         SET
           unit_price = bip.price + COALESCE((
             SELECT bim.amount FROM public.branch_item_markups bim
             WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+              AND (NOT markups_has_cycle OR bim.cycle_id = o.cycle_id)
           ), 0),
           branch_item_price_id = bip.id,
           amount = (bip.price + COALESCE((
             SELECT bim.amount FROM public.branch_item_markups bim
             WHERE bim.branch_id = o.delivery_branch_id AND bim.item_id = ol.item_id AND bim.active = TRUE
+              AND (NOT markups_has_cycle OR bim.cycle_id = o.cycle_id)
           ), 0)) * ol.qty
         FROM public.orders AS o
         JOIN public.branch_item_prices AS bip
@@ -150,11 +180,22 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url)
     const branchCodeParam = searchParams.get('branch_code')
     const skuParam = searchParams.get('sku')
+    const cycleIdParam = searchParams.get('cycle_id')
     const branchCodeRes = validateBranchCode(branchCodeParam)
     if (!branchCodeRes.isValid) return NextResponse.json({ ok: false, error: branchCodeRes.error }, { status: 400 })
 
     const supabase = createClient()
     const branchCode = branchCodeRes.sanitized
+
+    const markupsHasCycle = await hasColumn(supabase, 'branch_item_markups', 'cycle_id')
+    let cycleId = null
+    if (markupsHasCycle) {
+      try {
+        cycleId = await resolveCycleId(supabase, cycleIdParam)
+      } catch (e) {
+        return NextResponse.json({ ok: false, error: e?.message || 'Failed to resolve cycle' }, { status: 400 })
+      }
+    }
 
     const { data: branch, error: brErr } = await supabase
       .from('branches')
@@ -166,8 +207,14 @@ export async function GET(request) {
     // Join to items for convenience if available
     let query = supabase
       .from('branch_item_markups')
-      .select('item_id, amount, active, items:item_id ( sku, name, unit, category )')
+      .select(
+        markupsHasCycle
+          ? 'item_id, amount, active, cycle_id, items:item_id ( sku, name, unit, category )'
+          : 'item_id, amount, active, items:item_id ( sku, name, unit, category )'
+      )
       .eq('branch_id', branch.id)
+
+    if (markupsHasCycle) query = query.eq('cycle_id', cycleId)
 
     if (skuParam) {
       const skuRes = validateSku(skuParam)
@@ -202,14 +249,29 @@ export async function POST(request) {
     const branchCodeRes = validateBranchCode(body.branch_code)
     const skuRes = validateSku(body.sku)
     const amountRes = validateNumber(body.amount ?? 500, { min: 0, max: 100000, integer: true })
+    const cycleIdParam = body.cycle_id != null ? Number(body.cycle_id) : null
+    const activeParam = typeof body.active === 'boolean' ? body.active : true
 
     if (!branchCodeRes.isValid) return NextResponse.json({ ok: false, error: branchCodeRes.error }, { status: 400 })
     if (!skuRes.isValid)        return NextResponse.json({ ok: false, error: skuRes.error }, { status: 400 })
     if (!amountRes.isValid)     return NextResponse.json({ ok: false, error: amountRes.error }, { status: 400 })
+    if (cycleIdParam != null && !Number.isFinite(cycleIdParam)) {
+      return NextResponse.json({ ok: false, error: 'Invalid cycle_id' }, { status: 400 })
+    }
 
     const branchCode = branchCodeRes.sanitized
     const sku = skuRes.sanitized
     const amount = amountRes.value
+
+    const markupsHasCycle = await hasColumn(supabase, 'branch_item_markups', 'cycle_id')
+    let cycleId = null
+    if (markupsHasCycle) {
+      try {
+        cycleId = await resolveCycleId(supabase, cycleIdParam)
+      } catch (e) {
+        return NextResponse.json({ ok: false, error: e?.message || 'Failed to resolve cycle' }, { status: 400 })
+      }
+    }
 
     const { data: branch, error: brErr } = await supabase
       .from('branches')
@@ -225,10 +287,13 @@ export async function POST(request) {
       .single()
     if (iErr || !item) return NextResponse.json({ ok: false, error: 'Item not found' }, { status: 404 })
 
-    // Upsert markup
+    const payload = { branch_id: branch.id, item_id: item.item_id, amount, active: activeParam }
+    const onConflict = markupsHasCycle ? 'branch_id,item_id,cycle_id' : 'branch_id,item_id'
+    if (markupsHasCycle) payload.cycle_id = cycleId
+
     let { error: upErr } = await supabase
       .from('branch_item_markups')
-      .upsert({ branch_id: branch.id, item_id: item.item_id, amount, active: true }, { onConflict: 'branch_id,item_id' })
+      .upsert(payload, { onConflict })
 
     // Self-heal if trigger calls missing repricer function due to BIGINT signature mismatch
     if (upErr && /reprice_orders_for_branch_item\(bigint,\s*bigint\) does not exist/i.test(upErr.message || '')) {
@@ -238,7 +303,7 @@ export async function POST(request) {
         // Retry upsert after installing function/trigger
         const retry = await supabase
           .from('branch_item_markups')
-          .upsert({ branch_id: branch.id, item_id: item.item_id, amount, active: true }, { onConflict: 'branch_id,item_id' })
+          .upsert(payload, { onConflict })
         upErr = retry.error || null
       } catch (installErr) {
         return NextResponse.json({ ok: false, error: installErr?.message || 'Failed to install repricer function' }, { status: 500 })
@@ -247,7 +312,10 @@ export async function POST(request) {
 
     if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 })
 
-    return NextResponse.json({ ok: true, message: `Markup set to ₦${amount} for ${sku} in ${branchCode}` })
+    return NextResponse.json({
+      ok: true,
+      message: markupsHasCycle ? `Markup set to ₦${amount} for ${sku} in ${branchCode} (cycle_id=${cycleId})` : `Markup set to ₦${amount} for ${sku} in ${branchCode}`
+    })
   } catch (error) {
     console.error('Markups POST error:', error)
     return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
@@ -358,12 +426,26 @@ export async function DELETE(request) {
     const body = await request.json()
     const branchCodeRes = validateBranchCode(body.branch_code)
     const skuRes = validateSku(body.sku)
+    const cycleIdParam = body.cycle_id != null ? Number(body.cycle_id) : null
 
     if (!branchCodeRes.isValid) return NextResponse.json({ ok: false, error: branchCodeRes.error }, { status: 400 })
     if (!skuRes.isValid)        return NextResponse.json({ ok: false, error: skuRes.error }, { status: 400 })
+    if (cycleIdParam != null && !Number.isFinite(cycleIdParam)) {
+      return NextResponse.json({ ok: false, error: 'Invalid cycle_id' }, { status: 400 })
+    }
 
     const branchCode = branchCodeRes.sanitized
     const sku = skuRes.sanitized
+
+    const markupsHasCycle = await hasColumn(supabase, 'branch_item_markups', 'cycle_id')
+    let cycleId = null
+    if (markupsHasCycle) {
+      try {
+        cycleId = await resolveCycleId(supabase, cycleIdParam)
+      } catch (e) {
+        return NextResponse.json({ ok: false, error: e?.message || 'Failed to resolve cycle' }, { status: 400 })
+      }
+    }
 
     const { data: branch, error: brErr } = await supabase
       .from('branches')
@@ -379,15 +461,20 @@ export async function DELETE(request) {
       .single()
     if (iErr || !item) return NextResponse.json({ ok: false, error: 'Item not found' }, { status: 404 })
 
-    const { error: delErr } = await supabase
+    let delQuery = supabase
       .from('branch_item_markups')
       .delete()
       .eq('branch_id', branch.id)
       .eq('item_id', item.item_id)
+    if (markupsHasCycle) delQuery = delQuery.eq('cycle_id', cycleId)
+    const { error: delErr } = await delQuery
 
     if (delErr) return NextResponse.json({ ok: false, error: delErr.message }, { status: 500 })
 
-    return NextResponse.json({ ok: true, message: `Markup removed for ${sku} in ${branchCode}` })
+    return NextResponse.json({
+      ok: true,
+      message: markupsHasCycle ? `Markup removed for ${sku} in ${branchCode} (cycle_id=${cycleId})` : `Markup removed for ${sku} in ${branchCode}`
+    })
   } catch (error) {
     console.error('Markups DELETE error:', error)
     return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })

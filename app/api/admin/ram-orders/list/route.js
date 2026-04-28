@@ -5,6 +5,52 @@ import { createClient } from '@/lib/supabaseServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function isMissingTable(error, tableName) {
+  const code = String(error?.code || '')
+  if (code === '42P01') return true
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const t = String(tableName || '').toLowerCase()
+  if (!msg.includes(t)) return false
+  return msg.includes('does not exist') || msg.includes('could not find the table')
+}
+
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
+async function resolveRamCycleId({ supabase, cycleParam, ordersHasCycle }) {
+  if (!ordersHasCycle) return { cycleId: null, activeCycleId: null }
+  if (String(cycleParam || '').toLowerCase() === 'all') return { cycleId: null, activeCycleId: null }
+
+  const parsed = cycleParam != null ? Number(cycleParam) : null
+  if (parsed != null && Number.isFinite(parsed)) return { cycleId: Math.trunc(parsed), activeCycleId: null }
+
+  const { data: active, error: aErr } = await supabase
+    .from('ram_cycles')
+    .select('id')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .maybeSingle()
+
+  if (aErr) {
+    if (!isMissingTable(aErr, 'ram_cycles')) throw aErr
+    return { cycleId: null, activeCycleId: null }
+  }
+  if (active?.id) return { cycleId: active.id, activeCycleId: active.id }
+
+  const { data: latest, error: lErr } = await supabase
+    .from('ram_cycles')
+    .select('id')
+    .order('created_at', { ascending: false })
+    .maybeSingle()
+  if (lErr) {
+    if (!isMissingTable(lErr, 'ram_cycles')) throw lErr
+    return { cycleId: null, activeCycleId: null }
+  }
+  return { cycleId: latest?.id || null, activeCycleId: null }
+}
+
 function asInt(value, fallback) {
   const n = Number(value)
   return Number.isFinite(n) ? Math.trunc(n) : fallback
@@ -28,10 +74,18 @@ export async function GET(req) {
     const deliveryLocationId = asInt(searchParams.get('delivery_location_id'), null)
     const from = (searchParams.get('from') || '').trim()
     const to = (searchParams.get('to') || '').trim()
+    const ramCycleParam = (searchParams.get('ram_cycle_id') || searchParams.get('cycle_id') || '').trim()
     const limit = Math.min(Math.max(asInt(searchParams.get('limit'), 300), 1), 1000)
 
     const allowedStatus = new Set(['Pending', 'Approved', 'Cancelled'])
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
+
+    const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
+    const { cycleId, activeCycleId } = await resolveRamCycleId({
+      supabase,
+      cycleParam: ramCycleParam,
+      ordersHasCycle
+    })
 
     let query = supabase.from('ram_orders').select('*').order('created_at', { ascending: false }).limit(limit)
     if (statusRaw && allowedStatus.has(statusRaw)) query = query.eq('status', statusRaw)
@@ -40,6 +94,7 @@ export async function GET(req) {
     if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) query = query.eq('ram_delivery_location_id', deliveryLocationId)
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', `${to}T23:59:59`)
+    if (ordersHasCycle && cycleId != null) query = query.eq('ram_cycle_id', cycleId)
 
     const { data: orders, error } = await query
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
@@ -102,7 +157,14 @@ export async function GET(req) {
       }
     })
 
-    return NextResponse.json({ ok: true, orders: enriched })
+    return NextResponse.json({
+      ok: true,
+      orders: enriched,
+      meta: {
+        active_ram_cycle_id: activeCycleId,
+        used_ram_cycle_id: ordersHasCycle ? cycleId : null,
+      }
+    })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error', orders: [] }, { status: 500 })
   }
