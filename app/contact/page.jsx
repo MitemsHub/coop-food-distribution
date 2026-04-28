@@ -244,7 +244,7 @@ export default function ContactPage() {
               <span className="text-xs">Powered by</span>
               <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
             </div>
-            <div className="text-xs text-gray-400">© 2025 CBN Coop Food Distribution</div>
+            <div className="text-xs text-gray-400">© 2026 CBN Coop Food Distribution</div>
           </div>
         </div>
       </footer>

@@ -107,7 +107,7 @@ export default function Landing() {
               </Link>
             </div>
             <div className="text-xs text-gray-400">
-              © 2025 CBN Coop Food Distribution
+              © 2026 CBN Coop Food Distribution
             </div>
           </div>
         </div>
