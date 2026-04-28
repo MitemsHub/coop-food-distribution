@@ -102,7 +102,9 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
             <div className="flex items-center space-x-1.5 text-gray-500">
               <span className="text-xs">Powered by</span>
-              <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
+              <Link href="/contact" className="font-medium text-blue-600 hover:text-blue-700 hover:underline text-xs">
+                MitemsHub
+              </Link>
             </div>
             <div className="text-xs text-gray-400">
               © 2025 CBN Coop Food Distribution
