@@ -12,6 +12,10 @@ const CATEGORY_PRICES = {
   Undefined: 0,
 }
 
+function isValidRamCategory(category) {
+  return category === 'Executive' || category === 'Senior' || category === 'Junior'
+}
+
 function normalizeGrade(grade) {
   return String(grade || '')
     .toLowerCase()
@@ -133,6 +137,7 @@ export async function GET(req) {
     }
 
     const memberId = memberIdRes.sanitized.toUpperCase()
+    const requestedCategoryRaw = String(searchParams.get('ram_category') || '').trim()
     const supabase = createClient()
 
     const { data: member, error: mErr } = await supabase
@@ -207,7 +212,9 @@ export async function GET(req) {
     const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
     const loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
 
-    const ramCategory = await getRamCategory(supabase, member.grade)
+    const derivedRamCategory = await getRamCategory(supabase, member.grade)
+    const requestedCategory = isValidRamCategory(requestedCategoryRaw) ? requestedCategoryRaw : ''
+    const ramCategory = requestedCategory || derivedRamCategory
     const unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
     let activeRamCycleId = null
     let usedLoanQtyThisCycle = 0
@@ -269,6 +276,7 @@ export async function GET(req) {
         full_name: member.full_name,
         grade: member.grade || '',
         ram_category: ramCategory,
+        derived_ram_category: derivedRamCategory,
       },
       pricing: {
         unit_price: unitPrice,

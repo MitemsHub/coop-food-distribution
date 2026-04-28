@@ -22,6 +22,8 @@ function RamShopPageContent() {
   const [deliveryLocationId, setDeliveryLocationId] = useState('')
   const [paymentOption, setPaymentOption] = useState('')
   const [qty, setQty] = useState('')
+  const [selectedRamCategory, setSelectedRamCategory] = useState('')
+  const [categoryTouched, setCategoryTouched] = useState(false)
   const [shoppingOpen, setShoppingOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -42,6 +44,10 @@ function RamShopPageContent() {
       : Number(eligibility?.eligibility?.maxRamsAllowedForLoan ?? eligibility?.eligibility?.maxRamsAllowedForLoanOrSavings ?? 0)
   const savingsEligible = Number(eligibility?.eligibility?.savingsEligible || 0)
   const loanEligible = Number(eligibility?.eligibility?.loanEligible || 0)
+
+  const derivedRamCategory = String(eligibility?.member?.derived_ram_category || eligibility?.member?.ram_category || '')
+  const canOverrideRamCategory =
+    (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
   const allowLoanFallbackOne =
     paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
@@ -101,7 +107,11 @@ function RamShopPageContent() {
           if (!cancelled) setEligibility(null)
           return
         }
-        if (!cancelled) setEligibility(json)
+        if (!cancelled) {
+          setEligibility(json)
+          setSelectedRamCategory(String(json?.member?.ram_category || ''))
+          setCategoryTouched(false)
+        }
 
         const locRes = await fetch('/api/ram/delivery-locations', { cache: 'no-store' })
         const locJson = await locRes.json().catch(() => null)
@@ -131,6 +141,45 @@ function RamShopPageContent() {
       setPaymentOption('Loan')
     }
   }, [paymentOption, savingsEligible])
+
+  useEffect(() => {
+    const run = async () => {
+      if (!memberId) return
+      if (!categoryTouched) return
+      if (!selectedRamCategory) return
+      try {
+        const res = await fetch(
+          `/api/ram/eligibility?member_id=${encodeURIComponent(memberId)}&ram_category=${encodeURIComponent(selectedRamCategory)}`,
+          { cache: 'no-store' }
+        )
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.ok) return
+        setEligibility(json)
+      } catch {}
+    }
+    run()
+  }, [categoryTouched, memberId, selectedRamCategory])
+
+  useEffect(() => {
+    const run = async () => {
+      if (paymentOption !== 'Loan') return
+      if (!memberId) return
+      const derived = derivedRamCategory
+      if (!derived) return
+      if (selectedRamCategory !== derived) setSelectedRamCategory(derived)
+      if (categoryTouched) setCategoryTouched(false)
+      try {
+        const res = await fetch(
+          `/api/ram/eligibility?member_id=${encodeURIComponent(memberId)}&ram_category=${encodeURIComponent(derived)}`,
+          { cache: 'no-store' }
+        )
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.ok) return
+        setEligibility(json)
+      } catch {}
+    }
+    run()
+  }, [categoryTouched, derivedRamCategory, memberId, paymentOption, selectedRamCategory])
 
   const placeOrder = async () => {
     setMessage(null)
@@ -174,6 +223,7 @@ function RamShopPageContent() {
           payment_option: paymentOption,
           qty: Number(safeQty),
           delivery_location_id: Number(deliveryLocationId),
+          ...(canOverrideRamCategory && selectedRamCategory ? { ram_category: selectedRamCategory } : {}),
         }),
       })
 
@@ -248,7 +298,22 @@ function RamShopPageContent() {
               </div>
               <div className="bg-gray-50 rounded-xl p-3">
                 <div className="text-xs text-gray-600">Ram Category</div>
-                <div className="font-semibold text-gray-900">{eligibility?.member?.ram_category || '—'}</div>
+                {canOverrideRamCategory ? (
+                  <select
+                    value={selectedRamCategory || derivedRamCategory || ''}
+                    onChange={(e) => {
+                      setCategoryTouched(true)
+                      setSelectedRamCategory(e.target.value)
+                    }}
+                    className="mt-1 w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-green-600 focus:ring-2 focus:ring-green-200 transition-all duration-200 text-sm bg-white"
+                  >
+                    <option value="Junior">Junior</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Executive">Executive</option>
+                  </select>
+                ) : (
+                  <div className="font-semibold text-gray-900">{derivedRamCategory || '—'}</div>
+                )}
               </div>
               <div className="bg-gray-50 rounded-xl p-3">
                 <div className="text-xs text-gray-600">Unit Price</div>

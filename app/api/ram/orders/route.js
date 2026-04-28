@@ -18,6 +18,10 @@ const CATEGORY_PRICES = {
   Undefined: 0,
 }
 
+function isValidRamCategory(category) {
+  return category === 'Executive' || category === 'Senior' || category === 'Junior'
+}
+
 function normalizeGrade(grade) {
   return String(grade || '')
     .toLowerCase()
@@ -292,6 +296,11 @@ export async function POST(req) {
     const paymentOption = paymentRes.sanitized
     const qty = qtyRes.value
     const deliveryLocationId = deliveryLocationIdRes.value
+    const requestedCategoryRaw = String(body.ram_category || '').trim()
+    const requestedCategory = requestedCategoryRaw ? (isValidRamCategory(requestedCategoryRaw) ? requestedCategoryRaw : null) : ''
+    if (requestedCategory === null) {
+      return NextResponse.json({ ok: false, error: 'Invalid ram category' }, { status: 400 })
+    }
 
     const supabase = createClient()
 
@@ -304,7 +313,9 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 404 })
     }
 
-    const ramCategory = await getRamCategory(supabase, member.grade)
+    const derivedRamCategory = await getRamCategory(supabase, member.grade)
+    const canOverrideCategory = (paymentOption === 'Cash' || paymentOption === 'Savings') && !!requestedCategory
+    const ramCategory = canOverrideCategory ? requestedCategory : derivedRamCategory
     const unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
     if (unitPrice <= 0) {
       return NextResponse.json({ ok: false, error: 'Member is not eligible for ram pricing' }, { status: 400 })
