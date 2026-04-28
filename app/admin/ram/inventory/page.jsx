@@ -90,6 +90,8 @@ function RamInventoryContent() {
             <tr>
               <th className="p-2 border text-left">Delivery Location</th>
               <th className="p-2 border text-right">Orders</th>
+              <th className="p-2 border text-right">Pending</th>
+              <th className="p-2 border text-right">Approved</th>
               <th className="p-2 border text-right">Rams</th>
               <th className="p-2 border text-right">Principal</th>
               <th className="p-2 border text-right">Interest</th>
@@ -98,14 +100,14 @@ function RamInventoryContent() {
           <tbody>
             {loading && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={5}>
+                <td className="p-3 text-gray-600" colSpan={7}>
                   Loading...
                 </td>
               </tr>
             )}
             {!loading && byLocation.length === 0 && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={5}>
+                <td className="p-3 text-gray-600" colSpan={7}>
                   No data.
                 </td>
               </tr>
@@ -114,6 +116,8 @@ function RamInventoryContent() {
               <tr key={r.key} className="hover:bg-gray-50">
                 <td className="p-2 border">{r.key}</td>
                 <td className="p-2 border text-right">{r.orders}</td>
+                <td className="p-2 border text-right">{Number(r.pending_orders || 0)}</td>
+                <td className="p-2 border text-right">{Number(r.approved_orders || 0)}</td>
                 <td className="p-2 border text-right">{r.qty}</td>
                 <td className="p-2 border text-right">{money(Math.max(0, Number(r.amount || 0) - Number(r.loan_interest || 0)))}</td>
                 <td className="p-2 border text-right">{money(r.loan_interest)}</td>

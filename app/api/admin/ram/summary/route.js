@@ -65,6 +65,20 @@ function addAgg(map, key, row) {
   agg.loan_interest += Number(row.loan_interest ?? row.interest_amount ?? 0)
 }
 
+function addLocationAgg(map, key, row) {
+  if (!map.has(key)) {
+    map.set(key, { key, orders: 0, pending_orders: 0, approved_orders: 0, qty: 0, amount: 0, loan_interest: 0 })
+  }
+  const agg = map.get(key)
+  const status = String(row.status || '')
+  agg.orders += 1
+  if (status === 'Pending') agg.pending_orders += 1
+  if (status === 'Approved') agg.approved_orders += 1
+  agg.qty += Number(row.qty || 0)
+  agg.amount += Number(row.total_amount || 0)
+  agg.loan_interest += Number(row.loan_interest ?? row.interest_amount ?? 0)
+}
+
 export async function GET(req) {
   try {
     const session = await validateSession(req, 'admin')
@@ -131,7 +145,7 @@ export async function GET(req) {
 
       const loc = locationsById.get(Number(row.ram_delivery_location_id))
       const locKey = loc?.delivery_location || 'Unknown'
-      addAgg(byLocation, String(locKey), row)
+      addLocationAgg(byLocation, String(locKey), row)
     }
 
     const toSorted = (m) => Array.from(m.values()).sort((a, b) => b.orders - a.orders)

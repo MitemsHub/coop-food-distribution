@@ -19,6 +19,8 @@ function emptyForm() {
 
 function RamDataContent() {
   const [locations, setLocations] = useState([])
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
   const [form, setForm] = useState(emptyForm())
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -41,6 +43,8 @@ function RamDataContent() {
   const [newCycleMakeActive, setNewCycleMakeActive] = useState(true)
   const [creatingCycle, setCreatingCycle] = useState(false)
   const [activatingCycle, setActivatingCycle] = useState(false)
+
+  const pageSize = 10
 
   const loadCycles = async () => {
     try {
@@ -71,6 +75,7 @@ function RamDataContent() {
       const json = await safeJson(res, '/api/admin/ram/delivery-locations')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       setLocations(json.locations || [])
+      setPage(1)
     } catch (e) {
       setLocations([])
       setMsg({ type: 'error', text: e?.message || 'Failed to load' })
@@ -83,6 +88,10 @@ function RamDataContent() {
     loadCycles()
     fetchLocations()
   }, [])
+
+  useEffect(() => {
+    setPage(1)
+  }, [query])
 
   useEffect(() => {
     let cancelled = false
@@ -270,6 +279,28 @@ function RamDataContent() {
     }
   }
 
+  const filteredLocations = useMemo(() => {
+    const q = String(query || '').trim().toLowerCase()
+    if (!q) return locations || []
+    return (locations || []).filter((l) => {
+      const haystack = [
+        l?.delivery_location,
+        l?.name,
+        l?.phone,
+        l?.rep_code,
+        l?.address,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [locations, query])
+
+  const pageCount = Math.max(1, Math.ceil(filteredLocations.length / pageSize))
+  const safePage = Math.min(Math.max(1, Number(page || 1)), pageCount)
+  const pagedLocations = filteredLocations.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -418,6 +449,35 @@ function RamDataContent() {
       </div>
 
       <div className="overflow-x-auto border rounded bg-white">
+        <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <input
+            className="border rounded px-3 py-2 text-xs sm:text-sm w-full sm:max-w-sm bg-white"
+            placeholder="Search delivery locations..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="flex items-center justify-between sm:justify-end gap-2 text-xs text-gray-700">
+            <button
+              type="button"
+              className="px-2 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPage(Math.max(1, safePage - 1))}
+              disabled={safePage <= 1}
+            >
+              Prev
+            </button>
+            <div>
+              Page {safePage} / {pageCount}
+            </div>
+            <button
+              type="button"
+              className="px-2 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPage(Math.min(pageCount, safePage + 1))}
+              disabled={safePage >= pageCount}
+            >
+              Next
+            </button>
+          </div>
+        </div>
         <table className="w-full text-xs">
           <thead className="bg-gray-50">
             <tr>
@@ -439,14 +499,14 @@ function RamDataContent() {
                 </td>
               </tr>
             )}
-            {!loading && locations.length === 0 && (
+            {!loading && filteredLocations.length === 0 && (
               <tr>
                 <td className="p-3 text-gray-600" colSpan={8}>
-                  No delivery locations.
+                  {locations.length === 0 ? 'No delivery locations.' : 'No matches.'}
                 </td>
               </tr>
             )}
-            {locations.map((l) => (
+            {pagedLocations.map((l) => (
               <tr key={l.id} className="hover:bg-gray-50">
                 <td className="p-2 border font-medium">{l.delivery_location}</td>
                 <td className="p-2 border">{l.name || ''}</td>
