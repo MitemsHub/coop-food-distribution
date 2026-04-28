@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 function Icon({ name, className }) {
   if (name === 'mail') {
@@ -30,9 +30,8 @@ function Icon({ name, className }) {
   }
   if (name === 'whatsapp') {
     return (
-      <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
-        <path d="M19.11 17.49c-.29-.15-1.71-.84-1.98-.94-.27-.1-.47-.15-.67.15-.2.29-.77.94-.95 1.13-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.86-.76-1.44-1.71-1.61-2-.17-.29-.02-.45.13-.59.13-.13.29-.34.43-.51.15-.17.2-.29.3-.48.1-.2.05-.37-.03-.52-.08-.15-.67-1.6-.91-2.19-.24-.57-.49-.5-.67-.5h-.57c-.2 0-.52.07-.79.37-.27.29-1.03 1.01-1.03 2.46 0 1.45 1.06 2.86 1.2 3.06.15.2 2.08 3.16 5.04 4.43.7.3 1.25.48 1.68.61.7.22 1.34.19 1.85.12.56-.08 1.71-.71 1.95-1.4.24-.69.24-1.28.17-1.4-.07-.12-.27-.2-.56-.35z" />
-        <path d="M26.67 5.34A13.25 13.25 0 0016 1.02C8.85 1.02 3.04 6.83 3.04 13.98c0 2.29.6 4.52 1.74 6.49L3 30.98l10.73-2.81a12.9 12.9 0 006.2 1.58h.01c7.15 0 12.96-5.81 12.96-12.96 0-3.46-1.35-6.71-3.79-9.15zm-6.73 22.2h-.01a10.7 10.7 0 01-5.46-1.49l-.39-.23-6.36 1.67 1.7-6.2-.25-.4a10.67 10.67 0 01-1.64-5.78C7.53 8.02 11.32 4.23 16 4.23c2.86 0 5.55 1.11 7.57 3.14a10.62 10.62 0 013.12 7.57c0 5.68-4.62 10.6-10.75 12.6z" />
+      <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
       </svg>
     )
   }
@@ -84,21 +83,6 @@ export default function ContactPage() {
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState(null)
 
-  const toMailto = useMemo(() => {
-    const subject = `MitemsHub enquiry — ${name || 'New message'}`
-    const body = [
-      `Name: ${name || '-'}`,
-      `Phone: ${phone || '-'}`,
-      `Email: ${email || '-'}`,
-      '',
-      'Request:',
-      requests || '-',
-      '',
-      'Sent from: CBN Coop Food Distribution app',
-    ].join('\n')
-    return `mailto:chuksmitti@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  }, [email, name, phone, requests])
-
   const onSubmit = async (e) => {
     e.preventDefault()
     if (submitting) return
@@ -108,8 +92,25 @@ export default function ContactPage() {
       if (!String(name).trim()) throw new Error('Please enter your name')
       if (!String(phone).trim() && !String(email).trim()) throw new Error('Please enter a phone number or email')
       if (!String(requests).trim()) throw new Error('Please tell me what you need')
-      window.location.href = toMailto
-      setMsg({ type: 'success', text: 'Opening your email app…' })
+
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: String(name || '').trim(),
+          phone: String(phone || '').trim(),
+          email: String(email || '').trim(),
+          requests: String(requests || '').trim(),
+        }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to send message')
+
+      setMsg({ type: 'success', text: 'Message sent successfully. I will get back to you shortly.' })
+      setName('')
+      setPhone('')
+      setEmail('')
+      setRequests('')
     } catch (err) {
       setMsg({ type: 'error', text: err?.message || 'Please check the form and try again' })
     } finally {
@@ -118,14 +119,14 @@ export default function ContactPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50 flex flex-col">
+      <main className="flex-1">
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="flex items-center justify-between gap-3 mb-6">
           <div>
-            <div className="text-xs font-semibold text-blue-700">Powered by MitemsHub</div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Contact Me</h1>
             <div className="mt-1 text-sm text-gray-600">
-              Want a portal like this for your cooperative, business, or community? Send a message and I’ll respond quickly.
+              Need a customized portal, website, or management system for your organization? Send a message and I’ll respond promptly.
             </div>
           </div>
           <Link
@@ -152,15 +153,8 @@ export default function ContactPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-gray-900">Quick Message</div>
-                <div className="text-xs text-gray-600 mt-1">Fill this form and click submit. It opens an email to chuksmitti@gmail.com.</div>
+                <div className="text-xs text-gray-600 mt-1">Share what you need, and I’ll reach out.</div>
               </div>
-              <a
-                href={toMailto}
-                className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                <Icon name="mail" className="h-4 w-4" />
-                Email
-              </a>
             </div>
 
             <form onSubmit={onSubmit} className="mt-5 space-y-3">
@@ -217,10 +211,6 @@ export default function ContactPage() {
                 <Icon name="mail" className="h-4 w-4" />
                 {submitting ? 'Submitting…' : 'Submit'}
               </button>
-
-              <div className="text-xs text-gray-500 text-center">
-                If your device has no email app, use the options on the right to reach me directly.
-              </div>
             </form>
           </section>
 
@@ -230,22 +220,34 @@ export default function ContactPage() {
               <div className="mt-4 space-y-2">
                 <SocialButton href="tel:08122763992" label="Call" sub="08122763992" icon="phone" />
                 <SocialButton href="tel:08149100561" label="Call" sub="08149100561" icon="phone" />
-                <SocialButton href="https://wa.me/2348122763992" label="WhatsApp" sub="Chat on WhatsApp" icon="whatsapp" />
-                <SocialButton href="mailto:chuksmitti@gmail.com" label="Email" sub="chuksmitti@gmail.com" icon="mail" />
+                <SocialButton href="https://wa.me/2348122763992" label="WhatsApp" icon="whatsapp" />
+                <SocialButton href="mailto:chuksmitti@gmail.com" label="Email" icon="mail" />
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
               <div className="text-sm font-semibold text-gray-900">Social</div>
               <div className="mt-4 space-y-2">
-                <SocialButton href="http://linkedin.com/in/mitems" label="LinkedIn" sub="/in/mitems" icon="linkedin" />
-                <SocialButton href="https://mitemshub.github.io/mitems-portfolio/" label="Portfolio" sub="mitemshub.github.io" icon="globe" />
+                <SocialButton href="http://linkedin.com/in/mitems" label="LinkedIn" icon="linkedin" />
+                <SocialButton href="https://mitemshub.github.io/mitems-portfolio/" label="Portfolio" icon="globe" />
               </div>
             </div>
           </aside>
         </div>
       </div>
-    </main>
+      </main>
+
+      <footer className="bg-gray-50 border-t border-gray-100">
+        <div className="max-w-5xl mx-auto px-4 md:px-6 py-4">
+          <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
+            <div className="flex items-center space-x-1.5 text-gray-500">
+              <span className="text-xs">Powered by</span>
+              <span className="font-medium text-blue-500 text-xs">MitemsHub</span>
+            </div>
+            <div className="text-xs text-gray-400">© 2025 CBN Coop Food Distribution</div>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }
-
