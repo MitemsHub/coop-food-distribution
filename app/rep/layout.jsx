@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -15,22 +15,6 @@ function sectionButtonClass(open) {
   return `w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold tracking-wide uppercase ${
     open ? 'bg-gray-100 text-gray-700' : 'text-gray-500 hover:bg-gray-50'
   }`
-}
-
-function readBool(key, fallback) {
-  try {
-    const v = localStorage.getItem(key)
-    if (v === null) return fallback
-    return v === '1'
-  } catch {
-    return fallback
-  }
-}
-
-function writeBool(key, value) {
-  try {
-    localStorage.setItem(key, value ? '1' : '0')
-  } catch {}
 }
 
 export default function RepLayout({ children }) {
@@ -63,19 +47,6 @@ export default function RepLayout({ children }) {
     }
     return 'Rep'
   }, [activeKey])
-
-  useEffect(() => {
-    setFoodOpen(readBool('rep.nav.foodOpen', false))
-    setRamOpen(readBool('rep.nav.ramOpen', false))
-  }, [])
-
-  useEffect(() => {
-    writeBool('rep.nav.foodOpen', foodOpen)
-  }, [foodOpen])
-
-  useEffect(() => {
-    writeBool('rep.nav.ramOpen', ramOpen)
-  }, [ramOpen])
 
   const doLogout = async () => {
     try {
