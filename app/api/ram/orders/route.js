@@ -340,6 +340,8 @@ export async function POST(req) {
     const maxAllowed =
       paymentOption === 'Savings' ? eligibility.maxRamsAllowedForSavings : eligibility.maxRamsAllowedForLoan
 
+    const principalAmount = unitPrice * qty
+
     if (paymentOption === 'Savings') {
       if (eligibility.savingsEligible <= 0) {
         return NextResponse.json({ ok: false, error: 'Savings option not available for this member' }, { status: 400 })
@@ -353,6 +355,13 @@ export async function POST(req) {
     }
 
     if (paymentOption === 'Loan') {
+      if (eligibility.isRetiree && principalAmount > eligibility.loanEligible) {
+        const shortfall = Math.max(0, principalAmount - Number(eligibility.loanEligible || 0))
+        return NextResponse.json(
+          { ok: false, error: `Your purchase will exceed your loan limit by ₦${Number(shortfall).toLocaleString()}. Increase savings by ₦${Number(shortfall).toLocaleString()} to qualify.` },
+          { status: 400 }
+        )
+      }
       if (qty > maxAllowed) {
         return NextResponse.json(
           { ok: false, error: `Maximum allowed is ${maxAllowed} ram(s) for Loan` },
@@ -361,7 +370,6 @@ export async function POST(req) {
       }
     }
 
-    const principalAmount = unitPrice * qty
     const interestAmount = paymentOption === 'Loan' ? Math.round(principalAmount * LOAN_INTEREST_RATE) : 0
     const totalAmount = principalAmount + interestAmount
 
@@ -371,13 +379,6 @@ export async function POST(req) {
     if (paymentOption === 'Loan' && principalAmount > eligibility.loanEligible) {
       const allowFallbackOne = !eligibility.isRetiree && qty === 1 && eligibility.loanEligible > 0 && eligibility.loanEligible < unitPrice
       if (!allowFallbackOne) {
-        const shortfall = Math.max(0, principalAmount - Number(eligibility.loanEligible || 0))
-        if (eligibility.isRetiree && shortfall > 0) {
-          return NextResponse.json(
-            { ok: false, error: `Your purchase will exceed your loan limit by ₦${Number(shortfall).toLocaleString()}. Increase savings by ₦${Number(shortfall).toLocaleString()} to qualify.` },
-            { status: 400 }
-          )
-        }
         return NextResponse.json({ ok: false, error: 'Insufficient loan eligibility for this purchase' }, { status: 400 })
       }
     }

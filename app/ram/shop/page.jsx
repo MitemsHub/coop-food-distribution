@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { useAuth } from '../../contexts/AuthContext'
+import DraggableModal from '../../components/DraggableModal'
 import { supabase } from '@/lib/supabaseClient'
 
 function RamShopPageContent() {
@@ -28,6 +29,8 @@ function RamShopPageContent() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [popupText, setPopupText] = useState('')
+  const retireePopupKeyRef = useRef('')
 
   const qtyNumber = Number(qty)
   const safeQty = Number.isFinite(qtyNumber) ? Math.trunc(qtyNumber) : 0
@@ -63,12 +66,31 @@ function RamShopPageContent() {
 
   const qtyCapApplies = paymentOption === 'Loan' || paymentOption === 'Savings'
   const qtyExceeded = qtyCapApplies && safeQty > 0 && safeQty > maxRamsAllowed
+  const retireeLoanShortfall = useMemo(() => {
+    if (!isRetiree) return 0
+    if (paymentOption !== 'Loan') return 0
+    if (!Number.isFinite(principal) || principal <= 0) return 0
+    return Math.max(0, principal - loanEligible)
+  }, [isRetiree, paymentOption, principal, loanEligible])
   const notEligibleForPayment =
     paymentOption === 'Savings'
       ? total > savingsEligible
       : paymentOption === 'Loan'
         ? principal > loanEligible && !allowLoanFallbackOne
         : false
+
+  useEffect(() => {
+    if (!isRetiree) return
+    if (paymentOption !== 'Loan') return
+    if (!Number.isFinite(safeQty) || safeQty <= 0) return
+    if (!Number.isFinite(retireeLoanShortfall) || retireeLoanShortfall <= 0) return
+
+    const nextText = `Your purchase will exceed your loan limit by ₦${Number(retireeLoanShortfall).toLocaleString()}. Increase savings by ₦${Number(retireeLoanShortfall).toLocaleString()} to qualify.`
+    const key = `${paymentOption}|${safeQty}|${loanEligible}|${unitPrice}`
+    if (retireePopupKeyRef.current === key) return
+    retireePopupKeyRef.current = key
+    setPopupText(nextText)
+  }, [isRetiree, paymentOption, safeQty, retireeLoanShortfall, loanEligible, unitPrice])
 
   useEffect(() => {
     let cancelled = false
@@ -207,20 +229,19 @@ function RamShopPageContent() {
       return
     }
 
+    if (retireeLoanShortfall > 0) {
+      setPopupText(
+        `Your purchase will exceed your loan limit by ₦${Number(retireeLoanShortfall).toLocaleString()}. Increase savings by ₦${Number(retireeLoanShortfall).toLocaleString()} to qualify.`
+      )
+      return
+    }
+
     if (paymentOption === 'Savings' && total > savingsEligible) {
       setMessage({ type: 'error', text: 'Insufficient savings eligibility for this purchase' })
       return
     }
     if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanFallbackOne) {
-      if (isRetiree) {
-        const shortfall = Math.max(0, principal - loanEligible)
-        setMessage({
-          type: 'error',
-          text: `Your purchase will exceed your loan limit by ₦${Number(shortfall).toLocaleString()}. Increase savings by ₦${Number(shortfall).toLocaleString()} to qualify.`
-        })
-      } else {
-        setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
-      }
+      setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
       return
     }
 
@@ -240,7 +261,12 @@ function RamShopPageContent() {
 
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.ok) {
-        setMessage({ type: 'error', text: json?.error || 'Failed to place order' })
+        const errText = String(json?.error || 'Failed to place order')
+        if (isRetiree && errText.toLowerCase().includes('increase savings by')) {
+          setPopupText(errText)
+        } else {
+          setMessage({ type: 'error', text: errText })
+        }
         return
       }
 
@@ -294,6 +320,26 @@ function RamShopPageContent() {
             {message.text}
           </div>
         )}
+
+        <DraggableModal
+          open={!!popupText}
+          onClose={() => setPopupText('')}
+          title="Loan Limit"
+          overlayClassName="bg-black/40"
+          footer={
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                onClick={() => setPopupText('')}
+              >
+                OK
+              </button>
+            </div>
+          }
+        >
+          <div className="text-sm text-gray-800">{popupText}</div>
+        </DraggableModal>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 p-5 md:p-6">
@@ -374,6 +420,11 @@ function RamShopPageContent() {
                 {qtyCapApplies && (
                   <div className={`mt-2 text-xs ${qtyExceeded ? 'text-red-700' : 'text-gray-600'}`}>
                     Max for {paymentOption}: {maxRamsAllowed} ram(s)
+                  </div>
+                )}
+                {retireeLoanShortfall > 0 && (
+                  <div className="mt-2 text-xs text-red-700">
+                    Increase savings by ₦{Number(retireeLoanShortfall).toLocaleString()} to qualify for this loan purchase.
                   </div>
                 )}
               </div>
