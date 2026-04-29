@@ -23,6 +23,12 @@ function normalizeGrade(grade) {
     .trim()
 }
 
+function isRetireeGrade(grade) {
+  const g = normalizeGrade(grade)
+  if (!g) return false
+  return g.includes('retiree') || g.includes('pensioner')
+}
+
 function fallbackRamCategoryFromGrade(grade) {
   const g = normalizeGrade(grade)
   const executive = new Set([
@@ -201,16 +207,24 @@ export async function GET(req) {
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
-    const ADDITIONAL_FACILITY = 300000
-    const LOAN_CAP = 1000000
-    const rawLoanLimit = savings * 5
-    const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
-    const baseRemaining = effectiveLimit - outstandingLoansTotal
-    const exceededLoanLimit = baseRemaining <= 0
-    const baseEligible = Math.max(0, baseRemaining)
-    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
-    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
-    const loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
+    const isRetiree = isRetireeGrade(member.grade)
+    let exceededLoanLimit = false
+    let loanEligible = 0
+    if (isRetiree) {
+      loanEligible = Math.max(0, savings - outstandingLoansTotal)
+      exceededLoanLimit = loanEligible <= 0
+    } else {
+      const ADDITIONAL_FACILITY = 300000
+      const LOAN_CAP = 1000000
+      const rawLoanLimit = savings * 5
+      const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
+      const baseRemaining = effectiveLimit - outstandingLoansTotal
+      exceededLoanLimit = baseRemaining <= 0
+      const baseEligible = Math.max(0, baseRemaining)
+      const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
+      const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
+      loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
+    }
 
     const derivedRamCategory = await getRamCategory(supabase, member.grade)
     const requestedCategory = isValidRamCategory(requestedCategoryRaw) ? requestedCategoryRaw : ''
@@ -248,7 +262,7 @@ export async function GET(req) {
     let maxRamsAllowedForLoan = 0
     if (remainingLoanQtyThisCycle > 0 && loanEligible > 0) {
       if (loanEligible < unitPrice) {
-        maxRamsAllowedForLoan = 1
+        maxRamsAllowedForLoan = isRetiree ? 0 : 1
       } else {
         const cap = Math.min(2, remainingLoanQtyThisCycle)
         maxRamsAllowedForLoan = computeMaxAffordableQty({
@@ -277,6 +291,11 @@ export async function GET(req) {
         grade: member.grade || '',
         ram_category: ramCategory,
         derived_ram_category: derivedRamCategory,
+        is_retiree: isRetiree,
+      },
+      financial: {
+        savings,
+        loans,
       },
       pricing: {
         unit_price: unitPrice,

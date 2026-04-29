@@ -44,13 +44,16 @@ function RamShopPageContent() {
       : Number(eligibility?.eligibility?.maxRamsAllowedForLoan ?? eligibility?.eligibility?.maxRamsAllowedForLoanOrSavings ?? 0)
   const savingsEligible = Number(eligibility?.eligibility?.savingsEligible || 0)
   const loanEligible = Number(eligibility?.eligibility?.loanEligible || 0)
+  const isRetiree = !!eligibility?.member?.is_retiree
+  const savingsBalance = Number(eligibility?.financial?.savings ?? member?.savings ?? 0)
+  const loansBalance = Number(eligibility?.financial?.loans ?? member?.loans ?? 0)
 
   const derivedRamCategory = String(eligibility?.member?.derived_ram_category || eligibility?.member?.ram_category || '')
   const canOverrideRamCategory =
     (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
   const allowLoanFallbackOne =
-    paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
+    !isRetiree && paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
@@ -209,7 +212,15 @@ function RamShopPageContent() {
       return
     }
     if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanFallbackOne) {
-      setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
+      if (isRetiree) {
+        const shortfall = Math.max(0, principal - loanEligible)
+        setMessage({
+          type: 'error',
+          text: `Your purchase will exceed your loan limit by ₦${Number(shortfall).toLocaleString()}. Increase savings by ₦${Number(shortfall).toLocaleString()} to qualify.`
+        })
+      } else {
+        setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
+      }
       return
     }
 
@@ -287,17 +298,25 @@ function RamShopPageContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 p-5 md:p-6">
             <div className="text-sm font-semibold text-gray-800">Member</div>
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="text-xs text-gray-600">Full Name</div>
-                <div className="font-semibold text-gray-900">{member?.full_name || '—'}</div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Full Name</div>
+                <div className="font-semibold text-sm text-gray-900">{member?.full_name || '—'}</div>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="text-xs text-gray-600">Grade</div>
-                <div className="font-semibold text-gray-900">{eligibility?.member?.grade || member?.grade || '—'}</div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Grade</div>
+                <div className="font-semibold text-sm text-gray-900">{eligibility?.member?.grade || member?.grade || '—'}</div>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="text-xs text-gray-600">Ram Category</div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Savings</div>
+                <div className="font-semibold text-sm text-gray-900">₦{Number(savingsBalance || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Loans</div>
+                <div className="font-semibold text-sm text-gray-900">₦{Number(loansBalance || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Ram Category</div>
                 {canOverrideRamCategory ? (
                   <select
                     value={selectedRamCategory || derivedRamCategory || ''}
@@ -305,25 +324,25 @@ function RamShopPageContent() {
                       setCategoryTouched(true)
                       setSelectedRamCategory(e.target.value)
                     }}
-                    className="mt-1 w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-green-600 focus:ring-2 focus:ring-green-200 transition-all duration-200 text-sm bg-white"
+                    className="mt-1 w-full border-2 border-gray-200 rounded-xl px-3 py-1.5 focus:border-green-600 focus:ring-2 focus:ring-green-200 transition-all duration-200 text-sm bg-white"
                   >
                     <option value="Junior">Junior</option>
                     <option value="Senior">Senior</option>
                     <option value="Executive">Executive</option>
                   </select>
                 ) : (
-                  <div className="font-semibold text-gray-900">{derivedRamCategory || '—'}</div>
+                  <div className="font-semibold text-sm text-gray-900">{derivedRamCategory || '—'}</div>
                 )}
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="text-xs text-gray-600">Unit Price</div>
-                <div className="font-semibold text-gray-900">₦{unitPrice.toLocaleString()}</div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Unit Price</div>
+                <div className="font-semibold text-sm text-gray-900">₦{unitPrice.toLocaleString()}</div>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Payment Option</label>
+                <label className="block text-sm font-medium mb-1">How do you want to pay</label>
                 <select
                   value={paymentOption}
                   onChange={(e) => setPaymentOption(e.target.value)}
