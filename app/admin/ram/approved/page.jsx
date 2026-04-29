@@ -20,7 +20,6 @@ function RamApprovedContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
   const [payment, setPayment] = useState('')
-  const [memberId, setMemberId] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [msg, setMsg] = useState(null)
@@ -42,7 +41,6 @@ function RamApprovedContent() {
         limit: '800',
         ...(term ? { term } : {}),
         ...(payment ? { payment } : {}),
-        ...(memberId ? { member_id: memberId.toUpperCase().trim() } : {}),
       })
       const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/ram-orders/list')
@@ -105,7 +103,6 @@ function RamApprovedContent() {
     const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
     const filters = [
       `Payment: ${payment || 'All'}`,
-      `Member: ${memberId ? memberId.toUpperCase().trim() : 'All'}`,
       `Search: ${term || 'All'}`,
       `From: ${from || 'Any'}`,
       `To: ${to || 'Any'}`,
@@ -240,20 +237,13 @@ function RamApprovedContent() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={(e) => setPayment(e.target.value)}>
             <option value="">All payments</option>
             <option value="Cash">Cash</option>
             <option value="Savings">Savings</option>
             <option value="Loan">Loan</option>
           </select>
-
-          <input
-            className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
-            placeholder="Member ID"
-            value={memberId}
-            onChange={(e) => setMemberId(e.target.value)}
-          />
 
           <div className="flex items-center gap-2">
             <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">From</label>

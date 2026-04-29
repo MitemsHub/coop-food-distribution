@@ -335,7 +335,7 @@ function RamShopPageContent() {
                 )}
               </div>
               <div className="bg-gray-50 rounded-xl p-2">
-                <div className="text-[11px] text-gray-600">Unit Price</div>
+                <div className="text-[11px] text-gray-600">Unit Price per Category</div>
                 <div className="font-semibold text-sm text-gray-900">₦{unitPrice.toLocaleString()}</div>
               </div>
             </div>
@@ -529,7 +529,7 @@ function RamShopPageContent() {
                   <div className="font-semibold">{Number(safeQty || 0).toLocaleString()}</div>
               </div>
               <div className="flex items-center justify-between">
-                <div>Unit Price</div>
+                <div>Unit Price per Category</div>
                 <div className="font-semibold">₦{unitPrice.toLocaleString()}</div>
               </div>
               <div className="flex items-center justify-between">

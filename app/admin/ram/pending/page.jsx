@@ -22,7 +22,6 @@ function RamPendingContent() {
   const [locations, setLocations] = useState([])
   const [term, setTerm] = useState('')
   const [payment, setPayment] = useState('')
-  const [memberId, setMemberId] = useState('')
   const [memberGrade, setMemberGrade] = useState('')
   const [locationId, setLocationId] = useState('')
   const [msg, setMsg] = useState(null)
@@ -50,7 +49,6 @@ function RamPendingContent() {
         limit: '500',
         ...(term ? { term } : {}),
         ...(payment ? { payment } : {}),
-        ...(memberId ? { member_id: memberId.toUpperCase().trim() } : {}),
         ...(memberGrade ? { member_grade: memberGrade.trim() } : {}),
       })
       const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
@@ -158,7 +156,6 @@ function RamPendingContent() {
     const filters = [
       `Location: ${locationLabel}`,
       `Payment: ${payment || 'All'}`,
-      `Member: ${memberId ? memberId.toUpperCase().trim() : 'All'}`,
       `Grade: ${memberGrade ? memberGrade.trim() : 'All'}`,
       `Search: ${term || 'All'}`,
     ].join('  |  ')
@@ -403,7 +400,7 @@ function RamPendingContent() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={(e) => setPayment(e.target.value)}>
             <option value="">All payments</option>
             <option value="Cash">Cash</option>
@@ -426,18 +423,6 @@ function RamPendingContent() {
             value={memberGrade}
             onChange={(e) => setMemberGrade(e.target.value)}
           />
-
-          <div className="flex gap-2">
-            <input
-              className="border rounded px-3 py-2 text-xs sm:text-sm flex-1"
-              placeholder="Member ID"
-              value={memberId}
-              onChange={(e) => setMemberId(e.target.value)}
-            />
-            <button className="px-4 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={fetchOrders}>
-              Filter
-            </button>
-          </div>
         </div>
       </div>
 
