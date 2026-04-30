@@ -3,6 +3,7 @@
 import { useAuth } from '../contexts/AuthContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 
 export default function ProtectedRoute({ children, allowedRoles = [] }) {
   const { user, userType, loading } = useAuth()
@@ -47,11 +48,23 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
   // Show loading while checking authentication
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 10, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-100 px-6 py-6"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-emerald-600 flex items-center justify-center shadow-md">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-900">Loading</div>
+              <div className="text-xs text-gray-600">Preparing your session…</div>
+            </div>
+          </div>
+        </motion.div>
       </div>
     )
   }

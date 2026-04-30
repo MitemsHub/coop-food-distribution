@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import { AnimatePresence, motion } from 'framer-motion'
 
 function safeJsonFactory() {
   return async (res, label) => {
@@ -14,6 +15,13 @@ function safeJsonFactory() {
 
 function money(n) {
   return `₦${Number(n || 0).toLocaleString()}`
+}
+
+const toastMotion = {
+  initial: { opacity: 0, y: -8, scale: 0.99 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -6, scale: 0.99 },
+  transition: { duration: 0.18, ease: 'easeOut' },
 }
 
 function RamApprovedContent() {
@@ -244,15 +252,19 @@ function RamApprovedContent() {
         <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Ram Sales — Approved</h1>
       </div>
 
-      {!!msg && (
-        <div
-          className={`mb-4 rounded-lg border p-3 text-sm ${
-            msg.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {msg ? (
+          <motion.div
+            key={`${msg.type}-${msg.text}`}
+            {...toastMotion}
+            className={`mb-4 rounded-lg border p-3 text-sm ${
+              msg.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'
+            }`}
+          >
+            {msg.text}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <div className="space-y-2 mb-4">
         <div className="flex gap-2">
@@ -348,14 +360,19 @@ function RamApprovedContent() {
               <th className="p-2 border text-left">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody layout>
             {loading && (
-              <tr>
-                <td className="p-3 text-gray-600" colSpan={7}>
-                  Loading...
-                </td>
-              </tr>
+              <>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={`sk-${i}`} className="animate-pulse">
+                    <td className="p-2 border" colSpan={7}>
+                      <div className="h-4 bg-gray-100 rounded w-full" />
+                    </td>
+                  </tr>
+                ))}
+              </>
             )}
+
             {!loading && orders.length === 0 && (
               <tr>
                 <td className="p-3 text-gray-600" colSpan={7}>
@@ -363,40 +380,52 @@ function RamApprovedContent() {
                 </td>
               </tr>
             )}
-            {pagedOrders.map((o) => (
-              <tr key={o.id} className="hover:bg-gray-50">
-                <td className="p-2 border">
-                  <div className="font-medium">#{o.id}</div>
-                  <div className="text-gray-600">{new Date(o.created_at).toLocaleString()}</div>
-                </td>
-                <td className="p-2 border">
-                  <div className="font-medium">{o.member_id}</div>
-                  <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
-                  <div className="text-gray-600">{o.member?.phone || ''}</div>
-                </td>
-                <td className="p-2 border">
-                  <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>
-                  <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
-                  <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
-                </td>
-                <td className="p-2 border">{o.payment_option || '-'}</td>
-                <td className="p-2 border text-right">{o.qty || 0}</td>
-                <td className="p-2 border text-right">
-                  <div className="font-medium">{money(o.total_amount)}</div>
-                </td>
-                <td className="p-2 border">
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
-                    onClick={() => rollbackToPending(o.id)}
-                    disabled={loading || rollbackBusyId === o.id}
+
+            <AnimatePresence initial={false}>
+              {!loading &&
+                pagedOrders.map((o) => (
+                  <motion.tr
+                    key={o.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.16, ease: 'easeOut' }}
+                    className="hover:bg-gray-50"
                   >
-                    {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+                    <td className="p-2 border">
+                      <div className="font-medium">#{o.id}</div>
+                      <div className="text-gray-600">{new Date(o.created_at).toLocaleString()}</div>
+                    </td>
+                    <td className="p-2 border">
+                      <div className="font-medium">{o.member_id}</div>
+                      <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
+                      <div className="text-gray-600">{o.member?.phone || ''}</div>
+                    </td>
+                    <td className="p-2 border">
+                      <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>
+                      <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
+                      <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
+                    </td>
+                    <td className="p-2 border">{o.payment_option || '-'}</td>
+                    <td className="p-2 border text-right">{o.qty || 0}</td>
+                    <td className="p-2 border text-right">
+                      <div className="font-medium">{money(o.total_amount)}</div>
+                    </td>
+                    <td className="p-2 border">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
+                        onClick={() => rollbackToPending(o.id)}
+                        disabled={loading || rollbackBusyId === o.id}
+                      >
+                        {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))}
+            </AnimatePresence>
+          </motion.tbody>
         </table>
       </div>
     </div>

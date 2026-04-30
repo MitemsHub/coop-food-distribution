@@ -52,7 +52,14 @@ export default function AdminPinPage() {
         onChange={e=>setPin(e.target.value)}
       />
       <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={submit} disabled={!pin || loading}>
-        {loading ? 'Checking…' : 'Continue'}
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span>Checking…</span>
+          </span>
+        ) : (
+          'Continue'
+        )}
       </button>
       {msg && <div className="mt-3 text-sm text-red-700">{msg}</div>}
     </div>

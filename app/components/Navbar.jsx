@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -360,9 +361,16 @@ export default function Navbar() {
       </div>
 
       {/* Mobile Navigation Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200 shadow-lg">
+      <AnimatePresence>
+        {mobileMenuOpen ? (
+          <motion.div
+            className="lg:hidden overflow-hidden"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200 shadow-lg">
             {/* Member Mobile Navigation */}
             {userType === 'member' && (
               <>
@@ -552,9 +560,10 @@ export default function Navbar() {
                 Home
               </Link>
             )}
-          </div>
-        </div>
-      )}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </header>
   )
 }

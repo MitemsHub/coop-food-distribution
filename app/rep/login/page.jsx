@@ -70,7 +70,14 @@ export default function RepLoginPage() {
         placeholder="Enter your passcode"
       />
       <button className="px-4 py-2 bg-blue-600 text-white rounded w-full sm:w-auto hover:bg-blue-700 transition-colors duration-200 text-sm sm:text-base font-medium" onClick={submit} disabled={loading || !code.trim()}>
-        {loading ? 'Checking…' : 'Continue'}
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span>Checking…</span>
+          </span>
+        ) : (
+          'Continue'
+        )}
       </button>
       {msg && <div className="mt-3 text-xs sm:text-sm text-red-700">{msg}</div>}
     </div>
