@@ -175,6 +175,7 @@ function SummaryTable({ title, rows, pagination }) {
 
 function RamReportsContent() {
   const [summary, setSummary] = useState(null)
+  const [deliveryLocations, setDeliveryLocations] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [reportBusy, setReportBusy] = useState(false)
@@ -205,6 +206,17 @@ function RamReportsContent() {
 
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
+  const fetchLocations = async () => {
+    try {
+      const res = await fetch('/api/admin/ram/delivery-locations', { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/ram/delivery-locations')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load locations')
+      setDeliveryLocations(json.locations || [])
+    } catch {
+      setDeliveryLocations([])
+    }
+  }
+
   const fetchSummary = async () => {
     setLoading(true)
     setMsg(null)
@@ -222,6 +234,7 @@ function RamReportsContent() {
   }
 
   useEffect(() => {
+    fetchLocations()
     fetchSummary()
   }, [])
 
@@ -237,7 +250,19 @@ function RamReportsContent() {
   const savingsPrincipalAmount = Math.max(0, Number(savingsAgg.amount || 0) - Number(savingsAgg.loan_interest || 0))
   const loanPrincipalAmount = Math.max(0, Number(loanAgg.amount || 0) - Number(loanAgg.loan_interest || 0))
   const totalPrincipalAmount = Math.max(0, Number(totals.amount || 0) - Number(totals.loan_interest || 0))
-  const locations = (summary?.meta?.locations || []).slice().sort((a, b) => String(a.delivery_location || '').localeCompare(String(b.delivery_location || '')))
+  const locations = useMemo(
+    () =>
+      (deliveryLocations || [])
+        .filter((l) => l.is_active !== false)
+        .slice()
+        .sort((a, b) => String(a.delivery_location || '').localeCompare(String(b.delivery_location || ''))),
+    [deliveryLocations]
+  )
+
+  const refreshAll = () => {
+    fetchLocations()
+    fetchSummary()
+  }
 
   useEffect(() => {
     const pageCount = Math.max(1, Math.ceil((byLocation?.length || 0) / 3))
@@ -714,7 +739,7 @@ function RamReportsContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Admin — Ram Sales — Report</h1>
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchSummary}>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={refreshAll}>
             Refresh
           </button>
           <button
