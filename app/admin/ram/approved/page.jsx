@@ -24,6 +24,7 @@ function RamApprovedContent() {
   const [to, setTo] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [rollbackBusyId, setRollbackBusyId] = useState(null)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
@@ -64,6 +65,31 @@ function RamApprovedContent() {
       if (fetchCtl.current) fetchCtl.current.abort()
     }
   }, [])
+
+  const rollbackToPending = async (id) => {
+    const orderId = Number(id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    if (rollbackBusyId) return
+    const ok = window.confirm(`Rollback order #${orderId} back to Pending?`)
+    if (!ok) return
+    setRollbackBusyId(orderId)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/ram-orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ id: orderId, status: 'Pending' }),
+      })
+      const json = await safeJson(res, '/api/admin/ram-orders/update-status')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
+      setOrders((prev) => (prev || []).filter((o) => o.id !== orderId))
+      setMsg({ type: 'success', text: `Order #${orderId} rolled back to Pending` })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
+    } finally {
+      setRollbackBusyId(null)
+    }
+  }
 
   const exportCSV = () => {
     const rows = orders.map((o) => ({
@@ -319,19 +345,20 @@ function RamApprovedContent() {
               <th className="p-2 border text-left">Payment</th>
               <th className="p-2 border text-right">Qty</th>
               <th className="p-2 border text-right">Total</th>
+              <th className="p-2 border text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={6}>
+                <td className="p-3 text-gray-600" colSpan={7}>
                   Loading...
                 </td>
               </tr>
             )}
             {!loading && orders.length === 0 && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={6}>
+                <td className="p-3 text-gray-600" colSpan={7}>
                   No Approved ram orders.
                 </td>
               </tr>
@@ -356,6 +383,16 @@ function RamApprovedContent() {
                 <td className="p-2 border text-right">{o.qty || 0}</td>
                 <td className="p-2 border text-right">
                   <div className="font-medium">{money(o.total_amount)}</div>
+                </td>
+                <td className="p-2 border">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
+                    onClick={() => rollbackToPending(o.id)}
+                    disabled={loading || rollbackBusyId === o.id}
+                  >
+                    {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
+                  </button>
                 </td>
               </tr>
             ))}

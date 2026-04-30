@@ -34,6 +34,7 @@ function RamPendingContent() {
   const [editQty, setEditQty] = useState('')
   const [editLocationId, setEditLocationId] = useState('')
   const [editUnitPrice, setEditUnitPrice] = useState('')
+  const [editPhone, setEditPhone] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const fetchCtl = useRef(null)
   const safeJson = useMemo(() => safeJsonFactory(), [])
@@ -274,6 +275,7 @@ function RamPendingContent() {
     setEditQty(String(order.qty || 1))
     setEditLocationId(String(order.delivery_location?.id || order.ram_delivery_location_id || ''))
     setEditUnitPrice(String(order.unit_price ?? ''))
+    setEditPhone(String(order.member?.phone || ''))
     setShowModal({ type: 'edit', id: order.id })
   }
 
@@ -341,10 +343,17 @@ function RamPendingContent() {
       if (unitPriceNum != null && (!Number.isFinite(unitPriceNum) || unitPriceNum <= 0)) {
         throw new Error('Invalid unit price')
       }
+      const phone = String(editPhone || '').trim()
       const res = await fetch('/api/admin/ram-orders/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ id, qty, delivery_location_id: deliveryLocationId, ...(unitPriceNum != null ? { unit_price: unitPriceNum } : {}) }),
+        body: JSON.stringify({
+          id,
+          qty,
+          delivery_location_id: deliveryLocationId,
+          ...(unitPriceNum != null ? { unit_price: unitPriceNum } : {}),
+          ...(phone ? { member_phone: phone } : {}),
+        }),
       })
       const json = await safeJson(res, '/api/admin/ram-orders/update')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Update failed')
@@ -367,6 +376,7 @@ function RamPendingContent() {
                   is_active: loc.is_active,
                 }
               : o.delivery_location,
+            member: phone ? { ...(o.member || {}), phone } : o.member,
           }
         })
       )
@@ -631,7 +641,7 @@ function RamPendingContent() {
       >
         {showModal?.type === 'edit' ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-1">Delivery Location</div>
                 <select
@@ -665,6 +675,15 @@ function RamPendingContent() {
                   value={editUnitPrice}
                   onChange={(e) => setEditUnitPrice(e.target.value)}
                   inputMode="numeric"
+                  disabled={editBusy || bulkBusy}
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-700 mb-1">Member Phone</div>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
                   disabled={editBusy || bulkBusy}
                 />
               </div>

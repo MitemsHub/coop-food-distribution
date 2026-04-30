@@ -333,11 +333,19 @@ export async function POST(req) {
 
     const { data: member, error: mErr } = await supabase
       .from('members')
-      .select('member_id,full_name,savings,loans,global_limit,grade')
+      .select('member_id,full_name,savings,loans,global_limit,grade,phone')
       .eq('member_id', memberId)
       .single()
     if (mErr || !member) {
       return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 404 })
+    }
+
+    const memberPhone = String(member.phone || '').trim()
+    if (!memberPhone) {
+      return NextResponse.json(
+        { ok: false, error: 'Phone number is required. Please update your phone number before placing an order.' },
+        { status: 400 }
+      )
     }
 
     const derivedRamCategory = await getRamCategory(supabase, member.grade)

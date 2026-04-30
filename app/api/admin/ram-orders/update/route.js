@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { validateSession, validateNumber } from '@/lib/validation'
+import { sanitizeString, validateSession, validateNumber } from '@/lib/validation'
 import { createClient } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
@@ -18,6 +18,14 @@ function isPensionerGrade(grade) {
   const g = normalizeGrade(grade)
   if (!g) return false
   return g.includes('pensioner')
+}
+
+function sanitizePhone(phoneRaw) {
+  const phone = sanitizeString(String(phoneRaw || ''), { maxLength: 50, encodeHtml: false })
+  const cleaned = phone.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return { ok: false, value: '', error: 'Phone number is required' }
+  if (!/^[0-9+\-\s()]{7,20}$/.test(cleaned)) return { ok: false, value: '', error: 'Invalid phone number format' }
+  return { ok: true, value: cleaned }
 }
 
 export async function POST(req) {
@@ -39,11 +47,15 @@ export async function POST(req) {
     const unitPriceRes = hasUnitPrice ? validateNumber(body.unit_price, { min: 1, max: 100000000 }) : { isValid: true, value: null }
     if (!unitPriceRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid unit price' }, { status: 400 })
 
+    const phoneRaw = String(body.member_phone ?? '').trim()
+    const phoneRes = phoneRaw ? sanitizePhone(phoneRaw) : null
+    if (phoneRes && !phoneRes.ok) return NextResponse.json({ ok: false, error: phoneRes.error }, { status: 400 })
+
     const supabase = createClient()
 
     const { data: order, error: selErr } = await supabase
       .from('ram_orders')
-      .select('id,status,payment_option,unit_price,member_grade')
+      .select('id,status,payment_option,unit_price,member_grade,member_id')
       .eq('id', idRes.value)
       .single()
 
@@ -76,6 +88,14 @@ export async function POST(req) {
     const principalAmount = unitPrice * qtyRes.value
     const interestAmount = payment === 'Loan' ? Math.round(principalAmount * LOAN_INTEREST_RATE) : 0
     const totalAmount = principalAmount + interestAmount
+
+    if (phoneRes?.ok) {
+      const { error: phoneUpdErr } = await supabase
+        .from('members')
+        .update({ phone: phoneRes.value })
+        .eq('member_id', String(order.member_id || '').trim())
+      if (phoneUpdErr) return NextResponse.json({ ok: false, error: phoneUpdErr.message }, { status: 500 })
+    }
 
     const { data: updated, error: updErr } = await supabase
       .from('ram_orders')

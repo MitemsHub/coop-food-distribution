@@ -240,6 +240,12 @@ function RamShopPageContent() {
   const placeOrder = async () => {
     setMessage(null)
 
+    const memberPhone = String(member?.phone || '').trim()
+    if (!memberPhone) {
+      setMessage({ type: 'error', text: 'Phone number is required. Please enter and save your phone number before placing an order.' })
+      return
+    }
+
     if (!paymentOption) {
       setMessage({ type: 'error', text: 'Please select a payment option' })
       return

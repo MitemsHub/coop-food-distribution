@@ -255,10 +255,10 @@ function RamSuccessContent() {
 
           <button
             type="button"
-            onClick={() => router.push('/portal')}
+            onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(memberId)}`)}
             className="mt-3 w-full inline-flex items-center justify-center px-4 py-3 text-gray-700 text-sm md:text-base font-semibold rounded-xl transition-all duration-200 border border-gray-300 hover:bg-gray-50"
           >
-            Back to Portal
+            Back to Shop
           </button>
         </div>
       </div>
