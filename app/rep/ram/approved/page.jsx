@@ -94,6 +94,7 @@ function RepRamApprovedContent() {
         created_at: o.created_at,
         member_id: o.member_id,
         member_name: o.member?.full_name || '',
+        member_phone: o.member?.phone || '',
         payment: o.payment_option || '',
         qty: o.qty,
         unit_price: o.unit_price,
@@ -167,6 +168,7 @@ function RepRamApprovedContent() {
           'CreatedAt',
           'MemberID',
           'MemberName',
+          'MemberPhone',
           'Payment',
           'Qty',
           'Unit Price',
@@ -183,6 +185,7 @@ function RepRamApprovedContent() {
         o.created_at ? new Date(o.created_at).toLocaleString() : '',
         sanitize(o.member_id),
         sanitize(o.member?.full_name || ''),
+        sanitize(o.member?.phone || ''),
         sanitize(o.payment_option || ''),
         String(Number(o.qty || 0)),
         `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
@@ -211,6 +214,7 @@ function RepRamApprovedContent() {
         '',
         '',
         '',
+        '',
         String(totals.qty.toLocaleString()),
         '',
         `NGN ${totals.principal.toLocaleString()}`,
@@ -228,11 +232,11 @@ function RepRamApprovedContent() {
         headStyles: { fillColor: [75, 85, 99] },
         alternateRowStyles: { fillColor: [249, 250, 251] },
         columnStyles: {
-          5: { halign: 'right' },
           6: { halign: 'right' },
           7: { halign: 'right' },
           8: { halign: 'right' },
           9: { halign: 'right' },
+          10: { halign: 'right' },
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.row.index === totalsRowIndex) {
@@ -437,6 +441,7 @@ function RepRamApprovedContent() {
                   <td className="p-2">
                     <div className="font-medium">{o.member_id}</div>
                     <div className="text-gray-600">{o.member?.full_name || ''}</div>
+                    <div className="text-gray-600">{o.member?.phone || ''}</div>
                   </td>
                   <td className="p-2 whitespace-pre-line">
                     <div>{o.delivery_location?.delivery_location || ''}</div>

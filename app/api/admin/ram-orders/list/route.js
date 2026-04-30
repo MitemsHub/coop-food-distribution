@@ -121,7 +121,7 @@ export async function GET(req) {
 
     const [membersRes, locationsRes] = await Promise.all([
       memberIds.length
-        ? supabase.from('members').select('member_id,full_name,branches:branch_id(code,name)').in('member_id', memberIds)
+        ? supabase.from('members').select('member_id,full_name,phone,branches:branch_id(code,name)').in('member_id', memberIds)
         : Promise.resolve({ data: [], error: null }),
       locationIds.length
         ? supabase.from('ram_delivery_locations').select('id,delivery_location,name,phone,address,is_active').in('id', locationIds)
@@ -146,6 +146,7 @@ export async function GET(req) {
           ? {
               member_id: m.member_id,
               full_name: m.full_name,
+              phone: m.phone || '',
               branch: m.branches?.code ? { code: m.branches.code, name: m.branches.name || '' } : null,
             }
           : null,

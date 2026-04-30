@@ -26,7 +26,13 @@ function normalizeGrade(grade) {
 function isRetireeGrade(grade) {
   const g = normalizeGrade(grade)
   if (!g) return false
-  return g.includes('retiree') || g.includes('pensioner')
+  return g.includes('retiree')
+}
+
+function isPensionerGrade(grade) {
+  const g = normalizeGrade(grade)
+  if (!g) return false
+  return g.includes('pensioner')
 }
 
 function fallbackRamCategoryFromGrade(grade) {
@@ -208,10 +214,14 @@ export async function GET(req) {
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
     const isRetiree = isRetireeGrade(member.grade)
+    const isPensioner = isPensionerGrade(member.grade)
     let exceededLoanLimit = false
     let loanEligible = 0
     if (isRetiree) {
       loanEligible = Math.max(0, savings - outstandingLoansTotal)
+      exceededLoanLimit = loanEligible <= 0
+    } else if (isPensioner) {
+      loanEligible = Math.max(0, savings * 5 - outstandingLoansTotal)
       exceededLoanLimit = loanEligible <= 0
     } else {
       const ADDITIONAL_FACILITY = 300000
@@ -257,14 +267,15 @@ export async function GET(req) {
       if (loanQtyErr) return NextResponse.json({ ok: false, error: loanQtyErr.message }, { status: 500 })
       usedLoanQtyThisCycle = sumField(loanQtyRows, 'qty')
     }
-    const remainingLoanQtyThisCycle = Math.max(0, 2 - usedLoanQtyThisCycle)
+    const loanQtyCap = isPensioner ? 1 : 2
+    const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
 
     let maxRamsAllowedForLoan = 0
     if (remainingLoanQtyThisCycle > 0 && loanEligible > 0) {
       if (loanEligible < unitPrice) {
-        maxRamsAllowedForLoan = isRetiree ? 0 : 1
+        maxRamsAllowedForLoan = isRetiree || isPensioner ? 0 : 1
       } else {
-        const cap = Math.min(2, remainingLoanQtyThisCycle)
+        const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
         maxRamsAllowedForLoan = computeMaxAffordableQty({
           unitPrice,
           maxCap: cap,
@@ -292,6 +303,7 @@ export async function GET(req) {
         ram_category: ramCategory,
         derived_ram_category: derivedRamCategory,
         is_retiree: isRetiree,
+        is_pensioner: isPensioner,
       },
       financial: {
         savings,

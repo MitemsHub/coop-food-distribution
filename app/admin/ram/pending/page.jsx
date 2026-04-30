@@ -33,6 +33,7 @@ function RamPendingContent() {
   const [showModal, setShowModal] = useState(null)
   const [editQty, setEditQty] = useState('')
   const [editLocationId, setEditLocationId] = useState('')
+  const [editUnitPrice, setEditUnitPrice] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const fetchCtl = useRef(null)
   const safeJson = useMemo(() => safeJsonFactory(), [])
@@ -118,6 +119,7 @@ function RamPendingContent() {
       created_at: o.created_at,
       member_id: o.member_id,
       member_name: o.member?.full_name || '',
+      member_phone: o.member?.phone || '',
       member_category: o.member_category || '',
       member_grade: o.member_grade || '',
       payment: o.payment_option || '',
@@ -172,6 +174,7 @@ function RamPendingContent() {
         'CreatedAt',
         'MemberID',
         'MemberName',
+        'MemberPhone',
         'Payment',
         'Qty',
         'Unit Price',
@@ -188,6 +191,7 @@ function RamPendingContent() {
       o.created_at ? new Date(o.created_at).toLocaleString() : '',
       sanitize(o.member_id),
       sanitize(o.member?.full_name || ''),
+      sanitize(o.member?.phone || ''),
       sanitize(o.payment_option || ''),
       String(Number(o.qty || 0)),
       `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
@@ -216,6 +220,7 @@ function RamPendingContent() {
       '',
       '',
       '',
+      '',
       String(totals.qty.toLocaleString()),
       '',
       `NGN ${totals.principal.toLocaleString()}`,
@@ -233,11 +238,11 @@ function RamPendingContent() {
       headStyles: { fillColor: [75, 85, 99] },
       alternateRowStyles: { fillColor: [249, 250, 251] },
       columnStyles: {
-        5: { halign: 'right' },
         6: { halign: 'right' },
         7: { halign: 'right' },
         8: { halign: 'right' },
         9: { halign: 'right' },
+        10: { halign: 'right' },
       },
       didParseCell: (data) => {
         if (data.section === 'body' && data.row.index === totalsRowIndex) {
@@ -268,6 +273,7 @@ function RamPendingContent() {
     if (!order?.id) return
     setEditQty(String(order.qty || 1))
     setEditLocationId(String(order.delivery_location?.id || order.ram_delivery_location_id || ''))
+    setEditUnitPrice(String(order.unit_price ?? ''))
     setShowModal({ type: 'edit', id: order.id })
   }
 
@@ -331,10 +337,14 @@ function RamPendingContent() {
     setEditBusy(true)
     setMsg(null)
     try {
+      const unitPriceNum = String(editUnitPrice || '').trim() ? Number(editUnitPrice) : null
+      if (unitPriceNum != null && (!Number.isFinite(unitPriceNum) || unitPriceNum <= 0)) {
+        throw new Error('Invalid unit price')
+      }
       const res = await fetch('/api/admin/ram-orders/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ id, qty, delivery_location_id: deliveryLocationId }),
+        body: JSON.stringify({ id, qty, delivery_location_id: deliveryLocationId, ...(unitPriceNum != null ? { unit_price: unitPriceNum } : {}) }),
       })
       const json = await safeJson(res, '/api/admin/ram-orders/update')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Update failed')
@@ -539,6 +549,7 @@ function RamPendingContent() {
                 <td className="p-2 border">
                   <div className="font-medium">{o.member_id}</div>
                   <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
+                  <div className="text-gray-600">{o.member?.phone || ''}</div>
                   <div className="text-gray-600">
                     {o.member_category || '-'}
                     {o.member_grade ? ` (${o.member_grade})` : ''}
@@ -620,7 +631,7 @@ function RamPendingContent() {
       >
         {showModal?.type === 'edit' ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-1">Delivery Location</div>
                 <select
@@ -647,8 +658,18 @@ function RamPendingContent() {
                   disabled={editBusy || bulkBusy}
                 />
               </div>
+              <div>
+                <div className="text-xs font-medium text-gray-700 mb-1">Unit Price</div>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={editUnitPrice}
+                  onChange={(e) => setEditUnitPrice(e.target.value)}
+                  inputMode="numeric"
+                  disabled={editBusy || bulkBusy}
+                />
+              </div>
             </div>
-            <div className="text-xs text-gray-600">Loan is limited to 2 rams.</div>
+            <div className="text-xs text-gray-600">Loan is limited to 2 rams (1 for pensioners).</div>
           </div>
         ) : showModal?.type === 'delete' ? (
           <div className="text-sm text-gray-700">

@@ -7,6 +7,19 @@ export const dynamic = 'force-dynamic'
 
 const LOAN_INTEREST_RATE = 0.06
 
+function normalizeGrade(grade) {
+  return String(grade || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isPensionerGrade(grade) {
+  const g = normalizeGrade(grade)
+  if (!g) return false
+  return g.includes('pensioner')
+}
+
 export async function POST(req) {
   try {
     const session = await validateSession(req, 'admin')
@@ -22,11 +35,15 @@ export async function POST(req) {
     const locRes = validateNumber(body.delivery_location_id, { min: 1, integer: true })
     if (!locRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid delivery location' }, { status: 400 })
 
+    const hasUnitPrice = body.unit_price !== undefined && body.unit_price !== null && String(body.unit_price).trim() !== ''
+    const unitPriceRes = hasUnitPrice ? validateNumber(body.unit_price, { min: 1, max: 100000000 }) : { isValid: true, value: null }
+    if (!unitPriceRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid unit price' }, { status: 400 })
+
     const supabase = createClient()
 
     const { data: order, error: selErr } = await supabase
       .from('ram_orders')
-      .select('id,status,payment_option,unit_price')
+      .select('id,status,payment_option,unit_price,member_grade')
       .eq('id', idRes.value)
       .single()
 
@@ -38,8 +55,11 @@ export async function POST(req) {
     }
 
     const payment = String(order.payment_option || '').trim()
-    if (payment === 'Loan' && qtyRes.value > 2) {
-      return NextResponse.json({ ok: false, error: 'Maximum allowed is 2 ram(s) for Loan' }, { status: 400 })
+    if (payment === 'Loan') {
+      const cap = isPensionerGrade(order.member_grade) ? 1 : 2
+      if (qtyRes.value > cap) {
+        return NextResponse.json({ ok: false, error: `Maximum allowed is ${cap} ram(s) for Loan` }, { status: 400 })
+      }
     }
 
     const { data: loc, error: locErr } = await supabase
@@ -52,7 +72,7 @@ export async function POST(req) {
     if (!loc) return NextResponse.json({ ok: false, error: 'Delivery location not found' }, { status: 404 })
     if (loc.is_active === false) return NextResponse.json({ ok: false, error: 'Delivery location is not active' }, { status: 400 })
 
-    const unitPrice = Number(order.unit_price || 0)
+    const unitPrice = hasUnitPrice ? Number(unitPriceRes.value || 0) : Number(order.unit_price || 0)
     const principalAmount = unitPrice * qtyRes.value
     const interestAmount = payment === 'Loan' ? Math.round(principalAmount * LOAN_INTEREST_RATE) : 0
     const totalAmount = principalAmount + interestAmount
@@ -61,6 +81,7 @@ export async function POST(req) {
       .from('ram_orders')
       .update({
         qty: qtyRes.value,
+        unit_price: unitPrice,
         principal_amount: principalAmount,
         interest_amount: interestAmount,
         total_amount: totalAmount,

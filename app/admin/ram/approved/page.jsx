@@ -71,6 +71,7 @@ function RamApprovedContent() {
       created_at: o.created_at,
       member_id: o.member_id,
       member_name: o.member?.full_name || '',
+      member_phone: o.member?.phone || '',
       member_category: o.member_category || '',
       member_grade: o.member_grade || '',
       payment: o.payment_option || '',
@@ -120,6 +121,7 @@ function RamApprovedContent() {
         'CreatedAt',
         'MemberID',
         'MemberName',
+        'MemberPhone',
         'Payment',
         'Qty',
         'Unit Price',
@@ -136,6 +138,7 @@ function RamApprovedContent() {
       o.created_at ? new Date(o.created_at).toLocaleString() : '',
       sanitize(o.member_id),
       sanitize(o.member?.full_name || ''),
+      sanitize(o.member?.phone || ''),
       sanitize(o.payment_option || ''),
       String(Number(o.qty || 0)),
       `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
@@ -164,6 +167,7 @@ function RamApprovedContent() {
       '',
       '',
       '',
+      '',
       String(totals.qty.toLocaleString()),
       '',
       `NGN ${totals.principal.toLocaleString()}`,
@@ -181,11 +185,11 @@ function RamApprovedContent() {
       headStyles: { fillColor: [75, 85, 99] },
       alternateRowStyles: { fillColor: [249, 250, 251] },
       columnStyles: {
-        5: { halign: 'right' },
         6: { halign: 'right' },
         7: { halign: 'right' },
         8: { halign: 'right' },
         9: { halign: 'right' },
+        10: { halign: 'right' },
       },
       didParseCell: (data) => {
         if (data.section === 'body' && data.row.index === totalsRowIndex) {
@@ -341,6 +345,7 @@ function RamApprovedContent() {
                 <td className="p-2 border">
                   <div className="font-medium">{o.member_id}</div>
                   <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
+                  <div className="text-gray-600">{o.member?.phone || ''}</div>
                 </td>
                 <td className="p-2 border">
                   <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>

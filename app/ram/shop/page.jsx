@@ -31,6 +31,8 @@ function RamShopPageContent() {
   const [message, setMessage] = useState(null)
   const [popupText, setPopupText] = useState('')
   const retireePopupKeyRef = useRef('')
+  const [phoneDraft, setPhoneDraft] = useState('')
+  const [phoneSaving, setPhoneSaving] = useState(false)
 
   const qtyNumber = Number(qty)
   const safeQty = Number.isFinite(qtyNumber) ? Math.trunc(qtyNumber) : 0
@@ -48,6 +50,7 @@ function RamShopPageContent() {
   const savingsEligible = Number(eligibility?.eligibility?.savingsEligible || 0)
   const loanEligible = Number(eligibility?.eligibility?.loanEligible || 0)
   const isRetiree = !!eligibility?.member?.is_retiree
+  const isPensioner = !!eligibility?.member?.is_pensioner
   const savingsBalance = Number(eligibility?.financial?.savings ?? member?.savings ?? 0)
   const loansBalance = Number(eligibility?.financial?.loans ?? member?.loans ?? 0)
 
@@ -56,7 +59,7 @@ function RamShopPageContent() {
     (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
   const allowLoanFallbackOne =
-    !isRetiree && paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
+    !isRetiree && !isPensioner && paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
@@ -114,7 +117,7 @@ function RamShopPageContent() {
 
         const { data: memberData, error: mErr } = await supabase
           .from('members')
-          .select('member_id,full_name,grade,savings,loans,global_limit')
+          .select('member_id,full_name,grade,savings,loans,global_limit,phone')
           .eq('member_id', memberId)
           .single()
 
@@ -124,6 +127,7 @@ function RamShopPageContent() {
           return
         }
         if (!cancelled) setMember(memberData)
+        if (!cancelled) setPhoneDraft(String(memberData?.phone || ''))
 
         const res = await fetch(`/api/ram/eligibility?member_id=${encodeURIComponent(memberId)}`, { cache: 'no-store' })
         const json = await res.json().catch(() => null)
@@ -160,6 +164,33 @@ function RamShopPageContent() {
     load()
     return () => { cancelled = true }
   }, [memberId])
+
+  const savePhone = async () => {
+    if (phoneSaving) return
+    const phone = String(phoneDraft || '').trim()
+    if (!phone) {
+      setMessage({ type: 'error', text: 'Please enter a phone number' })
+      return
+    }
+    setPhoneSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/members/update-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: memberId, phone }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to save phone number')
+      setMember((prev) => ({ ...(prev || {}), phone: String(json?.member?.phone || phone) }))
+      setPhoneDraft(String(json?.member?.phone || phone))
+      setMessage({ type: 'success', text: 'Phone number saved' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e?.message || 'Failed to save phone number' })
+    } finally {
+      setPhoneSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (paymentOption === 'Savings' && savingsEligible <= 0) {
@@ -360,6 +391,30 @@ function RamShopPageContent() {
               <div className="bg-gray-50 rounded-xl p-2">
                 <div className="text-[11px] text-gray-600">Loans</div>
                 <div className="font-semibold text-sm text-gray-900">₦{Number(loansBalance || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-2">
+                <div className="text-[11px] text-gray-600">Phone</div>
+                {String(member?.phone || '').trim() ? (
+                  <div className="font-semibold text-sm text-gray-900">{String(member?.phone || '').trim()}</div>
+                ) : (
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      className="w-full border rounded-lg px-2 py-1 text-sm bg-white"
+                      placeholder="Enter phone number"
+                      value={phoneDraft}
+                      onChange={(e) => setPhoneDraft(e.target.value)}
+                      disabled={phoneSaving}
+                    />
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50"
+                      onClick={savePhone}
+                      disabled={phoneSaving || !String(phoneDraft || '').trim()}
+                    >
+                      {phoneSaving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="bg-gray-50 rounded-xl p-2">
                 <div className="text-[11px] text-gray-600">Ram Category</div>

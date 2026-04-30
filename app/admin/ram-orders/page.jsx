@@ -226,6 +226,9 @@ function RamOrdersPageContent() {
                           {member?.branch?.code ? <span className="text-gray-500"> · {member.branch.code}</span> : null}
                         </div>
                         <div>
+                          <span className="font-medium">Member Phone:</span> {member?.phone || '—'}
+                        </div>
+                        <div>
                           <span className="font-medium">Delivery Location:</span> {loc?.delivery_location || '—'}
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">

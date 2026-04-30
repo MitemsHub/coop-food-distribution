@@ -32,7 +32,13 @@ function normalizeGrade(grade) {
 function isRetireeGrade(grade) {
   const g = normalizeGrade(grade)
   if (!g) return false
-  return g.includes('retiree') || g.includes('pensioner')
+  return g.includes('retiree')
+}
+
+function isPensionerGrade(grade) {
+  const g = normalizeGrade(grade)
+  if (!g) return false
+  return g.includes('pensioner')
 }
 
 function fallbackRamCategoryFromGrade(grade) {
@@ -198,10 +204,14 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
   const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
   const isRetiree = isRetireeGrade(memberSnapshot.grade)
+  const isPensioner = isPensionerGrade(memberSnapshot.grade)
   let exceededLoanLimit = false
   let loanEligible = 0
   if (isRetiree) {
     loanEligible = Math.max(0, savings - outstandingLoansTotal)
+    exceededLoanLimit = loanEligible <= 0
+  } else if (isPensioner) {
+    loanEligible = Math.max(0, savings * 5 - outstandingLoansTotal)
     exceededLoanLimit = loanEligible <= 0
   } else {
     const ADDITIONAL_FACILITY = 300000
@@ -241,14 +251,15 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
     if (loanQtyErr) throw new Error(loanQtyErr.message)
     usedLoanQtyThisCycle = sumField(loanQtyRows, 'qty')
   }
-  const remainingLoanQtyThisCycle = Math.max(0, 2 - usedLoanQtyThisCycle)
+  const loanQtyCap = isPensioner ? 1 : 2
+  const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
 
   let maxRamsAllowedForLoan = 0
   if (remainingLoanQtyThisCycle > 0 && loanEligible > 0) {
     if (loanEligible < unitPrice) {
-      maxRamsAllowedForLoan = isRetiree ? 0 : 1
+      maxRamsAllowedForLoan = isRetiree || isPensioner ? 0 : 1
     } else {
-      const cap = Math.min(2, remainingLoanQtyThisCycle)
+      const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
       maxRamsAllowedForLoan = computeMaxAffordableQty({
         unitPrice,
         maxCap: cap,
@@ -280,6 +291,7 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
     activeRamCycleId,
     ramOrdersTableMissing,
     isRetiree,
+    isPensioner,
   }
 }
 
@@ -355,6 +367,9 @@ export async function POST(req) {
     }
 
     if (paymentOption === 'Loan') {
+      if (eligibility.isPensioner && qty > 1) {
+        return NextResponse.json({ ok: false, error: 'Maximum allowed is 1 ram(s) for Loan' }, { status: 400 })
+      }
       if (eligibility.isRetiree && principalAmount > eligibility.loanEligible) {
         const shortfall = Math.max(0, principalAmount - Number(eligibility.loanEligible || 0))
         return NextResponse.json(
@@ -377,7 +392,12 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Insufficient savings eligibility for this purchase' }, { status: 400 })
     }
     if (paymentOption === 'Loan' && principalAmount > eligibility.loanEligible) {
-      const allowFallbackOne = !eligibility.isRetiree && qty === 1 && eligibility.loanEligible > 0 && eligibility.loanEligible < unitPrice
+      const allowFallbackOne =
+        !eligibility.isRetiree &&
+        !eligibility.isPensioner &&
+        qty === 1 &&
+        eligibility.loanEligible > 0 &&
+        eligibility.loanEligible < unitPrice
       if (!allowFallbackOne) {
         return NextResponse.json({ ok: false, error: 'Insufficient loan eligibility for this purchase' }, { status: 400 })
       }
