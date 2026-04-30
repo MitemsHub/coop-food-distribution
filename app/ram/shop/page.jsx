@@ -53,6 +53,7 @@ function RamShopPageContent() {
   const isPensioner = !!eligibility?.member?.is_pensioner
   const savingsBalance = Number(eligibility?.financial?.savings ?? member?.savings ?? 0)
   const loansBalance = Number(eligibility?.financial?.loans ?? member?.loans ?? 0)
+  const phoneMissing = !String(member?.phone || '').trim()
 
   const derivedRamCategory = String(eligibility?.member?.derived_ram_category || eligibility?.member?.ram_category || '')
   const canOverrideRamCategory =
@@ -615,9 +616,27 @@ function RamShopPageContent() {
             <button
               type="button"
               onClick={placeOrder}
-              disabled={!shoppingOpen || submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment}
+              disabled={
+                !shoppingOpen ||
+                submitting ||
+                unitPrice <= 0 ||
+                phoneMissing ||
+                !paymentOption ||
+                !deliveryLocationId ||
+                safeQty <= 0 ||
+                qtyExceeded ||
+                notEligibleForPayment
+              }
               className={`mt-6 w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
-                !shoppingOpen || submitting || unitPrice <= 0 || !paymentOption || !deliveryLocationId || safeQty <= 0 || qtyExceeded || notEligibleForPayment
+                !shoppingOpen ||
+                submitting ||
+                unitPrice <= 0 ||
+                phoneMissing ||
+                !paymentOption ||
+                !deliveryLocationId ||
+                safeQty <= 0 ||
+                qtyExceeded ||
+                notEligibleForPayment
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
               }`}
