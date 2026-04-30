@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic'
 
 function sanitizePhone(phoneRaw) {
   const phone = sanitizeString(String(phoneRaw || ''), { maxLength: 50, encodeHtml: false })
-  const cleaned = phone.replace(/\s+/g, ' ').trim()
-  if (!cleaned) return { ok: false, value: '', error: 'Phone number is required' }
-  if (!/^[0-9+\-\s()]{7,20}$/.test(cleaned)) return { ok: false, value: '', error: 'Invalid phone number format' }
-  return { ok: true, value: cleaned }
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return { ok: false, value: '', error: 'Phone number is required' }
+  if (digits.length !== 11) return { ok: false, value: '', error: 'Phone number must be exactly 11 digits' }
+  return { ok: true, value: digits }
 }
 
 export async function POST(req) {

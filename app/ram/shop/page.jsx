@@ -173,6 +173,10 @@ function RamShopPageContent() {
       setMessage({ type: 'error', text: 'Please enter a phone number' })
       return
     }
+    if (!/^\d{11}$/.test(phone)) {
+      setMessage({ type: 'error', text: 'Phone number must be exactly 11 digits' })
+      return
+    }
     setPhoneSaving(true)
     setMessage(null)
     try {
@@ -409,14 +413,20 @@ function RamShopPageContent() {
                       className="w-full border rounded-lg px-2 py-1 text-sm bg-white"
                       placeholder="Enter phone number"
                       value={phoneDraft}
-                      onChange={(e) => setPhoneDraft(e.target.value)}
+                      onChange={(e) => {
+                        const digitsOnly = String(e.target.value || '').replace(/\D/g, '').slice(0, 11)
+                        setPhoneDraft(digitsOnly)
+                      }}
+                      inputMode="numeric"
+                      pattern="[0-9]{11}"
+                      maxLength={11}
                       disabled={phoneSaving}
                     />
                     <button
                       type="button"
                       className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50"
                       onClick={savePhone}
-                      disabled={phoneSaving || !String(phoneDraft || '').trim()}
+                      disabled={phoneSaving || String(phoneDraft || '').trim().length !== 11}
                     >
                       {phoneSaving ? 'Saving...' : 'Save'}
                     </button>

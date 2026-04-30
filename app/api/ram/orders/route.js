@@ -340,10 +340,16 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 404 })
     }
 
-    const memberPhone = String(member.phone || '').trim()
-    if (!memberPhone) {
+    const memberPhoneDigits = String(member.phone || '').replace(/\D/g, '')
+    if (!memberPhoneDigits) {
       return NextResponse.json(
         { ok: false, error: 'Phone number is required. Please update your phone number before placing an order.' },
+        { status: 400 }
+      )
+    }
+    if (memberPhoneDigits.length !== 11) {
+      return NextResponse.json(
+        { ok: false, error: 'Phone number must be exactly 11 digits. Please update your phone number before placing an order.' },
         { status: 400 }
       )
     }
