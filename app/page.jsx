@@ -112,15 +112,33 @@ export default function MemberVerification() {
         </motion.div>
       </main>
 
-      <footer className="relative border-t border-white/10 bg-slate-950/60 backdrop-blur">
+      <footer className="relative border-t border-gray-200/70 bg-gradient-to-r from-blue-50/90 via-white/80 to-green-50/90 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-white/70">
+          <motion.div
+            className="flex items-center gap-1.5 text-gray-600"
+            animate={reduceMotion ? undefined : { y: [0, -2, 0] }}
+            transition={reduceMotion ? undefined : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          >
             <span className="text-xs">Powered by</span>
-            <Link href="/contact" className="text-xs font-medium text-white/85 hover:text-white">
-              MitemsHub
-            </Link>
-          </div>
-          <div className="text-xs text-white/55">© 2026 CBN Coop Food Distribution</div>
+            <motion.span
+              className="inline-flex items-center"
+              animate={reduceMotion ? undefined : { opacity: [0.75, 1, 0.75], scale: [1, 1.05, 1] }}
+              transition={reduceMotion ? undefined : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Link
+                href="/contact"
+                className="text-xs font-semibold text-blue-700 hover:text-blue-800 drop-shadow-[0_0_12px_rgba(37,99,235,0.25)]"
+              >
+                MitemsHub
+              </Link>
+              <motion.span
+                className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-600"
+                animate={reduceMotion ? undefined : { opacity: [0.35, 1, 0.35], scale: [1, 1.6, 1] }}
+                transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            </motion.span>
+          </motion.div>
+          <div className="text-xs text-gray-500">© 2026 CBN Coop Food Distribution</div>
         </div>
       </footer>
     </div>
