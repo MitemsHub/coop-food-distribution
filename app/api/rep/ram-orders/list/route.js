@@ -70,8 +70,11 @@ export async function GET(req) {
     const claim = token && verify(token)
     if (!claim || claim.role !== 'rep') return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
     if (claim.module && claim.module !== 'ram') return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
-    const vendorLocationId = Number(claim.ram_delivery_location_id)
-    if (!Number.isFinite(vendorLocationId) || vendorLocationId <= 0) {
+    const rawIds = Array.isArray(claim.ram_delivery_location_ids) ? claim.ram_delivery_location_ids : []
+    const ids = (rawIds.length ? rawIds : [claim.ram_delivery_location_id])
+      .map((v) => Number(v))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    if (!ids.length) {
       return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
 
@@ -98,12 +101,15 @@ export async function GET(req) {
       .from('ram_orders')
       .select('*')
       .eq('status', 'Approved')
-      .eq('ram_delivery_location_id', vendorLocationId)
+      .in('ram_delivery_location_id', ids)
       .order('created_at', { ascending: false })
       .limit(limit)
     if (payment && allowedPayment.has(payment)) query = query.eq('payment_option', payment)
     if (memberId) query = query.eq('member_id', memberId)
-    if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) query = query.eq('ram_delivery_location_id', deliveryLocationId)
+    if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) {
+      if (ids.includes(deliveryLocationId)) query = query.eq('ram_delivery_location_id', deliveryLocationId)
+      else return NextResponse.json({ ok: true, orders: [] })
+    }
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', `${to}T23:59:59`)
     if (ordersHasCycle && cycleId != null) query = query.eq('ram_cycle_id', cycleId)

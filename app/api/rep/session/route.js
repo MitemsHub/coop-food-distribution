@@ -29,33 +29,43 @@ export async function POST(req) {
     if (!code) return NextResponse.json({ ok:false, error:'passcode required' }, { status:400 })
 
     if (portalModule === 'ram') {
-      const { data: vendor, error } = await supabase
+      const { data: vendors, error } = await supabase
         .from('ram_delivery_locations')
         .select('id, delivery_location, name, rep_code, is_active')
         .eq('rep_code', code)
         .eq('is_active', true)
-        .single()
+        .order('id', { ascending: true })
       if (error && isMissingTable(error, 'ram_delivery_locations')) {
         return NextResponse.json(
           { ok: false, error: 'Ram Sales vendors are not set up yet. Run the ram sales migration in Supabase.' },
           { status: 500 }
         )
       }
-      if (error || !vendor) return NextResponse.json({ ok: false, error: 'Invalid passcode' }, { status: 401 })
+      if (error) return NextResponse.json({ ok: false, error: error.message || 'Invalid passcode' }, { status: 401 })
+      const list = Array.isArray(vendors) ? vendors.filter((v) => v && v.id) : []
+      if (!list.length) return NextResponse.json({ ok: false, error: 'Invalid passcode' }, { status: 401 })
+      const ids = list.map((v) => Number(v.id)).filter((n) => Number.isFinite(n) && n > 0)
+      const first = list[0]
 
       const token = await sign(
         {
           role: 'rep',
           module: 'ram',
-          ram_delivery_location_id: vendor.id,
-          ram_vendor_code: vendor.rep_code,
+          ram_delivery_location_id: first.id,
+          ram_delivery_location_ids: ids,
+          ram_vendor_code: code,
         },
         60 * 60 * 8
       )
       const res = NextResponse.json({
         ok: true,
         module: 'ram',
-        vendor: { id: vendor.id, name: vendor.name || vendor.delivery_location || '', code: vendor.rep_code },
+        vendor: {
+          id: first.id,
+          ids,
+          name: first.delivery_location || first.name || '',
+          code,
+        },
       })
       res.cookies.set('rep_token', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 8 })
       return res

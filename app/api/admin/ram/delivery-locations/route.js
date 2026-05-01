@@ -54,7 +54,20 @@ export async function POST(req) {
       .select('id,delivery_location,name,phone,address,rep_code,is_active,sort_order,created_at')
       .single()
 
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    if (error) {
+      const msg = String(error.message || '')
+      if (msg.includes('ram_delivery_locations_rep_code_uidx')) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'This passcode is currently restricted to be unique in your database. To allow multiple vendors to share the same passcode, apply the migration: migrations/allow-duplicate-ram-vendor-passcodes.sql',
+          },
+          { status: 400 }
+        )
+      }
+      return NextResponse.json({ ok: false, error: msg }, { status: 500 })
+    }
     return NextResponse.json({ ok: true, location: data })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error' }, { status: 500 })
