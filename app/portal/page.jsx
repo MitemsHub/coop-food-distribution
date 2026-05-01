@@ -1,22 +1,116 @@
+'use client'
+
 // app/portal/page.jsx
 import Link from 'next/link'
+import Image from 'next/image'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import MemberLauncher from '../components/MemberLauncher'
+import slide1 from '../../public/landing/slide1.png'
+import slide2 from '../../public/landing/slide2.png'
+import slide3 from '../../public/landing/slide3.png'
+import slide4 from '../../public/landing/slide4.png'
 
 export default function Landing() {
+  const reduceMotion = useReducedMotion()
+  const MotionImage = motion.create(Image)
+  const slides = useMemo(
+    () => [
+      { src: slide1, blur: true },
+      { src: slide2, blur: true },
+      { src: slide3, blur: true },
+      { src: slide4, blur: true },
+    ],
+    []
+  )
+  const [activeSlide, setActiveSlide] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (reduceMotion || paused || slides.length < 2) return
+    const intervalId = setInterval(() => {
+      setActiveSlide((i) => (i + 1) % slides.length)
+    }, 6500)
+    return () => clearInterval(intervalId)
+  }, [paused, reduceMotion, slides.length])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const next1 = slides[(activeSlide + 1) % slides.length]?.src
+    const next2 = slides[(activeSlide + 2) % slides.length]?.src
+    const candidates = [next1, next2]
+      .filter(Boolean)
+      .map((s) => (typeof s === 'string' ? s : s?.src))
+      .filter(Boolean)
+    for (const src of candidates) {
+      const img = new window.Image()
+      img.decoding = 'async'
+      img.loading = 'eager'
+      img.src = src
+    }
+  }, [activeSlide, slides])
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       {/* Hero Section */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-green-600/10"></div>
+        <div className="absolute inset-0 bg-slate-950" />
+        <div
+          className="absolute inset-0"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          <AnimatePresence initial={false} mode="wait">
+            <MotionImage
+              key={activeSlide}
+              src={slides[activeSlide]?.src}
+              alt=""
+              fill
+              priority={activeSlide === 0}
+              quality={75}
+              placeholder={slides[activeSlide]?.blur ? 'blur' : undefined}
+              sizes="100vw"
+              className="object-cover object-center brightness-[1.43] contrast-105 saturate-110"
+              initial={
+                reduceMotion
+                  ? false
+                  : { opacity: 0, scale: 1.02, x: 0, y: 0 }
+              }
+              animate={
+                reduceMotion
+                  ? { opacity: 1 }
+                  : { opacity: 1, scale: 1.05, x: -10, y: -6 }
+              }
+              exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : {
+                      opacity: { duration: 0.65, ease: 'easeOut' },
+                      scale: { duration: 6.5, ease: 'easeOut' },
+                      x: { duration: 6.5, ease: 'easeOut' },
+                      y: { duration: 6.5, ease: 'easeOut' },
+                    }
+              }
+            />
+          </AnimatePresence>
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950/45 via-slate-950/30 to-emerald-950/30" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.20),rgba(0,0,0,0.46))]" />
+        <div className="absolute inset-0 backdrop-blur-[0.5px]" />
         <div className="relative px-4 md:px-6 py-8 md:py-16 text-center">
           <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent mb-2 md:mb-4">
-              CBN Coop
-            </h1>
-            <p className="text-lg md:text-2xl lg:text-3xl text-gray-700 font-light mb-1 md:mb-2">Food Distribution Portal</p>
-            <p className="text-sm md:text-lg text-gray-600 max-w-2xl mx-auto px-2">
-              Your one-stop platform for cooperative food distribution management
-            </p>
+            <div className="inline-block rounded-3xl border border-white/20 bg-white/10 px-4 py-4 md:px-8 md:py-7 shadow-2xl backdrop-blur-xl">
+              <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-2 md:mb-4">
+                CBN Coop
+              </h1>
+              <p className="text-lg md:text-2xl lg:text-3xl text-white/95 font-light mb-1 md:mb-2">
+                Food Distribution Portal
+              </p>
+              <p className="text-sm md:text-lg text-white/80 max-w-2xl mx-auto px-2">
+                Your one-stop platform for cooperative food distribution management
+              </p>
+            </div>
           </div>
         </div>
       </div>
