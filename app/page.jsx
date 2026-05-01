@@ -114,17 +114,9 @@ export default function MemberVerification() {
 
       <footer className="relative border-t border-gray-200/70 bg-gradient-to-r from-blue-50/90 via-white/80 to-green-50/90 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-2">
-          <motion.div
-            className="flex items-center gap-1.5 text-gray-600"
-            animate={reduceMotion ? undefined : { y: [0, -2, 0] }}
-            transition={reduceMotion ? undefined : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-          >
+          <div className="flex items-center gap-1.5 text-gray-600">
             <span className="text-xs">Powered by</span>
-            <motion.span
-              className="inline-flex items-center"
-              animate={reduceMotion ? undefined : { opacity: [0.75, 1, 0.75], scale: [1, 1.05, 1] }}
-              transition={reduceMotion ? undefined : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-            >
+            <span className="inline-flex items-center">
               <Link
                 href="/contact"
                 className="text-xs font-semibold text-blue-700 hover:text-blue-800 drop-shadow-[0_0_12px_rgba(37,99,235,0.25)]"
@@ -136,8 +128,8 @@ export default function MemberVerification() {
                 animate={reduceMotion ? undefined : { opacity: [0.35, 1, 0.35], scale: [1, 1.6, 1] }}
                 transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
               />
-            </motion.span>
-          </motion.div>
+            </span>
+          </div>
           <div className="text-xs text-gray-500">© 2026 CBN Coop Food Distribution</div>
         </div>
       </footer>
