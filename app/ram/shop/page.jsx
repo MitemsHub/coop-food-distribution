@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 function RamShopPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   const memberId = useMemo(() => {
     const mid = (searchParams.get('mid') || '').trim().toUpperCase()
@@ -410,13 +410,6 @@ function RamShopPageContent() {
               className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-semibold text-gray-700"
             >
               View Orders
-            </button>
-            <button
-              type="button"
-              onClick={logout}
-              className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-semibold text-gray-700"
-            >
-              Logout
             </button>
           </div>
         </div>

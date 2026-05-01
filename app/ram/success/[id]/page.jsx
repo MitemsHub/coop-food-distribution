@@ -224,7 +224,7 @@ function RamSuccessContent() {
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="mt-6">
             <button
               type="button"
               onClick={downloadPDF}
@@ -243,13 +243,6 @@ function RamSuccessContent() {
               ) : (
                 'Download PDF'
               )}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(memberId)}`)}
-              className="w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-            >
-              New Ram Order
             </button>
           </div>
 
