@@ -2,13 +2,17 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useAuth } from '../../contexts/AuthContext'
 
 function SuccessContent() {
   const params = useParams()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id
-  const mid = searchParams?.get('mid') || '' // memberId passed from /shop
+  const mid = (searchParams?.get('mid') || '').trim().toUpperCase()
+  const { user } = useAuth()
+  const fallbackMemberId = mid || (user?.id || '')
 
   const [order, setOrder] = useState(null)
   const [error, setError] = useState(null)
@@ -30,6 +34,12 @@ function SuccessContent() {
     loadStatus()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!mid) return
+    if (!id) return
+    router.replace(`/shop/success/${encodeURIComponent(id)}`)
+  }, [id, mid, router])
 
   const currency = (n) => `₦${Number(n || 0).toLocaleString()}`
   // Use ASCII-only currency for PDF to avoid Unicode glyph issues
@@ -54,8 +64,8 @@ function SuccessContent() {
       }
 
       // 2) Fallback: latest order by member (if mid present)
-      if (mid) {
-        const qs = new URLSearchParams({ id: mid, limit: '1' }).toString()
+      if (fallbackMemberId) {
+        const qs = new URLSearchParams({ id: fallbackMemberId, limit: '1' }).toString()
         const r2 = await fetch(`/api/members/orders?${qs}`, { cache: 'no-store' })
         const j2 = await safeJson(r2, `/api/members/orders?${qs}`)
         if (j2.ok && Array.isArray(j2.orders) && j2.orders.length > 0) {
@@ -72,7 +82,7 @@ function SuccessContent() {
   useEffect(() => {
     if (id) loadOrder()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, mid])
+  }, [id, fallbackMemberId])
 
   const downloadPDF = async () => {
     if (!order) return
@@ -318,7 +328,7 @@ function SuccessContent() {
 
       <div className="flex gap-2">
         {shoppingOpen && (
-          <a href={`/shop${mid ? `?mid=${encodeURIComponent(mid)}` : ''}`} className="px-4 py-2 border rounded">Back to Shop</a>
+          <a href={mid ? `/shop?mid=${encodeURIComponent(mid)}&admin=true` : '/shop'} className="px-4 py-2 border rounded">Back to Shop</a>
         )}
         <button onClick={downloadPDF} className="px-4 py-2 bg-blue-600 text-white rounded" disabled={downloading}>
           {downloading ? 'Preparing…' : 'Download PDF'}

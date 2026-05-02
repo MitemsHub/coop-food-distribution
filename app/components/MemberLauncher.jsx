@@ -339,7 +339,7 @@ export default function MemberLauncher() {
       })
       await new Promise(resolve => setTimeout(resolve, 300))
       // Navigate to member orders view
-      router.push(`/orders?member_id=${encodeURIComponent(mid)}`)
+      router.push('/orders')
     } catch (error) {
       console.error('Navigation error:', error)
       setIsLoading(false)
@@ -576,7 +576,7 @@ export default function MemberLauncher() {
 
           <button
             type="button"
-            onClick={() => router.push(`/shop?mid=${encodeURIComponent(authenticatedMemberId)}`)}
+            onClick={() => router.push('/shop')}
             disabled={!shoppingOpen}
             className={`w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
               shoppingOpen
@@ -589,7 +589,7 @@ export default function MemberLauncher() {
 
           <button
             type="button"
-            onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(authenticatedMemberId)}`)}
+            onClick={() => router.push('/ram/shop')}
             disabled={!ramShoppingOpen}
             className={`w-full inline-flex items-center justify-center px-4 py-2 md:px-6 md:py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
               ramShoppingOpen ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' : 'bg-gray-400 cursor-not-allowed'

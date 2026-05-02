@@ -13,10 +13,12 @@ function RamShopPageContent() {
   const searchParams = useSearchParams()
   const { user } = useAuth()
 
-  const memberId = useMemo(() => {
-    const mid = (searchParams.get('mid') || '').trim().toUpperCase()
-    return mid || (user?.id || '')
-  }, [searchParams, user?.id])
+  const memberId = user?.id || ''
+
+  useEffect(() => {
+    const mid = (searchParams.get('mid') || '').trim()
+    if (mid) router.replace('/ram/shop')
+  }, [router, searchParams])
 
   const [member, setMember] = useState(null)
   const [eligibility, setEligibility] = useState(null)
@@ -50,6 +52,7 @@ function RamShopPageContent() {
       : Number(eligibility?.eligibility?.maxRamsAllowedForLoan ?? eligibility?.eligibility?.maxRamsAllowedForLoanOrSavings ?? 0)
   const savingsEligible = Number(eligibility?.eligibility?.savingsEligible || 0)
   const loanEligible = Number(eligibility?.eligibility?.loanEligible || 0)
+  const remainingLoanQtyThisCycle = Number(eligibility?.eligibility?.remainingLoanQtyThisCycle || 0)
   const isRetiree = !!eligibility?.member?.is_retiree
   const isPensioner = !!eligibility?.member?.is_pensioner
   const savingsBalance = Number(eligibility?.financial?.savings ?? member?.savings ?? 0)
@@ -71,12 +74,115 @@ function RamShopPageContent() {
 
   const qtyCapApplies = paymentOption === 'Loan' || paymentOption === 'Savings'
   const qtyExceeded = qtyCapApplies && safeQty > 0 && safeQty > maxRamsAllowed
-  const retireeLoanShortfall = useMemo(() => {
-    if (!isRetiree) return 0
+  const maxStepperQty = useMemo(() => {
+    if (!paymentOption) return 100
+    if (paymentOption === 'Cash') return 100
+    if (paymentOption === 'Savings') return Math.max(100, Math.max(0, Math.trunc(Number(maxRamsAllowed || 0))))
+    return Math.max(0, Math.trunc(Number(maxRamsAllowed || 0)))
+  }, [paymentOption, maxRamsAllowed])
+  const loanShortfall = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
+    if (allowLoanFallbackOne) return 0
     if (!Number.isFinite(principal) || principal <= 0) return 0
     return Math.max(0, principal - loanEligible)
-  }, [isRetiree, paymentOption, principal, loanEligible])
+  }, [allowLoanFallbackOne, paymentOption, principal, loanEligible])
+  const savingsIncreaseNeeded = useMemo(() => {
+    if (paymentOption !== 'Loan') return 0
+    if (allowLoanFallbackOne) return 0
+    if (!Number.isFinite(principal) || principal <= 0) return 0
+    if (principal <= loanEligible) return 0
+
+    const outstandingLoansTotal = Number(eligibility?.eligibility?.outstandingLoansTotal || 0)
+    const savingsNow = Number(savingsBalance || 0)
+
+    if (isRetiree) {
+      const requiredSavings = principal + outstandingLoansTotal
+      return Math.max(0, requiredSavings - savingsNow)
+    }
+
+    if (isPensioner) {
+      const requiredSavings = Math.ceil((principal + outstandingLoansTotal) / 5)
+      return Math.max(0, requiredSavings - savingsNow)
+    }
+
+    const loanExposure = Number(eligibility?.eligibility?.loanExposure || 0)
+    const globalLimit = Number(member?.global_limit || 0)
+    const ADDITIONAL_FACILITY = 300000
+    const LOAN_CAP = 1000000
+
+    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
+    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
+    const desiredPrincipal = Math.min(principal, capRemaining)
+    const requiredBaseEligible = Math.max(0, desiredPrincipal - facilityRemaining)
+    const requiredEffectiveLimit = requiredBaseEligible + outstandingLoansTotal
+
+    if (principal > capRemaining) return 0
+    if (globalLimit <= 0) return 0
+    if (globalLimit < requiredEffectiveLimit) return 0
+
+    const requiredSavings = Math.ceil(requiredEffectiveLimit / 5)
+    return Math.max(0, requiredSavings - savingsNow)
+  }, [
+    allowLoanFallbackOne,
+    eligibility?.eligibility?.loanExposure,
+    eligibility?.eligibility?.outstandingLoansTotal,
+    isPensioner,
+    isRetiree,
+    loanEligible,
+    member?.global_limit,
+    paymentOption,
+    principal,
+    savingsBalance,
+  ])
+
+  const minLoanSavingsIncreaseNeeded = useMemo(() => {
+    if (paymentOption !== 'Loan') return 0
+    if (allowLoanFallbackOne) return 0
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0
+    if (!Number.isFinite(loanEligible) || loanEligible <= 0) return 0
+    if (unitPrice <= loanEligible) return 0
+
+    const outstandingLoansTotal = Number(eligibility?.eligibility?.outstandingLoansTotal || 0)
+    const savingsNow = Number(savingsBalance || 0)
+
+    if (isRetiree) {
+      const requiredSavings = unitPrice + outstandingLoansTotal
+      return Math.max(0, requiredSavings - savingsNow)
+    }
+
+    if (isPensioner) {
+      const requiredSavings = Math.ceil((unitPrice + outstandingLoansTotal) / 5)
+      return Math.max(0, requiredSavings - savingsNow)
+    }
+
+    const loanExposure = Number(eligibility?.eligibility?.loanExposure || 0)
+    const globalLimit = Number(member?.global_limit || 0)
+    const ADDITIONAL_FACILITY = 300000
+    const LOAN_CAP = 1000000
+
+    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
+    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
+    if (unitPrice > capRemaining) return 0
+    if (globalLimit <= 0) return 0
+
+    const requiredBaseEligible = Math.max(0, unitPrice - facilityRemaining)
+    const requiredEffectiveLimit = requiredBaseEligible + outstandingLoansTotal
+    if (globalLimit < requiredEffectiveLimit) return 0
+
+    const requiredSavings = Math.ceil(requiredEffectiveLimit / 5)
+    return Math.max(0, requiredSavings - savingsNow)
+  }, [
+    allowLoanFallbackOne,
+    eligibility?.eligibility?.loanExposure,
+    eligibility?.eligibility?.outstandingLoansTotal,
+    isPensioner,
+    isRetiree,
+    loanEligible,
+    member?.global_limit,
+    paymentOption,
+    savingsBalance,
+    unitPrice,
+  ])
   const notEligibleForPayment =
     paymentOption === 'Savings'
       ? total > savingsEligible
@@ -84,18 +190,71 @@ function RamShopPageContent() {
         ? principal > loanEligible && !allowLoanFallbackOne
         : false
 
+  const placeOrderDisabledReason = useMemo(() => {
+    if (!shoppingOpen) return 'Ram shopping is currently closed.'
+    if (submitting) return 'Submitting your order…'
+    if (unitPrice <= 0) return 'Unit price is not available yet. Please wait a moment and try again.'
+    if (phoneMissing) return 'Add your phone number before placing an order.'
+    if (!paymentOption) return 'Select a payment option to continue.'
+    if (!deliveryLocationId) return 'Select a delivery location to continue.'
+    if (paymentOption === 'Loan' && remainingLoanQtyThisCycle <= 0) return 'You have reached your loan quantity limit for this cycle.'
+    if (safeQty <= 0) return 'Select a quantity greater than 0.'
+    if (paymentOption !== 'Cash' && qtyCapApplies && maxRamsAllowed > 0 && safeQty > maxRamsAllowed) {
+      return `Max for ${paymentOption}: ${maxRamsAllowed} ram(s).`
+    }
+    if (paymentOption === 'Loan' && allowLoanFallbackOne && safeQty === 1) return null
+    if (paymentOption === 'Savings' && notEligibleForPayment) return 'Your total exceeds your available savings eligibility.'
+    if (paymentOption === 'Loan' && savingsIncreaseNeeded > 0) {
+      return `Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify for this loan purchase.`
+    }
+    if (paymentOption === 'Loan' && safeQty <= 0 && maxRamsAllowed <= 0 && minLoanSavingsIncreaseNeeded > 0) {
+      return `Increase savings by ₦${Number(minLoanSavingsIncreaseNeeded).toLocaleString()} to qualify for a 1-ram loan purchase.`
+    }
+    if (paymentOption === 'Loan' && notEligibleForPayment) return 'Your principal exceeds your loan eligibility.'
+    return null
+  }, [
+    allowLoanFallbackOne,
+    deliveryLocationId,
+    isPensioner,
+    isRetiree,
+    maxRamsAllowed,
+    minLoanSavingsIncreaseNeeded,
+    notEligibleForPayment,
+    paymentOption,
+    phoneMissing,
+    qtyCapApplies,
+    remainingLoanQtyThisCycle,
+    savingsIncreaseNeeded,
+    safeQty,
+    shoppingOpen,
+    submitting,
+    unitPrice,
+  ])
+
   useEffect(() => {
-    if (!isRetiree) return
     if (paymentOption !== 'Loan') return
     if (!Number.isFinite(safeQty) || safeQty <= 0) return
-    if (!Number.isFinite(retireeLoanShortfall) || retireeLoanShortfall <= 0) return
+    if (!Number.isFinite(savingsIncreaseNeeded) || savingsIncreaseNeeded <= 0) return
 
-    const nextText = `Your purchase will exceed your loan limit by ₦${Number(retireeLoanShortfall).toLocaleString()}. Increase savings by ₦${Number(retireeLoanShortfall).toLocaleString()} to qualify.`
-    const key = `${paymentOption}|${safeQty}|${loanEligible}|${unitPrice}`
+    const nextText = `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
+    const key = `${paymentOption}|${safeQty}|${loanEligible}|${unitPrice}|${savingsIncreaseNeeded}`
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [isRetiree, paymentOption, safeQty, retireeLoanShortfall, loanEligible, unitPrice])
+  }, [loanEligible, loanShortfall, paymentOption, safeQty, savingsIncreaseNeeded, unitPrice])
+
+  useEffect(() => {
+    if (paymentOption !== 'Loan') return
+    if (!Number.isFinite(safeQty) || safeQty !== 0) return
+    if (!Number.isFinite(minLoanSavingsIncreaseNeeded) || minLoanSavingsIncreaseNeeded <= 0) return
+    if (remainingLoanQtyThisCycle <= 0) return
+
+    const nextText = `You are not eligible for a 1-ram loan purchase yet. Increase savings by ₦${Number(minLoanSavingsIncreaseNeeded).toLocaleString()} to qualify.`
+    const key = `min1|${paymentOption}|${loanEligible}|${unitPrice}|${minLoanSavingsIncreaseNeeded}`
+    if (retireePopupKeyRef.current === key) return
+    retireePopupKeyRef.current = key
+    setPopupText(nextText)
+  }, [loanEligible, minLoanSavingsIncreaseNeeded, paymentOption, remainingLoanQtyThisCycle, safeQty, unitPrice])
 
   useEffect(() => {
     let cancelled = false
@@ -272,9 +431,9 @@ function RamShopPageContent() {
       return
     }
 
-    if (retireeLoanShortfall > 0) {
+    if (paymentOption === 'Loan' && savingsIncreaseNeeded > 0) {
       setPopupText(
-        `Your purchase will exceed your loan limit by ₦${Number(retireeLoanShortfall).toLocaleString()}. Increase savings by ₦${Number(retireeLoanShortfall).toLocaleString()} to qualify.`
+        `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
       )
       return
     }
@@ -305,7 +464,7 @@ function RamShopPageContent() {
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.ok) {
         const errText = String(json?.error || 'Failed to place order')
-        if (isRetiree && errText.toLowerCase().includes('increase savings by')) {
+        if (errText.toLowerCase().includes('increase savings by')) {
           setPopupText(errText)
         } else {
           setMessage({ type: 'error', text: errText })
@@ -313,7 +472,7 @@ function RamShopPageContent() {
         return
       }
 
-      router.push(`/ram/success/${encodeURIComponent(json.order.id)}?mid=${encodeURIComponent(memberId)}`)
+      router.push(`/ram/success/${encodeURIComponent(json.order.id)}`)
     } catch (e) {
       setMessage({ type: 'error', text: e.message || 'Network error' })
     } finally {
@@ -406,7 +565,7 @@ function RamShopPageContent() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push(`/orders?member_id=${encodeURIComponent(memberId)}&tab=ram`)}
+              onClick={() => router.push('/orders?tab=ram')}
               className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-semibold text-gray-700"
             >
               View Orders
@@ -560,23 +719,47 @@ function RamShopPageContent() {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className={`w-full border-2 rounded-xl px-3 py-2 focus:ring-2 transition-all duration-200 text-sm ${
-                    qtyExceeded ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-green-600 focus:ring-green-200'
+                <div
+                  className={`grid grid-cols-[44px_1fr_44px] items-center rounded-xl border-2 bg-white ${
+                    qtyExceeded ? 'border-red-400' : 'border-gray-200'
                   }`}
-                />
-                {qtyCapApplies && (
-                  <div className={`mt-2 text-xs ${qtyExceeded ? 'text-red-700' : 'text-gray-600'}`}>
-                    Max for {paymentOption}: {maxRamsAllowed} ram(s)
+                >
+                  <button
+                    type="button"
+                    onClick={() => setQty(String(Math.max(0, safeQty - 1)))}
+                    disabled={submitting || safeQty <= 0}
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-l-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Decrease quantity"
+                  >
+                    −
+                  </button>
+                  <div className="h-11 flex items-center justify-center text-sm font-semibold text-gray-900 tabular-nums">
+                    {safeQty || 0}
                   </div>
-                )}
-                {retireeLoanShortfall > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setQty(String(Math.min(maxStepperQty, Math.max(0, safeQty) + 1)))}
+                    disabled={submitting || safeQty >= maxStepperQty}
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-r-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Increase quantity"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className={`mt-2 text-xs ${qtyExceeded ? 'text-red-700' : 'text-gray-600'}`}>
+                  {paymentOption ? (
+                    paymentOption === 'Cash' ? (
+                      <>Max (UI): {maxStepperQty} ram(s)</>
+                    ) : (
+                      <>Max for {paymentOption}: {maxRamsAllowed} ram(s)</>
+                    )
+                  ) : (
+                    <>Select payment option to see your max quantity</>
+                  )}
+                </div>
+                {paymentOption === 'Loan' && savingsIncreaseNeeded > 0 && (
                   <div className="mt-2 text-xs text-red-700">
-                    Increase savings by ₦{Number(retireeLoanShortfall).toLocaleString()} to qualify for this loan purchase.
+                    Increase savings by ₦{Number(savingsIncreaseNeeded).toLocaleString()} to qualify for this loan purchase.
                   </div>
                 )}
               </div>
@@ -702,6 +885,12 @@ function RamShopPageContent() {
                 </select>
               </div>
             </div>
+
+            {!!placeOrderDisabledReason && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                {placeOrderDisabledReason}
+              </div>
+            )}
 
             <motion.button
               type="button"

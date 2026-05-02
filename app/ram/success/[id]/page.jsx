@@ -11,8 +11,14 @@ function RamSuccessContent() {
   const searchParams = useSearchParams()
   const params = useParams()
 
-  const memberId = (searchParams.get('mid') || '').trim().toUpperCase()
   const orderId = useMemo(() => (Array.isArray(params?.id) ? params.id[0] : params?.id), [params])
+
+  useEffect(() => {
+    const mid = (searchParams.get('mid') || '').trim()
+    if (!mid) return
+    if (!orderId) return
+    router.replace(`/ram/success/${encodeURIComponent(orderId)}`)
+  }, [orderId, router, searchParams])
 
   const [order, setOrder] = useState(null)
   const [member, setMember] = useState(null)
@@ -248,7 +254,7 @@ function RamSuccessContent() {
 
           <button
             type="button"
-            onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(memberId)}`)}
+            onClick={() => router.push('/ram/shop')}
             className="mt-3 w-full inline-flex items-center justify-center px-4 py-3 text-gray-700 text-sm md:text-base font-semibold rounded-xl transition-all duration-200 border border-gray-300 hover:bg-gray-50"
           >
             Back to Shop

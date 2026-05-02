@@ -20,19 +20,29 @@ function OrdersPageContent() {
   
   const router = useRouter()
   const searchParams = useSearchParams()
-  const memberId = searchParams.get('member_id')
   const isAdmin = searchParams.get('admin') === 'true'
   const tabParam = (searchParams.get('tab') || '').trim().toLowerCase()
   const [activeTab, setActiveTab] = useState(tabParam === 'ram' ? 'ram' : 'food')
   const { user } = useAuth()
+  const memberId = isAdmin ? (searchParams.get('member_id') || '') : (user?.id || '')
 
   useEffect(() => {
+    if (isAdmin) {
+      if (!memberId) router.push('/admin')
+      return
+    }
     if (!memberId) {
       router.push('/shop')
       return
     }
+    const legacy = searchParams.get('member_id')
+    if (legacy) {
+      const qs = tabParam ? `?tab=${encodeURIComponent(tabParam)}` : ''
+      router.replace(`/orders${qs}`)
+    }
     loadAll()
-  }, [memberId, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, memberId, router, searchParams, tabParam])
 
   useEffect(() => {
     setActiveTab(tabParam === 'ram' ? 'ram' : 'food')
@@ -142,11 +152,11 @@ function OrdersPageContent() {
   }
 
   const downloadReceipt = (orderId) => {
-    window.open(`/shop/success/${orderId}?mid=${memberId}`, '_blank')
+    window.open(isAdmin ? `/shop/success/${orderId}?mid=${memberId}` : `/shop/success/${orderId}`, '_blank')
   }
 
   const downloadRamReceipt = (orderId) => {
-    window.open(`/ram/success/${orderId}?mid=${memberId}`, '_blank')
+    window.open(isAdmin ? `/ram/success/${orderId}?mid=${memberId}` : `/ram/success/${orderId}`, '_blank')
   }
 
   const ramLocationMap = new Map(ramLocations.map((l) => [String(l.id), l]))
@@ -180,7 +190,7 @@ function OrdersPageContent() {
               <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-row">
                 {shoppingOpen && (
                 <button
-                  onClick={() => router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                  onClick={() => router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')}
                   className="px-2 py-2 sm:px-3 md:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
                 >
                   <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,7 +201,7 @@ function OrdersPageContent() {
                 )}
                 {shoppingOpen && (
                 <button
-                  onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                  onClick={() => router.push(isAdmin ? `/cart?member_id=${memberId}&admin=true` : '/cart')}
                   className="px-2 py-2 sm:px-3 md:px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
                 >
                   <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -236,7 +246,7 @@ function OrdersPageContent() {
               <button
                 type="button"
                 onClick={() =>
-                  router.push(`/orders?member_id=${encodeURIComponent(memberId)}${isAdmin ? '&admin=true' : ''}&tab=food`)
+                  router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=food` : '/orders?tab=food')
                 }
                 className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
                   activeTab === 'food' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -247,7 +257,7 @@ function OrdersPageContent() {
               <button
                 type="button"
                 onClick={() =>
-                  router.push(`/orders?member_id=${encodeURIComponent(memberId)}${isAdmin ? '&admin=true' : ''}&tab=ram`)
+                  router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=ram` : '/orders?tab=ram')
                 }
                 className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
                   activeTab === 'ram' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -319,7 +329,7 @@ function OrdersPageContent() {
                 </p>
                 {shoppingOpen ? (
                   <button
-                    onClick={() => router.push(`/shop?mid=${memberId}`)}
+                    onClick={() => router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     Start Shopping

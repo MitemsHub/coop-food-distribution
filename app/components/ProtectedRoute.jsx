@@ -28,7 +28,7 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
       let dest = '/'
       switch (userType) {
         case 'member':
-          dest = `/shop?mid=${user.id}`
+          dest = '/shop'
           break
         case 'rep':
           dest = '/rep/pending'

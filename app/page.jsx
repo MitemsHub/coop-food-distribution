@@ -124,9 +124,17 @@ export default function MemberVerification() {
                 MitemsHub
               </Link>
               <motion.span
-                className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-600"
-                animate={reduceMotion ? undefined : { opacity: [0.35, 1, 0.35], scale: [1, 1.6, 1] }}
-                transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                className="ml-1 inline-block h-2 w-2 rounded-full bg-blue-600"
+                animate={{
+                  opacity: [0.35, 1, 0.35],
+                  scale: [1, 1.9, 1],
+                  boxShadow: [
+                    '0 0 0px rgba(37,99,235,0.0)',
+                    '0 0 14px rgba(37,99,235,0.45)',
+                    '0 0 0px rgba(37,99,235,0.0)',
+                  ],
+                }}
+                transition={{ duration: reduceMotion ? 2.2 : 1.4, repeat: Infinity, ease: 'easeInOut' }}
               />
             </span>
           </div>

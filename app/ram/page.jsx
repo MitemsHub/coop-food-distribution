@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -12,10 +12,12 @@ function RamPageContent() {
   const [shoppingOpen, setShoppingOpen] = useState(true)
   const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
 
-  const memberId = useMemo(() => {
-    const mid = (searchParams.get('mid') || '').trim().toUpperCase()
-    return mid || (user?.id || '')
-  }, [searchParams, user?.id])
+  const memberId = user?.id || ''
+
+  useEffect(() => {
+    const mid = (searchParams.get('mid') || '').trim()
+    if (mid) router.replace('/ram')
+  }, [router, searchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +56,7 @@ function RamPageContent() {
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => router.push(`/ram/shop?mid=${encodeURIComponent(memberId)}`)}
+              onClick={() => router.push('/ram/shop')}
               disabled={!shoppingOpen || shoppingStatusLoading}
               className={`w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
                 shoppingOpen && !shoppingStatusLoading
@@ -66,7 +68,7 @@ function RamPageContent() {
             </button>
             <button
               type="button"
-              onClick={() => router.push(`/shop?mid=${encodeURIComponent(memberId)}`)}
+              onClick={() => router.push('/shop')}
               className="w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
             >
               Go to Food Distribution

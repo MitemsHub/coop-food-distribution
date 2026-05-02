@@ -118,7 +118,7 @@ export default function Navbar() {
             <>
               {shoppingOpen && (
                 <Link
-                  href={`/shop?mid=${user?.id}`}
+                  href="/shop"
                   className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                     isActive('/shop') 
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
@@ -376,7 +376,7 @@ export default function Navbar() {
               <>
                 {shoppingOpen && (
                   <Link
-                    href={`/shop?mid=${user?.id}`}
+                    href="/shop"
                     onClick={closeMobileMenu}
                     className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
                       isActive('/shop') 

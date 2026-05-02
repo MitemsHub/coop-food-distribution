@@ -1,7 +1,7 @@
 // app/cart/page.jsx
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -29,9 +29,15 @@ function CartPageContent() {
   
   const router = useRouter()
   const searchParams = useSearchParams()
-  const memberId = searchParams.get('member_id')
   const isAdmin = searchParams.get('admin') === 'true'
   const { user } = useAuth()
+  const memberId = isAdmin ? (searchParams.get('member_id') || '') : (user?.id || '')
+
+  const emitToast = (type, text) => {
+    try {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { type, text } }))
+    } catch {}
+  }
 
   // Helper function for safe JSON parsing
   // Do not throw on non-2xx; return parsed payload so callers can show
@@ -93,6 +99,10 @@ function CartPageContent() {
   // Load member data and cart from localStorage
   useEffect(() => {
     const loadData = async () => {
+      if (!isAdmin) {
+        const legacy = searchParams.get('member_id')
+        if (legacy) router.replace('/cart')
+      }
       if (!memberId) {
         router.push('/shop')
         return
@@ -155,7 +165,7 @@ function CartPageContent() {
     }
     
     loadData()
-  }, [memberId, router])
+  }, [isAdmin, memberId, router, searchParams])
 
   // Load items when delivery branch changes
   useEffect(() => {
@@ -204,11 +214,36 @@ function CartPageContent() {
   }
 
   const updateQuantity = (sku, newQty) => {
-    const quantity = Math.max(0, Math.min(9999, Number(newQty) || 0))
-    const updatedCart = cartItems.map(item => 
-      item.sku === sku ? { ...item, qty: quantity } : item
-    ).filter(item => item.qty > 0)
-    
+    const item = cartItems.find((i) => i.sku === sku)
+    if (!item) return
+
+    const nextQty = Math.max(0, Math.min(9999, Number(newQty) || 0))
+    const othersTotal = cartItems.reduce((sum, i) => sum + i.price * (i.sku === sku ? 0 : i.qty), 0)
+    const nextCartTotal = othersTotal + item.price * nextQty
+
+    if (paymentOption === 'Savings') {
+      const limit = Number(eligibility.savingsEligible || 0)
+      if (limit > 0 && nextCartTotal > limit) {
+        setMessage({ type: 'error', text: 'This change would exceed your Savings limit. Reduce quantities or switch payment method.' })
+        emitToast('error', 'This change would exceed your Savings limit.')
+        return
+      }
+    }
+
+    if (paymentOption === 'Loan') {
+      const limit = Number(eligibility.loanEligible || 0)
+      const withInterest = nextCartTotal + Math.round(nextCartTotal * LOAN_INTEREST_RATE)
+      if (limit > 0 && withInterest > limit) {
+        setMessage({ type: 'error', text: 'This change would exceed your Loan limit (including 13% interest). Reduce quantities or switch payment method.' })
+        emitToast('error', 'This change would exceed your Loan limit (including interest).')
+        return
+      }
+    }
+
+    const updatedCart = cartItems
+      .map((i) => (i.sku === sku ? { ...i, qty: nextQty } : i))
+      .filter((i) => i.qty > 0)
+
     setCartItems(updatedCart)
     localStorage.setItem(`cart_${memberId}`, JSON.stringify(updatedCart))
   }
@@ -274,6 +309,15 @@ function CartPageContent() {
   const overLimit = paymentOption !== 'Cash' && totalWithInterest > currentLimit
   const canSubmit = cartItems.length > 0 && !overLimit && deliveryBranch && department
 
+  const submitDisabledReason = useMemo(() => {
+    if (submitting) return null
+    if (cartItems.length === 0) return 'Add at least one item to your cart.'
+    if (!deliveryBranch) return 'Select a delivery branch to continue.'
+    if (!department) return 'Select your department to continue.'
+    if (overLimit) return `Total exceeds your ${paymentOption} limit. Reduce quantities or switch payment method.`
+    return null
+  }, [cartItems.length, department, deliveryBranch, overLimit, paymentOption, submitting])
+
   const submitOrder = async () => {
     if (!canSubmit) return
     
@@ -309,7 +353,7 @@ function CartPageContent() {
         localStorage.removeItem(`cart_${memberId}`)
         
         // Redirect to success page
-        router.push(`/shop/success/${data.order_id}?mid=${memberId}`)
+        router.push(isAdmin ? `/shop/success/${data.order_id}?mid=${memberId}` : `/shop/success/${data.order_id}`)
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to submit order' })
       }
@@ -381,7 +425,7 @@ function CartPageContent() {
                     <button
                       onClick={() => {
                         sessionStorage.setItem('navigatingFromCart', 'true')
-                        router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                        router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')
                       }}
                       className="w-full md:w-auto px-2 py-1.5 sm:px-3 sm:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
                     >
@@ -487,7 +531,7 @@ function CartPageContent() {
                   <button
                     onClick={() => {
                       sessionStorage.setItem('navigatingFromCart', 'true')
-                      router.push(`/shop?mid=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                      router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')
                     }}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
@@ -532,13 +576,9 @@ function CartPageContent() {
                             >
                               −
                             </button>
-                            <input
-                              type="number"
-                              min={0}
-                              value={item.qty}
-                              onChange={(e) => updateQuantity(item.sku, e.target.value)}
-                              className="w-12 sm:w-16 py-2 sm:py-3 text-center font-bold text-gray-800 border-0 focus:ring-0 focus:outline-none text-xs sm:text-sm md:text-sm"
-                            />
+                            <div className="w-12 sm:w-16 py-2 sm:py-3 text-center font-bold text-gray-800 text-xs sm:text-sm md:text-sm tabular-nums">
+                              {Number(item.qty || 0)}
+                            </div>
                             <button
                               onClick={() => updateQuantity(item.sku, item.qty + 1)}
                               className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 hover:bg-green-50 text-gray-700 hover:text-green-600 font-semibold transition-colors border-l border-gray-200 min-w-[36px] sm:min-w-[40px] text-xs sm:text-sm md:text-sm"
@@ -633,6 +673,12 @@ function CartPageContent() {
                   message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-600'
                 }`}>
                   {message.text}
+                </div>
+              )}
+
+              {!!submitDisabledReason && (
+                <div className="mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm">
+                  {submitDisabledReason}
                 </div>
               )}
               

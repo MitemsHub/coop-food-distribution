@@ -6,11 +6,13 @@ import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import ProtectedRoute from '../components/ProtectedRoute'
+import { useAuth } from '../contexts/AuthContext'
 
 function ShopPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isAdmin = searchParams.get('admin') === 'true'
+  const { user } = useAuth()
 
   // Member + lookups
   const [memberId, setMemberId] = useState('')
@@ -135,22 +137,26 @@ function ShopPageContent() {
     }
   }, [qty, memberId, member, deliveryBranchCode, departmentName, paymentOption, items])
 
-  // Auto-fill member ID from ?mid= and lookup
+  useEffect(() => {
+    if (isAdmin) {
+      const mid = searchParams?.get('mid')
+      if (mid) setMemberId(String(mid).toUpperCase())
+      return
+    }
+    if (user?.id) setMemberId(String(user.id).toUpperCase())
+  }, [isAdmin, searchParams, user?.id])
+
   useEffect(() => {
     const mid = searchParams?.get('mid')
-    if (mid) {
-      const upperMid = mid.toUpperCase()
-      setMemberId(upperMid)
-    }
-  }, [searchParams])
+    if (mid && !isAdmin) router.replace('/shop')
+  }, [isAdmin, router, searchParams])
 
-  // Auto-lookup when memberId is set from URL
   useEffect(() => {
-    if (memberId && searchParams?.get('mid')) {
-      lookupMember()
-    }
+    if (!memberId) return
+    const mid = searchParams?.get('mid')
+    if (!isAdmin || mid) lookupMember()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberId])
+  }, [memberId, isAdmin, searchParams])
 
   // Load branches/departments with simple session cache for snappy dropdowns
   useEffect(() => {
@@ -530,6 +536,24 @@ function ShopPageContent() {
     if (!item) {
       return
     }
+
+    if (adjustment > 0 && paymentOption !== 'Cash') {
+      const price = Number(item.price || 0)
+      const currentCartTotal = items.reduce((s, it) => s + (Number(qty[it.sku] || 0) * Number(it.price || 0)), 0)
+      const nextCartTotal = currentCartTotal + adjustment * price
+      if (paymentOption === 'Savings' && nextCartTotal > savingsEligible) {
+        setMessage({ type: 'error', text: 'This quantity exceeds your Savings eligibility.' })
+        return
+      }
+      if (paymentOption === 'Loan') {
+        const nextInterest = Math.round(nextCartTotal * LOAN_INTEREST_RATE)
+        const nextTotal = nextCartTotal + nextInterest
+        if (nextTotal > loanEligible) {
+          setMessage({ type: 'error', text: 'This quantity exceeds your Loan eligibility.' })
+          return
+        }
+      }
+    }
     
     // Check if member and delivery branch are set
     if (!member?.member_id) {
@@ -596,7 +620,7 @@ function ShopPageContent() {
         return newSet
       })
     }
-  }, [items, member, deliveryBranchCode, qty, message, loadingItems])
+  }, [items, loanEligible, member, deliveryBranchCode, paymentOption, qty, savingsEligible])
 
   // Debounced input handler for better performance
   const handleInputChange = useCallback((sku, value) => {
@@ -701,7 +725,11 @@ function ShopPageContent() {
         localStorage.removeItem(`cart_${member.member_id}`)
       }
       
-      router.push(`/shop/success/${json.order_id}?mid=${encodeURIComponent(member.member_id)}`)
+      router.push(
+        isAdmin
+          ? `/shop/success/${json.order_id}?mid=${encodeURIComponent(member.member_id)}`
+          : `/shop/success/${json.order_id}`
+      )
       
     } catch (e) {
       console.error('submitOrder error:', e)
@@ -751,7 +779,7 @@ function ShopPageContent() {
                 {memberId && (
                   <>
                     <button
-                      onClick={() => router.push(`/orders?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                      onClick={() => router.push(isAdmin ? `/orders?member_id=${memberId}&admin=true` : '/orders')}
                       className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-full transition-all duration-200 text-xs sm:text-sm md:text-base whitespace-nowrap"
                     >
                       <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -760,7 +788,7 @@ function ShopPageContent() {
                       Orders
                     </button>
                     <button
-                      onClick={() => router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)}
+                      onClick={() => router.push(isAdmin ? `/cart?member_id=${memberId}&admin=true` : '/cart')}
                       className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full transition-all duration-200 text-xs sm:text-sm md:text-base whitespace-nowrap"
                     >
                       <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1095,15 +1123,9 @@ function ShopPageContent() {
                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                            </svg>
                              </button>
-                         <input
-                            type="number"
-                            min={0}
-                            max={it.demand_tracking_mode ? 999 : availableStock}
-                            value={currentQty}
-                            onChange={(e) => handleInputChange(it.sku, e.target.value)}
-
-                            className="w-12 h-7 sm:w-16 sm:h-8 md:w-20 md:h-10 border-2 border-gray-200 rounded-lg text-center font-semibold focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 text-xs sm:text-sm disabled:opacity-50"
-                          />
+                         <div className="w-12 h-7 sm:w-16 sm:h-8 md:w-20 md:h-10 border-2 border-gray-200 rounded-lg text-center font-semibold text-gray-900 flex items-center justify-center text-xs sm:text-sm tabular-nums">
+                           {currentQty}
+                         </div>
                          <button 
                              className={increaseButtonClass}
                              onClick={() => setQtySafe(it.sku, currentQty + 1)}
@@ -1164,7 +1186,7 @@ function ShopPageContent() {
                      disabled={cartLines.length === 0 || goingToCart}
                      onClick={async () => {
                        setGoingToCart(true)
-                       router.push(`/cart?member_id=${memberId}${isAdmin ? '&admin=true' : ''}`)
+                      router.push(isAdmin ? `/cart?member_id=${memberId}&admin=true` : '/cart')
                      }}
                      className={`w-full py-2 md:py-3 px-2 md:px-3 rounded-lg font-semibold text-xs md:text-sm transition-all duration-200 ${
                        cartLines.length > 0 && !goingToCart
