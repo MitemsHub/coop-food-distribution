@@ -561,7 +561,9 @@ function RamShopPageContent() {
     <main className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Ram Sales (Sallah)</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+            Ram Sales ({shoppingOpen ? 'Opened' : 'Closed'})
+          </h1>
           <div className="flex items-center gap-2">
             <button
               type="button"

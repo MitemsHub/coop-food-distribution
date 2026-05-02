@@ -44,7 +44,7 @@ function RamPageContent() {
     <main className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 md:p-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Ram Sales (Sallah)</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Ram Sales ({shoppingOpen ? 'Opened' : 'Closed'})</h1>
           <div className="mt-2 text-sm md:text-base text-gray-600">
             Member ID: <span className="font-semibold text-gray-800">{memberId || '—'}</span>
           </div>

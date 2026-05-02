@@ -595,7 +595,7 @@ export default function MemberLauncher() {
               ramShoppingOpen ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' : 'bg-gray-400 cursor-not-allowed'
             }`}
           >
-            {ramShoppingOpen ? 'Ram Sales (Sallah)' : 'Ram Sales (Sallah) (Closed)'}
+            {ramShoppingOpen ? 'Ram Sales (Opened)' : 'Ram Sales (Closed)'}
           </button>
 
           <button
