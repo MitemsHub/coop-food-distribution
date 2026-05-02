@@ -122,8 +122,7 @@ export async function GET(req) {
       const t = term.toLowerCase()
       filtered = filtered.filter((o) => {
         const idTxt = String(o.id || '')
-        const mid = String(o.member_id || '')
-        return idTxt.toLowerCase().includes(t) || mid.toLowerCase().includes(t)
+        return idTxt.toLowerCase().includes(t)
       })
     }
 

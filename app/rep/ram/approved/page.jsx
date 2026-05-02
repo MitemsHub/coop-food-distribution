@@ -284,7 +284,7 @@ function RepRamApprovedContent() {
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             className="border rounded px-3 py-2 text-xs sm:text-sm flex-1 sm:flex-[2] min-w-[180px]"
-            placeholder="Search (ID or member ID)"
+            placeholder="Search (Order ID)"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             onKeyDown={(e) => {
