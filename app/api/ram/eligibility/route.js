@@ -213,6 +213,11 @@ export async function GET(req) {
     const savingsBase = 0.5 * savings
     const savingsEligible = outstandingLoansTotal > 0 ? 0 : Math.max(0, savingsBase - savingsExposure)
 
+    const derivedRamCategory = await getRamCategory(supabase, member.grade)
+    const requestedCategory = isValidRamCategory(requestedCategoryRaw) ? requestedCategoryRaw : ''
+    const ramCategory = requestedCategory || derivedRamCategory
+    const unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
+
     const isRetiree = isRetireeGrade(member.grade)
     const isPensioner = isPensionerGrade(member.grade)
     let exceededLoanLimit = false
@@ -236,10 +241,6 @@ export async function GET(req) {
       loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
     }
 
-    const derivedRamCategory = await getRamCategory(supabase, member.grade)
-    const requestedCategory = isValidRamCategory(requestedCategoryRaw) ? requestedCategoryRaw : ''
-    const ramCategory = requestedCategory || derivedRamCategory
-    const unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
     let activeRamCycleId = null
     let usedLoanQtyThisCycle = 0
     if (!ramOrdersTableMissing) {
@@ -269,6 +270,12 @@ export async function GET(req) {
     }
     const loanQtyCap = isPensioner ? 1 : 2
     const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
+
+    const loanPolicyCapPrincipal = unitPrice > 0 ? unitPrice * loanQtyCap : 0
+    if (loanPolicyCapPrincipal > 0) {
+      loanEligible = Math.min(loanEligible, loanPolicyCapPrincipal)
+      exceededLoanLimit = loanEligible <= 0
+    }
 
     let maxRamsAllowedForLoan = 0
     if (remainingLoanQtyThisCycle > 0 && loanEligible > 0) {
