@@ -410,7 +410,7 @@ export async function POST(req) {
         !eligibility.isRetiree &&
         !eligibility.isPensioner &&
         qty === 1 &&
-        eligibility.loanEligible > 0 &&
+        eligibility.remainingLoanQtyThisCycle > 0 &&
         eligibility.loanEligible < unitPrice
       if (!allowFallbackOne) {
         return NextResponse.json({ ok: false, error: 'Insufficient loan eligibility for this purchase' }, { status: 400 })

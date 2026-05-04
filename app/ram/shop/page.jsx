@@ -64,7 +64,13 @@ function RamShopPageContent() {
     (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
   const allowLoanFallbackOne =
-    !isRetiree && !isPensioner && paymentOption === 'Loan' && safeQty === 1 && loanEligible > 0 && unitPrice > 0 && loanEligible < unitPrice
+    !isRetiree &&
+    !isPensioner &&
+    paymentOption === 'Loan' &&
+    remainingLoanQtyThisCycle > 0 &&
+    safeQty === 1 &&
+    unitPrice > 0 &&
+    loanEligible < unitPrice
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
