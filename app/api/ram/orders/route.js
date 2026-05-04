@@ -256,7 +256,9 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
 
   let maxRamsAllowedForLoan = 0
   if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
-    if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
+    if (isPensioner) {
+      maxRamsAllowedForLoan = 1
+    } else if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
       maxRamsAllowedForLoan = 1
     } else if (loanEligible > 0) {
       const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
@@ -408,7 +410,6 @@ export async function POST(req) {
     if (paymentOption === 'Loan' && principalAmount > eligibility.loanEligible) {
       const allowFallbackOne =
         !eligibility.isRetiree &&
-        !eligibility.isPensioner &&
         qty === 1 &&
         eligibility.remainingLoanQtyThisCycle > 0 &&
         eligibility.loanEligible < unitPrice

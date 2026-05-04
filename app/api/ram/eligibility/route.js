@@ -279,7 +279,9 @@ export async function GET(req) {
 
     let maxRamsAllowedForLoan = 0
     if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
-      if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
+      if (isPensioner) {
+        maxRamsAllowedForLoan = 1
+      } else if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
         maxRamsAllowedForLoan = 1
       } else if (loanEligible > 0) {
         const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)

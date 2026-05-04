@@ -65,12 +65,12 @@ function RamShopPageContent() {
 
   const allowLoanFallbackOne =
     !isRetiree &&
-    !isPensioner &&
     paymentOption === 'Loan' &&
     safeQty === 1 &&
     unitPrice > 0 &&
-    loanEligible < unitPrice &&
-    maxRamsAllowed === 1
+    remainingLoanQtyThisCycle > 0 &&
+    maxRamsAllowed >= 1 &&
+    (isPensioner || (!isPensioner && loanEligible < unitPrice))
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
