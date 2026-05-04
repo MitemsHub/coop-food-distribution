@@ -17,7 +17,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
         <AuthProvider>
           <Navbar />
-          <main className="max-w-7xl mx-auto p-2 lg:p-3 xl:p-4 pt-2 lg:pt-3 xl:pt-4">
+          <main className="w-full">
             <PageTransition>{children}</PageTransition>
           </main>
         </AuthProvider>

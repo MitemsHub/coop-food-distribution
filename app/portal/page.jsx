@@ -51,7 +51,7 @@ export default function Landing() {
   }, [activeSlide, slides])
 
   return (
-    <main className="min-h-screen w-screen overflow-x-hidden relative left-1/2 -translate-x-1/2 bg-gradient-to-br from-blue-50 via-white to-green-50">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-slate-950" />
