@@ -67,10 +67,10 @@ function RamShopPageContent() {
     !isRetiree &&
     !isPensioner &&
     paymentOption === 'Loan' &&
-    remainingLoanQtyThisCycle > 0 &&
     safeQty === 1 &&
     unitPrice > 0 &&
-    loanEligible < unitPrice
+    loanEligible < unitPrice &&
+    maxRamsAllowed === 1
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
