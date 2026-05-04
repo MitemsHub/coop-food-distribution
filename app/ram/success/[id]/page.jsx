@@ -25,6 +25,7 @@ function RamSuccessContent() {
   const [location, setLocation] = useState(null)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
+  const memberId = String(order?.member_id || member?.member_id || '').trim()
 
   const currency = (n) => `₦${Number(n || 0).toLocaleString()}`
   const currencyPDF = (n) => `NGN ${Number(n || 0).toLocaleString()}`

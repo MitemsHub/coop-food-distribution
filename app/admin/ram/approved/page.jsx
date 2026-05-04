@@ -33,6 +33,7 @@ function RamApprovedContent() {
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [rollbackBusyId, setRollbackBusyId] = useState(null)
+  const [receiptBusyId, setReceiptBusyId] = useState(null)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
@@ -96,6 +97,119 @@ function RamApprovedContent() {
       setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
     } finally {
       setRollbackBusyId(null)
+    }
+  }
+
+  const printReceipt = async (order) => {
+    const orderId = Number(order?.id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    if (receiptBusyId) return
+    setReceiptBusyId(orderId)
+    setMsg(null)
+    try {
+      const { jsPDF } = await import('jspdf')
+      const autoTableMod = await import('jspdf-autotable')
+      const autoTable = autoTableMod?.default ?? autoTableMod
+      const doc = new jsPDF()
+
+      const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
+      const currencyPDF = (n) => `NGN ${Number(n || 0).toLocaleString()}`
+
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const marginX = 12
+      const headerY = 10
+      const headerH = 18
+
+      doc.setFillColor(21, 128, 61)
+      doc.rect(marginX, headerY, pageWidth - marginX * 2, headerH, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(14)
+      doc.text('CBN Coop — Ram Sales Receipt', marginX + 6, headerY + 12)
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - marginX, headerY + 12, { align: 'right' })
+
+      const detailsBody = [
+        ['Order ID', `#${orderId}`, 'Status', sanitize(order?.status || '—')],
+        ['Date', order?.created_at ? new Date(order.created_at).toLocaleString() : '—', 'Payment', sanitize(order?.payment_option || '—')],
+        ['Member', sanitize(`${order?.member?.full_name || '—'} (${order?.member_id || '—'})`), 'Member Phone', sanitize(order?.member?.phone || '—')],
+        ['Quantity', String(Number(order?.qty || 0).toLocaleString()), 'Unit Price', currencyPDF(order?.unit_price)],
+      ]
+
+      autoTable(doc, {
+        head: [['Order Details', '', '', '']],
+        body: detailsBody,
+        startY: headerY + headerH + 6,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 2, lineWidth: 0.1, lineColor: [220, 220, 220] },
+        headStyles: { fillColor: [240, 253, 244], textColor: [21, 128, 61], fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 64 }, 2: { cellWidth: 28 }, 3: { cellWidth: 64 } },
+        margin: { left: marginX, right: marginX },
+      })
+
+      const principal = Number(order?.principal_amount ?? 0)
+      const interest = Number(order?.interest_amount ?? order?.loan_interest ?? 0)
+      const total = Number(order?.total_amount ?? 0)
+
+      autoTable(doc, {
+        head: [['Amount Breakdown', '', '']],
+        body: [
+          ['Principal', currencyPDF(principal), ''],
+          ['Interest', currencyPDF(interest), ''],
+          ['Total', currencyPDF(total), ''],
+        ],
+        startY: (doc.lastAutoTable?.finalY || 0) + 6,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 2, lineWidth: 0.1, lineColor: [220, 220, 220] },
+        headStyles: { fillColor: [240, 253, 244], textColor: [21, 128, 61], fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 40 }, 1: { halign: 'right', cellWidth: 60 }, 2: { cellWidth: 84 } },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.row.index === 2) {
+            data.cell.styles.fontStyle = 'bold'
+            data.cell.styles.fillColor = [240, 253, 244]
+          }
+        },
+        margin: { left: marginX, right: marginX },
+      })
+
+      const vendorRows = [
+        ['Delivery Location', sanitize(order?.delivery_location?.delivery_location || order?.delivery_location?.name || '—')],
+        ['Vendor Name', sanitize(order?.delivery_location?.name || '—')],
+        ['Vendor Phone No', sanitize(order?.delivery_location?.phone || '—')],
+      ]
+      if (order?.delivery_location?.address) vendorRows.push(['Vendor Address', sanitize(order.delivery_location.address)])
+
+      autoTable(doc, {
+        head: [['Vendor Details', '']],
+        body: vendorRows,
+        startY: (doc.lastAutoTable?.finalY || 0) + 6,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 2, lineWidth: 0.1, lineColor: [220, 220, 220] },
+        headStyles: { fillColor: [240, 253, 244], textColor: [21, 128, 61], fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 44 }, 1: { cellWidth: 166 } },
+        margin: { left: marginX, right: marginX },
+      })
+
+      autoTable(doc, {
+        head: [['Signature', '']],
+        body: [['', '']],
+        startY: (doc.lastAutoTable?.finalY || 0) + 8,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 6, lineWidth: 0.1, lineColor: [220, 220, 220] },
+        headStyles: { fillColor: [249, 250, 251], textColor: [55, 65, 81], fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 44 }, 1: { cellWidth: 166 } },
+        margin: { left: marginX, right: marginX },
+      })
+
+      if (typeof doc.autoPrint === 'function') doc.autoPrint()
+      const blobUrl = doc.output('bloburl')
+      const w = window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      if (!w) doc.save(`RamReceipt_${orderId}.pdf`)
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Failed to generate receipt' })
+    } finally {
+      setReceiptBusyId(null)
     }
   }
 
@@ -413,14 +527,24 @@ function RamApprovedContent() {
                       <div className="font-medium">{money(o.total_amount)}</div>
                     </td>
                     <td className="p-2 border">
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
-                        onClick={() => rollbackToPending(o.id)}
-                        disabled={loading || rollbackBusyId === o.id}
-                      >
-                        {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
-                      </button>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
+                          onClick={() => rollbackToPending(o.id)}
+                          disabled={loading || rollbackBusyId === o.id || receiptBusyId === o.id}
+                        >
+                          {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50"
+                          onClick={() => printReceipt(o)}
+                          disabled={loading || rollbackBusyId === o.id || receiptBusyId === o.id}
+                        >
+                          {receiptBusyId === o.id ? 'Preparing...' : 'Receipt'}
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
