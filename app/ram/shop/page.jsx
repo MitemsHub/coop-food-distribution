@@ -159,6 +159,7 @@ function RamShopPageContent() {
   const minLoanSavingsIncreaseNeeded = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
     if (allowLoanFallbackOne) return 0
+    if (maxRamsAllowed > 0) return 0
     if (isPensioner && remainingLoanQtyThisCycle > 0 && maxRamsAllowed >= 1) return 0
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0
     if (!Number.isFinite(loanEligible) || loanEligible <= 0) return 0
@@ -276,13 +277,14 @@ function RamShopPageContent() {
     if (!Number.isFinite(minLoanSavingsIncreaseNeeded) || minLoanSavingsIncreaseNeeded <= 0) return
     if (remainingLoanQtyThisCycle <= 0) return
     if (pensionerLoanGraceActive) return
+    if (maxRamsAllowed > 0) return
 
     const nextText = `You are not eligible for a 1-ram loan purchase yet. Increase savings by ₦${Number(minLoanSavingsIncreaseNeeded).toLocaleString()} to qualify.`
     const key = `min1|${paymentOption}|${loanEligible}|${unitPrice}|${minLoanSavingsIncreaseNeeded}`
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [loanEligible, minLoanSavingsIncreaseNeeded, paymentOption, pensionerLoanGraceActive, remainingLoanQtyThisCycle, safeQty, unitPrice])
+  }, [loanEligible, maxRamsAllowed, minLoanSavingsIncreaseNeeded, paymentOption, pensionerLoanGraceActive, remainingLoanQtyThisCycle, safeQty, unitPrice])
 
   useEffect(() => {
     let cancelled = false
