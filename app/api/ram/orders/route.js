@@ -255,10 +255,10 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
   const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
 
   let maxRamsAllowedForLoan = 0
-  if (remainingLoanQtyThisCycle > 0 && loanEligible > 0) {
-    if (loanEligible < unitPrice) {
-      maxRamsAllowedForLoan = isRetiree || isPensioner ? 0 : 1
-    } else {
+  if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
+    if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
+      maxRamsAllowedForLoan = 1
+    } else if (loanEligible > 0) {
       const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
       maxRamsAllowedForLoan = computeMaxAffordableQty({
         unitPrice,
