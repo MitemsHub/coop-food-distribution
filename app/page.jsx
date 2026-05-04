@@ -10,7 +10,7 @@ export default function MemberVerification() {
   const MotionImage = motion.create(Image)
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950">
+    <div className="min-h-screen w-screen overflow-x-hidden relative left-1/2 -translate-x-1/2 flex flex-col bg-slate-950">
       <main className="flex-1 relative overflow-hidden flex items-center justify-center px-4 py-8">
         <div className="absolute inset-0">
           <MotionImage
