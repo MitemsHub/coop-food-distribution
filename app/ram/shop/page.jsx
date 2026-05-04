@@ -53,8 +53,9 @@ function RamShopPageContent() {
   const savingsEligible = Number(eligibility?.eligibility?.savingsEligible || 0)
   const loanEligible = Number(eligibility?.eligibility?.loanEligible || 0)
   const remainingLoanQtyThisCycle = Number(eligibility?.eligibility?.remainingLoanQtyThisCycle || 0)
-  const isRetiree = !!eligibility?.member?.is_retiree
-  const isPensioner = !!eligibility?.member?.is_pensioner
+  const gradeText = String(eligibility?.member?.grade || member?.grade || '').toLowerCase()
+  const isRetiree = !!eligibility?.member?.is_retiree || gradeText.includes('retiree')
+  const isPensioner = !!eligibility?.member?.is_pensioner || gradeText.includes('pensioner')
   const savingsBalance = Number(eligibility?.financial?.savings ?? member?.savings ?? 0)
   const loansBalance = Number(eligibility?.financial?.loans ?? member?.loans ?? 0)
   const phoneMissing = !String(member?.phone || '').trim()
@@ -63,14 +64,24 @@ function RamShopPageContent() {
   const canOverrideRamCategory =
     (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
-  const allowLoanFallbackOne =
-    !isRetiree &&
+  const pensionerLoanGraceActive =
+    isPensioner &&
     paymentOption === 'Loan' &&
     safeQty === 1 &&
     unitPrice > 0 &&
     remainingLoanQtyThisCycle > 0 &&
-    maxRamsAllowed >= 1 &&
-    (isPensioner || (!isPensioner && loanEligible < unitPrice))
+    maxRamsAllowed >= 1
+
+  const allowLoanFallbackOne =
+    pensionerLoanGraceActive ||
+    (!isRetiree &&
+      !isPensioner &&
+      paymentOption === 'Loan' &&
+      safeQty === 1 &&
+      unitPrice > 0 &&
+      remainingLoanQtyThisCycle > 0 &&
+      maxRamsAllowed >= 1 &&
+      loanEligible < unitPrice)
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
@@ -95,6 +106,7 @@ function RamShopPageContent() {
   const savingsIncreaseNeeded = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
     if (allowLoanFallbackOne) return 0
+    if (isPensioner && safeQty === 1 && remainingLoanQtyThisCycle > 0 && maxRamsAllowed >= 1) return 0
     if (!Number.isFinite(principal) || principal <= 0) return 0
     if (principal <= loanEligible) return 0
 
@@ -135,15 +147,19 @@ function RamShopPageContent() {
     isPensioner,
     isRetiree,
     loanEligible,
+    maxRamsAllowed,
     member?.global_limit,
     paymentOption,
     principal,
+    remainingLoanQtyThisCycle,
     savingsBalance,
+    safeQty,
   ])
 
   const minLoanSavingsIncreaseNeeded = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
     if (allowLoanFallbackOne) return 0
+    if (isPensioner && remainingLoanQtyThisCycle > 0 && maxRamsAllowed >= 1) return 0
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0
     if (!Number.isFinite(loanEligible) || loanEligible <= 0) return 0
     if (unitPrice <= loanEligible) return 0
@@ -184,8 +200,10 @@ function RamShopPageContent() {
     isPensioner,
     isRetiree,
     loanEligible,
+    maxRamsAllowed,
     member?.global_limit,
     paymentOption,
+    remainingLoanQtyThisCycle,
     savingsBalance,
     unitPrice,
   ])
@@ -208,6 +226,7 @@ function RamShopPageContent() {
     if (paymentOption !== 'Cash' && qtyCapApplies && maxRamsAllowed > 0 && safeQty > maxRamsAllowed) {
       return `Max for ${paymentOption}: ${maxRamsAllowed} ram(s).`
     }
+    if (pensionerLoanGraceActive) return null
     if (paymentOption === 'Loan' && allowLoanFallbackOne && safeQty === 1) return null
     if (paymentOption === 'Savings' && notEligibleForPayment) return 'Your total exceeds your available savings eligibility.'
     if (paymentOption === 'Loan' && savingsIncreaseNeeded > 0) {
@@ -227,6 +246,7 @@ function RamShopPageContent() {
     minLoanSavingsIncreaseNeeded,
     notEligibleForPayment,
     paymentOption,
+    pensionerLoanGraceActive,
     phoneMissing,
     qtyCapApplies,
     remainingLoanQtyThisCycle,
@@ -241,26 +261,28 @@ function RamShopPageContent() {
     if (paymentOption !== 'Loan') return
     if (!Number.isFinite(safeQty) || safeQty <= 0) return
     if (!Number.isFinite(savingsIncreaseNeeded) || savingsIncreaseNeeded <= 0) return
+    if (pensionerLoanGraceActive) return
 
     const nextText = `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
     const key = `${paymentOption}|${safeQty}|${loanEligible}|${unitPrice}|${savingsIncreaseNeeded}`
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [loanEligible, loanShortfall, paymentOption, safeQty, savingsIncreaseNeeded, unitPrice])
+  }, [loanEligible, loanShortfall, paymentOption, pensionerLoanGraceActive, safeQty, savingsIncreaseNeeded, unitPrice])
 
   useEffect(() => {
     if (paymentOption !== 'Loan') return
     if (!Number.isFinite(safeQty) || safeQty !== 0) return
     if (!Number.isFinite(minLoanSavingsIncreaseNeeded) || minLoanSavingsIncreaseNeeded <= 0) return
     if (remainingLoanQtyThisCycle <= 0) return
+    if (pensionerLoanGraceActive) return
 
     const nextText = `You are not eligible for a 1-ram loan purchase yet. Increase savings by ₦${Number(minLoanSavingsIncreaseNeeded).toLocaleString()} to qualify.`
     const key = `min1|${paymentOption}|${loanEligible}|${unitPrice}|${minLoanSavingsIncreaseNeeded}`
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [loanEligible, minLoanSavingsIncreaseNeeded, paymentOption, remainingLoanQtyThisCycle, safeQty, unitPrice])
+  }, [loanEligible, minLoanSavingsIncreaseNeeded, paymentOption, pensionerLoanGraceActive, remainingLoanQtyThisCycle, safeQty, unitPrice])
 
   useEffect(() => {
     let cancelled = false
@@ -437,7 +459,7 @@ function RamShopPageContent() {
       return
     }
 
-    if (paymentOption === 'Loan' && savingsIncreaseNeeded > 0) {
+    if (paymentOption === 'Loan' && !pensionerLoanGraceActive && savingsIncreaseNeeded > 0) {
       setPopupText(
         `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
       )
@@ -448,7 +470,7 @@ function RamShopPageContent() {
       setMessage({ type: 'error', text: 'Insufficient savings eligibility for this purchase' })
       return
     }
-    if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanFallbackOne) {
+    if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanFallbackOne && !pensionerLoanGraceActive) {
       setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
       return
     }
