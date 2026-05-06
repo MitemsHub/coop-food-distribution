@@ -228,7 +228,7 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
 
   let activeRamCycleId = null
   let usedLoanQtyThisCycle = 0
-  if (!ramOrdersTableMissing) {
+  if (!ramOrdersTableMissing && !isPensioner) {
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
 
     if (ordersHasCycle) {
@@ -241,15 +241,6 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
 
       if (arcErr && !isMissingTable(arcErr, 'ram_cycles')) throw new Error(arcErr.message)
       if (activeRamCycle?.id) activeRamCycleId = activeRamCycle.id
-
-      if (activeRamCycleId == null) {
-        const { data: latest, error: lErr } = await supabase
-          .from('ram_cycles')
-          .select('id')
-          .order('created_at', { ascending: false })
-          .maybeSingle()
-        if (!lErr && latest?.id) activeRamCycleId = latest.id
-      }
     }
 
     if (!ordersHasCycle || activeRamCycleId == null) {
@@ -462,14 +453,6 @@ export async function POST(req) {
 
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
     let ramCycleId = ordersHasCycle ? eligibility.activeRamCycleId : null
-    if (ordersHasCycle && ramCycleId == null) {
-      const { data: latest, error: lErr } = await supabase
-        .from('ram_cycles')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .maybeSingle()
-      if (!lErr && latest?.id) ramCycleId = latest.id
-    }
 
     const { data: inserted, error: insErr } = await supabase
       .from('ram_orders')
