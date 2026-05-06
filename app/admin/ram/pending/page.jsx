@@ -106,6 +106,8 @@ function RamPendingContent() {
   const safePage = Math.min(Math.max(1, page), pageCount)
   const startIndex = (safePage - 1) * pageSize
   const pagedOrders = useMemo(() => (orders || []).slice(startIndex, startIndex + pageSize), [orders, startIndex, pageSize])
+  const selectedCount = selected.size
+  const allSelectedOnPage = pagedOrders.length > 0 && pagedOrders.every((o) => selected.has(o.id))
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage)
@@ -122,7 +124,7 @@ function RamPendingContent() {
     setSelected(allSelected ? new Set() : new Set(ids))
   }
 
-  const exportCSV = () => {
+  const exportExcel = async () => {
     const rows = orders.map((o) => ({
       id: o.id,
       created_at: o.created_at,
@@ -143,13 +145,27 @@ function RamPendingContent() {
       signature: '',
     }))
     if (!rows.length) return
-    const headers = Object.keys(rows[0])
-    const csv = [headers.join(','), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const ExcelJSMod = await import('exceljs')
+    const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Pending')
+
+    const locationLabel = locationId
+      ? filteredLocations.find((l) => String(l.id) === String(locationId))?.delivery_location || String(locationId)
+      : 'All'
+    ws.addRow(['Ram Sales — Pending Orders (Admin)'])
+    ws.addRow([`Location: ${locationLabel} | Payment: ${payment || 'All'} | Grade: ${memberGrade ? memberGrade.trim() : 'All'} | Search: ${term || 'All'}`])
+
+    const headers = Object.keys(rows[0] || { id: '' })
+    ws.addRow(headers)
+    for (const r of rows) ws.addRow(headers.map((h) => r[h]))
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'ram_pending_orders.csv'
+    a.download = `admin_ram_pending_${new Date().toISOString().split('T')[0]}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -419,216 +435,269 @@ function RamPendingContent() {
         ) : null}
       </AnimatePresence>
 
-      <div className="space-y-2 mb-4">
-        <div className="flex gap-2">
-          <input
-            className="border rounded px-3 py-2 text-xs sm:text-sm flex-1"
-            placeholder="Search (ID or member ID)"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-          />
-          <button className="px-4 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={fetchOrders}>
-            Search
-          </button>
-        </div>
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <input
+                className="w-full max-w-[420px] border-2 border-gray-200 rounded-xl px-3 py-2 text-sm"
+                placeholder="Search (Order ID / Member ID)"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') fetchOrders()
+                }}
+              />
+              <button
+                type="button"
+                onClick={fetchOrders}
+                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+              >
+                Search
+              </button>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={(e) => setPayment(e.target.value)}>
-            <option value="">All payments</option>
-            <option value="Cash">Cash</option>
-            <option value="Savings">Savings</option>
-            <option value="Loan">Loan</option>
-          </select>
-
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-            <option value="">All delivery locations</option>
-            {filteredLocations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.delivery_location}
-              </option>
-            ))}
-          </select>
-
-          <input
-            className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
-            placeholder="Member grade (e.g. Retiree)"
-            value={memberGrade}
-            onChange={(e) => setMemberGrade(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-3">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>
-          Refresh
-        </button>
-        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>
-          Select All
-        </button>
-        <button
-          className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50"
-          onClick={() => openBulkModal('Approved')}
-          disabled={!selected.size || bulkBusy}
-        >
-          Approve Selected ({selected.size})
-        </button>
-        <button
-          className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-          onClick={() => openDeleteModal(Array.from(selected))}
-          disabled={!selected.size || bulkBusy}
-        >
-          Delete Selected ({selected.size})
-        </button>
-        <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm" onClick={exportCSV}>
-          Download CSV
-        </button>
-        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>
-          Download PDF
-        </button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-        <div className="text-xs sm:text-sm text-gray-700">
-          Showing {orders.length ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, orders.length)} of {orders.length}
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value) || 50)}
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={safePage <= 1}
-          >
-            Prev
-          </button>
-          <div className="text-xs sm:text-sm text-gray-700">
-            Page {safePage} / {pageCount}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                value={payment}
+                onChange={(e) => setPayment(e.target.value)}
+              >
+                <option value="">All payments</option>
+                <option value="Cash">Cash</option>
+                <option value="Savings">Savings</option>
+                <option value="Loan">Loan</option>
+              </select>
+              <select
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+              >
+                <option value="">All delivery locations</option>
+                {filteredLocations.map((l) => (
+                  <option key={l.id} value={String(l.id)}>
+                    {l.delivery_location}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                placeholder="Member grade (e.g. Retiree)"
+                value={memberGrade}
+                onChange={(e) => setMemberGrade(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={!orders.length}
+                className="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={exportPDF}
+                disabled={!orders.length}
+                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                Download PDF
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            disabled={safePage >= pageCount}
-          >
-            Next
-          </button>
+
+          <div className="text-xs text-gray-600">
+            Orders: {orders.length.toLocaleString()} · Selected: {selectedCount.toLocaleString()}
+          </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto border rounded bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2 border text-left w-10">
-                <input
-                  type="checkbox"
-                  checked={pagedOrders.length > 0 && pagedOrders.every((o) => selected.has(o.id))}
-                  onChange={selectAll}
-                />
-              </th>
-              <th className="p-2 border text-left">Order</th>
-              <th className="p-2 border text-left">Member</th>
-              <th className="p-2 border text-left">Delivery</th>
-              <th className="p-2 border text-left">Payment</th>
-              <th className="p-2 border text-right">Qty</th>
-              <th className="p-2 border text-right">Unit</th>
-              <th className="p-2 border text-right">Total</th>
-              <th className="p-2 border text-left">Actions</th>
-            </tr>
-          </thead>
-          <motion.tbody layout>
-            {loading && (
-              <>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={`sk-${i}`} className="animate-pulse">
-                    <td className="p-2 border" colSpan={9}>
-                      <div className="h-4 bg-gray-100 rounded w-full" />
-                    </td>
-                  </tr>
-                ))}
-              </>
-            )}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold">Pending Orders</div>
+            <button
+              type="button"
+              onClick={fetchOrders}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              onClick={selectAll}
+              disabled={!pagedOrders.length}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+            >
+              {allSelectedOnPage ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkModal('Approved')}
+              disabled={!selectedCount || bulkBusy}
+              className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              Approve Selected ({selectedCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => openDeleteModal(Array.from(selected))}
+              disabled={!selectedCount || bulkBusy}
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              Delete Selected ({selectedCount})
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              className="border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) || 50)}
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+            >
+              Prev
+            </button>
+            <div className="text-xs text-gray-500">
+              Page {safePage} / {pageCount}
+            </div>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={safePage >= pageCount}
+            >
+              Next
+            </button>
+          </div>
+        </div>
 
-            {!loading && orders.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="bg-gray-50 border-b">
               <tr>
-                <td className="p-3 text-gray-600" colSpan={9}>
-                  No Pending ram orders.
-                </td>
+                <th className="p-2 text-left w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelectedOnPage}
+                    onChange={selectAll}
+                    disabled={!pagedOrders.length}
+                    className="h-4 w-4"
+                    aria-label="Select all"
+                  />
+                </th>
+                <th className="p-2 text-left">Order</th>
+                <th className="p-2 text-left">Member</th>
+                <th className="p-2 text-left">Delivery</th>
+                <th className="p-2 text-left">Payment</th>
+                <th className="p-2 text-right">Qty</th>
+                <th className="p-2 text-right">Unit</th>
+                <th className="p-2 text-right">Total</th>
+                <th className="p-2 text-right">Actions</th>
               </tr>
-            )}
+            </thead>
+            <motion.tbody layout>
+              {loading && (
+                <>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`sk-${i}`} className="animate-pulse">
+                      <td className="p-2" colSpan={9}>
+                        <div className="h-4 bg-gray-100 rounded w-full" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )}
 
-            <AnimatePresence initial={false}>
-              {!loading &&
-                pagedOrders.map((o) => (
-                  <motion.tr
-                    key={o.id}
-                    layout
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16, ease: 'easeOut' }}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="p-2 border">
-                      <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggleSelect(o.id)} />
-                    </td>
-                    <td className="p-2 border">
-                      <div className="font-medium">#{o.id}</div>
-                      <div className="text-gray-600">{new Date(o.created_at).toLocaleString()}</div>
-                    </td>
-                    <td className="p-2 border">
-                      <div className="font-medium">{o.member_id}</div>
-                      <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
-                      <div className="text-gray-600">{o.member?.phone || ''}</div>
-                      <div className="text-gray-600">
-                        {o.member_category || '-'}
-                        {o.member_grade ? ` (${o.member_grade})` : ''}
-                      </div>
-                    </td>
-                    <td className="p-2 border">
-                      <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>
-                      <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
-                      <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
-                    </td>
-                    <td className="p-2 border">{o.payment_option || '-'}</td>
-                    <td className="p-2 border text-right">{o.qty || 0}</td>
-                    <td className="p-2 border text-right">{money(o.unit_price)}</td>
-                    <td className="p-2 border text-right">
-                      <div className="font-medium">{money(o.total_amount)}</div>
-                    </td>
-                    <td className="p-2 border">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50"
-                          onClick={() => openEditModal(o)}
-                          disabled={bulkBusy || editBusy}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded bg-red-600 text-white text-xs hover:bg-red-700 disabled:opacity-50"
-                          onClick={() => openDeleteModal([o.id])}
-                          disabled={bulkBusy}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-            </AnimatePresence>
-          </motion.tbody>
-        </table>
+              {!loading && orders.length === 0 && (
+                <tr>
+                  <td className="p-3 text-gray-600" colSpan={9}>
+                    No Pending ram orders.
+                  </td>
+                </tr>
+              )}
+
+              <AnimatePresence initial={false}>
+                {!loading &&
+                  pagedOrders.map((o) => (
+                    <motion.tr
+                      key={o.id}
+                      layout
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.16, ease: 'easeOut' }}
+                      className="border-b last:border-b-0 hover:bg-gray-50"
+                    >
+                      <td className="p-2 align-top">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(o.id)}
+                          onChange={() => toggleSelect(o.id)}
+                          className="h-4 w-4"
+                          aria-label={`Select order ${o.id}`}
+                        />
+                      </td>
+                      <td className="p-2 align-top">
+                        <div className="font-medium">#{o.id}</div>
+                        <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+                      </td>
+                      <td className="p-2 align-top">
+                        <div className="font-medium">{o.member_id}</div>
+                        <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
+                        <div className="text-gray-600">{o.member?.phone || ''}</div>
+                        <div className="text-gray-600">
+                          {o.member_category || '-'}
+                          {o.member_grade ? ` (${o.member_grade})` : ''}
+                        </div>
+                      </td>
+                      <td className="p-2 align-top whitespace-pre-line">
+                        <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>
+                        <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
+                        <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
+                      </td>
+                      <td className="p-2 align-top">{o.payment_option || '-'}</td>
+                      <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
+                      <td className="p-2 align-top text-right">{money(o.unit_price)}</td>
+                      <td className="p-2 align-top text-right">
+                        <div className="font-medium">{money(o.total_amount)}</div>
+                      </td>
+                      <td className="p-2 align-top text-right">
+                        <div className="flex justify-end">
+                          <select
+                            defaultValue=""
+                            disabled={bulkBusy || editBusy}
+                            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
+                            onChange={(e) => {
+                              const v = e.target.value
+                              e.target.value = ''
+                              if (!v) return
+                              if (v === 'edit') openEditModal(o)
+                              if (v === 'delete') openDeleteModal([o.id])
+                            }}
+                          >
+                            <option value="" disabled>
+                              Actions
+                            </option>
+                            <option value="edit">Edit</option>
+                            <option value="delete">Delete</option>
+                          </select>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+              </AnimatePresence>
+            </motion.tbody>
+          </table>
+        </div>
       </div>
 
       <DraggableModal

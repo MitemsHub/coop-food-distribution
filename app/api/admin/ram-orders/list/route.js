@@ -81,7 +81,7 @@ export async function GET(req) {
     const ramCycleParam = (searchParams.get('ram_cycle_id') || searchParams.get('cycle_id') || '').trim()
     const limit = Math.min(Math.max(asInt(searchParams.get('limit'), 300), 1), 1000)
 
-    const allowedStatus = new Set(['Pending', 'Approved', 'Cancelled'])
+    const allowedStatus = new Set(['Pending', 'Approved', 'Delivered', 'Cancelled'])
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
 
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')

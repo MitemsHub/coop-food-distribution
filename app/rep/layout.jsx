@@ -43,6 +43,7 @@ export default function RepLayout({ children }) {
     if (pathname.startsWith('/rep/posted')) return 'food_posted'
     if (pathname.startsWith('/rep/delivered')) return 'food_delivered'
     if (pathname.startsWith('/rep/ram/approved')) return 'ram_approved'
+    if (pathname.startsWith('/rep/ram/delivered')) return 'ram_delivered'
     return ''
   }, [pathname])
 
@@ -127,6 +128,9 @@ export default function RepLayout({ children }) {
                   <div className="mt-2 space-y-1">
                     <Link href="/rep/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
                       Approved
+                    </Link>
+                    <Link href="/rep/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
+                      Delivered
                     </Link>
                   </div>
                 )}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import { AnimatePresence, motion } from 'framer-motion'
+import DraggableModal from '../../../components/DraggableModal'
 
 function safeJsonFactory() {
   return async (res, label) => {
@@ -27,13 +28,18 @@ const toastMotion = {
 function RamApprovedContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
-  const [payment, setPayment] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [deliveryLocationId, setDeliveryLocationId] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [rollbackBusyId, setRollbackBusyId] = useState(null)
   const [receiptBusyId, setReceiptBusyId] = useState(null)
+  const [delivering, setDelivering] = useState(false)
+  const [deliverBusyIds, setDeliverBusyIds] = useState(() => new Set())
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [deliverConfirmOpen, setDeliverConfirmOpen] = useState(false)
+  const [deliverConfirmIds, setDeliverConfirmIds] = useState([])
+  const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false)
+  const [rollbackConfirmOrder, setRollbackConfirmOrder] = useState(null)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
@@ -48,21 +54,20 @@ function RamApprovedContent() {
       fetchCtl.current = ctl
       const qs = new URLSearchParams({
         status: 'Approved',
-        limit: '800',
+        limit: '1000',
         ...(term ? { term } : {}),
-        ...(payment ? { payment } : {}),
       })
       const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/ram-orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       let rows = json.orders || []
-      if (from) rows = rows.filter((r) => new Date(r.created_at) >= new Date(from))
-      if (to) rows = rows.filter((r) => new Date(r.created_at) <= new Date(to + 'T23:59:59'))
       setOrders(rows)
+      setSelectedIds(new Set())
       setPage(1)
     } catch (e) {
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
+      setSelectedIds(new Set())
     } finally {
       setLoading(false)
     }
@@ -75,12 +80,15 @@ function RamApprovedContent() {
     }
   }, [])
 
+  useEffect(() => {
+    setSelectedIds(new Set())
+    setPage(1)
+  }, [deliveryLocationId])
+
   const rollbackToPending = async (id) => {
     const orderId = Number(id)
     if (!Number.isFinite(orderId) || orderId <= 0) return
     if (rollbackBusyId) return
-    const ok = window.confirm(`Rollback order #${orderId} back to Pending?`)
-    if (!ok) return
     setRollbackBusyId(orderId)
     setMsg(null)
     try {
@@ -213,8 +221,36 @@ function RamApprovedContent() {
     }
   }
 
-  const exportCSV = () => {
-    const rows = orders.map((o) => ({
+  const locations = useMemo(() => {
+    const byId = new Map()
+    for (const o of orders || []) {
+      const loc = o?.delivery_location
+      const id = Number(loc?.id ?? o?.ram_delivery_location_id)
+      if (!Number.isFinite(id) || id <= 0) continue
+      if (byId.has(id)) continue
+      const title = String(loc?.delivery_location || '').trim()
+      const name = String(loc?.name || '').trim()
+      const label = [title, name].filter(Boolean).join(' — ')
+      byId.set(id, { id, label: label || `Location ${id}` })
+    }
+    return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [orders])
+
+  const selectedLocationLabel = useMemo(() => {
+    const id = Number(deliveryLocationId)
+    if (!Number.isFinite(id) || id <= 0) return ''
+    return locations.find((l) => l.id === id)?.label || ''
+  }, [deliveryLocationId, locations])
+
+  const filteredOrders = useMemo(() => {
+    const id = Number(deliveryLocationId)
+    if (!Number.isFinite(id) || id <= 0) return orders || []
+    return (orders || []).filter((o) => Number(o?.ram_delivery_location_id) === id)
+  }, [deliveryLocationId, orders])
+
+  const exportExcel = async () => {
+    const list = filteredOrders || []
+    const rows = list.map((o) => ({
       id: o.id,
       created_at: o.created_at,
       member_id: o.member_id,
@@ -224,6 +260,8 @@ function RamApprovedContent() {
       member_grade: o.member_grade || '',
       payment: o.payment_option || '',
       delivery_location: o.delivery_location?.delivery_location || '',
+      vendor_name: o.delivery_location?.name || '',
+      vendor_phone: o.delivery_location?.phone || '',
       qty: o.qty,
       unit_price: o.unit_price,
       total_amount: o.total_amount,
@@ -232,29 +270,38 @@ function RamApprovedContent() {
       signature: '',
     }))
     if (!rows.length) return
-    const headers = Object.keys(rows[0])
-    const csv = [headers.join(','), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const ExcelJSMod = await import('exceljs')
+    const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Approved')
+
+    ws.addRow(['Ram Sales — Approved Orders (Admin)'])
+    ws.addRow([`Delivery Location: ${selectedLocationLabel || 'All'} | Search: ${term || 'All'}`])
+
+    const headers = Object.keys(rows[0] || { id: '' })
+    ws.addRow(headers)
+    for (const r of rows) ws.addRow(headers.map((h) => r[h]))
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'ram_approved_orders.csv'
+    a.download = `admin_ram_approved_${new Date().toISOString().split('T')[0]}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const exportPDF = async () => {
-    if (!orders.length) return
+    if (!filteredOrders.length) return
     const { jsPDF } = await import('jspdf')
     const { default: autoTable } = await import('jspdf-autotable')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
     const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
     const filters = [
-      `Payment: ${payment || 'All'}`,
+      `Delivery: ${selectedLocationLabel || 'All'}`,
       `Search: ${term || 'All'}`,
-      `From: ${from || 'Any'}`,
-      `To: ${to || 'Any'}`,
     ].join('  |  ')
 
     doc.setFontSize(14)
@@ -281,7 +328,7 @@ function RamApprovedContent() {
       ],
     ]
 
-    const body = orders.map((o) => [
+    const body = filteredOrders.map((o) => [
       String(o.id ?? ''),
       o.created_at ? new Date(o.created_at).toLocaleString() : '',
       sanitize(o.member_id),
@@ -297,7 +344,7 @@ function RamApprovedContent() {
       '',
     ])
 
-    const totals = orders.reduce(
+    const totals = filteredOrders.reduce(
       (acc, o) => {
         acc.qty += Number(o.qty || 0)
         acc.principal += Number(o.principal_amount || 0)
@@ -352,13 +399,107 @@ function RamApprovedContent() {
   }
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil((orders?.length || 0) / Math.max(1, pageSize))), [orders, pageSize])
-  const safePage = Math.min(Math.max(1, page), pageCount)
+  const filteredPageCount = useMemo(
+    () => Math.max(1, Math.ceil((filteredOrders?.length || 0) / Math.max(1, pageSize))),
+    [filteredOrders, pageSize]
+  )
+  const safePage = Math.min(Math.max(1, page), filteredPageCount)
   const startIndex = (safePage - 1) * pageSize
-  const pagedOrders = useMemo(() => (orders || []).slice(startIndex, startIndex + pageSize), [orders, startIndex, pageSize])
+  const endIndex = startIndex + pageSize
+  const pagedOrders = useMemo(() => (filteredOrders || []).slice(startIndex, endIndex), [filteredOrders, startIndex, endIndex])
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage)
   }, [page, safePage])
+
+  const selectedCount = selectedIds.size
+  const allSelected = filteredOrders.length > 0 && selectedCount === filteredOrders.length
+
+  const toggleSelect = (id) => {
+    const orderId = Number(id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    setSelectedIds((prev) => {
+      const next = new Set(prev || [])
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const cur = new Set(prev || [])
+      if (filteredOrders.length > 0 && cur.size === filteredOrders.length) return new Set()
+      return new Set((filteredOrders || []).map((o) => Number(o.id)).filter((n) => Number.isFinite(n) && n > 0))
+    })
+  }
+
+  const requestDeliver = (ids) => {
+    const list = Array.from(new Set((ids || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)))
+    if (!list.length) return
+    if (delivering) return
+    setDeliverConfirmIds(list)
+    setDeliverConfirmOpen(true)
+  }
+
+  const deliverIds = async (ids) => {
+    const list = Array.from(new Set((ids || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)))
+    if (!list.length) return
+    if (delivering) return
+    setDelivering(true)
+    setMsg(null)
+    setDeliverBusyIds(new Set(list))
+    try {
+      const res = await fetch('/api/admin/ram-orders/update-status-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ids: list, status: 'Delivered' }),
+      })
+      const json = await safeJson(res, '/api/admin/ram-orders/update-status-bulk')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to deliver')
+      const updatedIds = new Set((json.updated || []).map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0))
+      setOrders((prev) => (prev || []).filter((o) => !updatedIds.has(Number(o.id))))
+      setSelectedIds((prev) => {
+        const next = new Set(prev || [])
+        for (const id of updatedIds) next.delete(id)
+        return next
+      })
+      setMsg({ type: 'success', text: `${updatedIds.size} order(s) marked as Delivered` })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Failed to deliver' })
+    } finally {
+      setDelivering(false)
+      setDeliverBusyIds(new Set())
+    }
+  }
+
+  const requestRollback = (order) => {
+    const orderId = Number(order?.id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    if (rollbackBusyId || delivering) return
+    setRollbackConfirmOrder(order || null)
+    setRollbackConfirmOpen(true)
+  }
+
+  const confirmRollback = async () => {
+    const orderId = Number(rollbackConfirmOrder?.id)
+    setRollbackConfirmOpen(false)
+    setRollbackConfirmOrder(null)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    await rollbackToPending(orderId)
+  }
+
+  const deliverSelected = async () => {
+    if (!selectedIds.size) return
+    requestDeliver(Array.from(selectedIds))
+  }
+
+  const confirmDeliver = async () => {
+    const ids = Array.from(deliverConfirmIds || [])
+    setDeliverConfirmOpen(false)
+    setDeliverConfirmIds([])
+    await deliverIds(ids)
+  }
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
@@ -380,98 +521,142 @@ function RamApprovedContent() {
         ) : null}
       </AnimatePresence>
 
-      <div className="space-y-2 mb-4">
-        <div className="flex gap-2">
-          <input
-            className="border rounded px-3 py-2 text-xs sm:text-sm flex-1"
-            placeholder="Search (ID or member ID)"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-          />
-          <button className="px-4 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={fetchOrders}>
-            Search
-          </button>
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <input
+                className="w-full max-w-[420px] border-2 border-gray-200 rounded-xl px-3 py-2 text-sm"
+                placeholder="Search (Order ID / Member ID)"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') fetchOrders()
+                }}
+              />
+              <button
+                type="button"
+                onClick={fetchOrders}
+                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+              >
+                Search
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                value={deliveryLocationId}
+                onChange={(e) => setDeliveryLocationId(e.target.value)}
+              >
+                <option value="">All locations</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={String(l.id)}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={!filteredOrders.length}
+                className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={exportPDF}
+                disabled={!filteredOrders.length}
+                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-600">Orders: {filteredOrders.length.toLocaleString()} · Selected: {selectedCount.toLocaleString()}</div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={(e) => setPayment(e.target.value)}>
-            <option value="">All payments</option>
-            <option value="Cash">Cash</option>
-            <option value="Savings">Savings</option>
-            <option value="Loan">Loan</option>
-          </select>
-
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold">Approved Orders</div>
+            <button
+              type="button"
+              onClick={fetchOrders}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              disabled={!orders.length}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+            >
+              {allSelected ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              onClick={deliverSelected}
+              disabled={!selectedCount || delivering}
+              className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              {delivering && selectedCount ? 'Delivering…' : `Deliver Selected (${selectedCount})`}
+            </button>
+          </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">From</label>
-            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">To</label>
-            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={to} onChange={(e) => setTo(e.target.value)} />
+            <select className="border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value) || 50)}>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+            >
+              Prev
+            </button>
+            <div className="text-xs text-gray-500">
+              Page {safePage} / {filteredPageCount}
+            </div>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.min(filteredPageCount, p + 1))}
+              disabled={safePage >= filteredPageCount}
+            >
+              Next
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={fetchOrders}>
-          Refresh
-        </button>
-        <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm" onClick={exportCSV}>
-          Download CSV
-        </button>
-        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm" onClick={exportPDF}>
-          Download PDF
-        </button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-        <div className="text-xs sm:text-sm text-gray-700">
-          Showing {orders.length ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, orders.length)} of {orders.length}
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value) || 50)}
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={safePage <= 1}
-          >
-            Prev
-          </button>
-          <div className="text-xs sm:text-sm text-gray-700">
-            Page {safePage} / {pageCount}
-          </div>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            disabled={safePage >= pageCount}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto border rounded bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="p-2 border text-left">Order</th>
-              <th className="p-2 border text-left">Member</th>
-              <th className="p-2 border text-left">Delivery</th>
-              <th className="p-2 border text-left">Payment</th>
-              <th className="p-2 border text-right">Qty</th>
-              <th className="p-2 border text-right">Total</th>
-              <th className="p-2 border text-left">Actions</th>
+                <th className="p-2 text-left w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    disabled={!orders.length}
+                    className="h-4 w-4"
+                    aria-label="Select all"
+                  />
+                </th>
+              <th className="p-2 text-left">Order</th>
+              <th className="p-2 text-left">Member</th>
+              <th className="p-2 text-left">Delivery</th>
+              <th className="p-2 text-left">Payment</th>
+              <th className="p-2 text-right">Qty</th>
+              <th className="p-2 text-right">Total</th>
+              <th className="p-2 text-right">Actions</th>
             </tr>
           </thead>
           <motion.tbody layout>
@@ -479,7 +664,7 @@ function RamApprovedContent() {
               <>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <tr key={`sk-${i}`} className="animate-pulse">
-                    <td className="p-2 border" colSpan={7}>
+                    <td className="p-2" colSpan={8}>
                       <div className="h-4 bg-gray-100 rounded w-full" />
                     </td>
                   </tr>
@@ -489,7 +674,7 @@ function RamApprovedContent() {
 
             {!loading && orders.length === 0 && (
               <tr>
-                <td className="p-3 text-gray-600" colSpan={7}>
+                <td className="p-3 text-gray-600" colSpan={8}>
                   No Approved ram orders.
                 </td>
               </tr>
@@ -505,53 +690,167 @@ function RamApprovedContent() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.16, ease: 'easeOut' }}
-                    className="hover:bg-gray-50"
+                    className="border-b last:border-b-0 hover:bg-gray-50"
                   >
-                    <td className="p-2 border">
+                    <td className="p-2 align-top">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(Number(o.id))}
+                        onChange={() => toggleSelect(o.id)}
+                        className="h-4 w-4"
+                        aria-label={`Select order ${o.id}`}
+                      />
+                    </td>
+                    <td className="p-2 align-top">
                       <div className="font-medium">#{o.id}</div>
                       <div className="text-gray-600">{new Date(o.created_at).toLocaleString()}</div>
                     </td>
-                    <td className="p-2 border">
+                    <td className="p-2 align-top">
                       <div className="font-medium">{o.member_id}</div>
                       <div className="text-gray-600 break-words">{o.member?.full_name || '-'}</div>
                       <div className="text-gray-600">{o.member?.phone || ''}</div>
                     </td>
-                    <td className="p-2 border">
+                    <td className="p-2 align-top whitespace-pre-line">
                       <div className="font-medium">{o.delivery_location?.delivery_location || '-'}</div>
                       <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
                       <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
                     </td>
-                    <td className="p-2 border">{o.payment_option || '-'}</td>
-                    <td className="p-2 border text-right">{o.qty || 0}</td>
-                    <td className="p-2 border text-right">
+                    <td className="p-2 align-top">{o.payment_option || '-'}</td>
+                    <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
+                    <td className="p-2 align-top text-right">
                       <div className="font-medium">{money(o.total_amount)}</div>
                     </td>
-                    <td className="p-2 border">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded bg-orange-600 text-white text-xs hover:bg-orange-700 disabled:opacity-50"
-                          onClick={() => rollbackToPending(o.id)}
-                          disabled={loading || rollbackBusyId === o.id || receiptBusyId === o.id}
+                    <td className="p-2 align-top text-right">
+                      <div className="flex justify-end">
+                        <select
+                          defaultValue=""
+                          disabled={loading || delivering || rollbackBusyId === o.id || receiptBusyId === o.id || deliverBusyIds.has(Number(o.id))}
+                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
+                          onChange={(e) => {
+                            const v = e.target.value
+                            e.target.value = ''
+                            if (!v) return
+                            if (v === 'deliver') requestDeliver([o.id])
+                            else if (v === 'rollback') requestRollback(o)
+                            else if (v === 'receipt') printReceipt(o)
+                          }}
                         >
-                          {rollbackBusyId === o.id ? 'Rolling back...' : 'Rollback'}
-                        </button>
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50"
-                          onClick={() => printReceipt(o)}
-                          disabled={loading || rollbackBusyId === o.id || receiptBusyId === o.id}
-                        >
-                          {receiptBusyId === o.id ? 'Preparing...' : 'Receipt'}
-                        </button>
+                          <option value="" disabled>
+                            Actions
+                          </option>
+                          <option value="deliver">Deliver</option>
+                          <option value="rollback">Rollback</option>
+                          <option value="receipt">Receipt</option>
+                        </select>
                       </div>
                     </td>
                   </motion.tr>
                 ))}
             </AnimatePresence>
           </motion.tbody>
-        </table>
+          </table>
+        </div>
       </div>
+
+      <DraggableModal
+        open={deliverConfirmOpen}
+        onClose={() => {
+          if (delivering) return
+          setDeliverConfirmOpen(false)
+          setDeliverConfirmIds([])
+        }}
+        title="Confirm Delivery"
+        overlayClassName="bg-black/40"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => {
+                setDeliverConfirmOpen(false)
+                setDeliverConfirmIds([])
+              }}
+              disabled={delivering}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50"
+              onClick={confirmDeliver}
+              disabled={delivering}
+            >
+              {delivering ? 'Delivering…' : 'Yes, Delivered'}
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-800">
+          <div className="font-semibold text-gray-900">Has the member taken possession of the Ram?</div>
+          <div className="mt-1 text-gray-700">
+            {deliverConfirmIds.length === 1
+              ? `This will mark order #${deliverConfirmIds[0]} as Delivered.`
+              : `This will mark ${deliverConfirmIds.length} order(s) as Delivered.`}
+          </div>
+          <div className="mt-3 text-xs text-gray-600">This action can be rolled back by Admin if needed.</div>
+        </div>
+      </DraggableModal>
+
+      <DraggableModal
+        open={rollbackConfirmOpen}
+        onClose={() => {
+          if (rollbackBusyId) return
+          setRollbackConfirmOpen(false)
+          setRollbackConfirmOrder(null)
+        }}
+        title="Confirm Rollback"
+        overlayClassName="bg-black/40"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => {
+                setRollbackConfirmOpen(false)
+                setRollbackConfirmOrder(null)
+              }}
+              disabled={!!rollbackBusyId}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold disabled:opacity-50"
+              onClick={confirmRollback}
+              disabled={!!rollbackBusyId}
+            >
+              {rollbackBusyId ? 'Rolling back…' : 'Yes, Rollback'}
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-800">
+          <div className="font-semibold text-gray-900">Are you sure you want to rollback this order?</div>
+          <div className="mt-1 text-gray-700">
+            This will move order #{rollbackConfirmOrder?.id ?? '—'} from <span className="font-semibold">Approved</span> to{' '}
+            <span className="font-semibold">Pending</span> records.
+          </div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <div className="text-gray-500">Member</div>
+              <div className="font-semibold">{rollbackConfirmOrder?.member_id || '—'}</div>
+              <div className="text-gray-600">{rollbackConfirmOrder?.member?.full_name || ''}</div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <div className="text-gray-500">Delivery Location</div>
+              <div className="font-semibold">{rollbackConfirmOrder?.delivery_location?.delivery_location || '—'}</div>
+              <div className="text-gray-600">{rollbackConfirmOrder?.delivery_location?.name || ''}</div>
+              <div className="text-gray-600">{rollbackConfirmOrder?.delivery_location?.phone || ''}</div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-600">After rollback, you’ll find it under Admin → Ram Sales → Pending.</div>
+        </div>
+      </DraggableModal>
     </div>
   )
 }

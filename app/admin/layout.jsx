@@ -48,6 +48,7 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/data-management')) return 'food_data'
     if (pathname.startsWith('/admin/ram/pending')) return 'ram_pending'
     if (pathname.startsWith('/admin/ram/approved')) return 'ram_approved'
+    if (pathname.startsWith('/admin/ram/delivered')) return 'ram_delivered'
     if (pathname.startsWith('/admin/ram/inventory')) return 'ram_inventory'
     if (pathname.startsWith('/admin/ram/reports')) return 'ram_reports'
     if (pathname.startsWith('/admin/ram/data')) return 'ram_data'
@@ -158,6 +159,9 @@ export default function AdminLayout({ children }) {
                   </Link>
                   <Link href="/admin/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
                     Approved
+                  </Link>
+                  <Link href="/admin/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
+                    Delivered
                   </Link>
                   <Link href="/admin/ram/inventory" className={navItemClass(activeKey === 'ram_inventory')}>
                     Inventory

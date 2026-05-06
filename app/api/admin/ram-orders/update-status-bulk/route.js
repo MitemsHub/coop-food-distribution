@@ -14,7 +14,7 @@ export async function POST(req) {
     const ids = Array.isArray(body.ids) ? body.ids : []
     const status = String(body.status || '').trim()
 
-    const allowedStatus = new Set(['Pending', 'Approved', 'Cancelled'])
+    const allowedStatus = new Set(['Pending', 'Approved', 'Delivered', 'Cancelled'])
     if (!allowedStatus.has(status)) {
       return NextResponse.json({ ok: false, error: 'Invalid status' }, { status: 400 })
     }

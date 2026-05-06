@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
-import DraggableModal from '../../../components/DraggableModal'
 
 function safeJsonFactory() {
   return async (res, label) => {
@@ -17,27 +16,13 @@ function money(n) {
   return `₦${Number(n || 0).toLocaleString()}`
 }
 
-function Spinner({ className = '' }) {
-  return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" aria-hidden="true">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  )
-}
-
-function RepRamApprovedContent() {
+function RepRamDeliveredContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
   const [deliveryLocationId, setDeliveryLocationId] = useState('')
   const [locationOptions, setLocationOptions] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [delivering, setDelivering] = useState(false)
-  const [deliverBusyIds, setDeliverBusyIds] = useState(() => new Set())
-  const [selectedIds, setSelectedIds] = useState(() => new Set())
-  const [deliverConfirmOpen, setDeliverConfirmOpen] = useState(false)
-  const [deliverConfirmIds, setDeliverConfirmIds] = useState([])
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
   const [pageSize, setPageSize] = useState(50)
@@ -54,6 +39,7 @@ function RepRamApprovedContent() {
       const ctl = new AbortController()
       fetchCtl.current = ctl
       const qs = new URLSearchParams({
+        status: 'Delivered',
         limit: '1000',
         ...(term ? { term } : {}),
         ...(deliveryLocationId ? { delivery_location_id: deliveryLocationId } : {}),
@@ -76,12 +62,10 @@ function RepRamApprovedContent() {
         }
         return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label))
       })
-      setSelectedIds(new Set())
       setPage(1)
     } catch (e) {
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
-      setSelectedIds(new Set())
     } finally {
       setLoading(false)
     }
@@ -98,7 +82,6 @@ function RepRamApprovedContent() {
   useEffect(() => {
     if (!didInitRef.current) return
     fetchOrders()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliveryLocationId])
 
   const selectedLocationLabel = useMemo(() => {
@@ -106,90 +89,6 @@ function RepRamApprovedContent() {
     if (!Number.isFinite(id) || id <= 0) return ''
     return locationOptions.find((l) => Number(l.id) === id)?.label || ''
   }, [deliveryLocationId, locationOptions])
-
-  const pageCount = useMemo(() => Math.max(1, Math.ceil((orders?.length || 0) / Math.max(1, pageSize))), [orders, pageSize])
-  const safePage = Math.min(Math.max(1, page), pageCount)
-  const startIndex = (safePage - 1) * pageSize
-  const endIndex = startIndex + pageSize
-  const pageRows = useMemo(() => (orders || []).slice(startIndex, endIndex), [endIndex, orders, startIndex])
-
-  useEffect(() => {
-    if (page !== safePage) setPage(safePage)
-  }, [page, safePage])
-
-  const selectedCount = selectedIds.size
-  const allSelected = orders.length > 0 && selectedCount === orders.length
-
-  const toggleSelect = (id) => {
-    const orderId = Number(id)
-    if (!Number.isFinite(orderId) || orderId <= 0) return
-    setSelectedIds((prev) => {
-      const next = new Set(prev || [])
-      if (next.has(orderId)) next.delete(orderId)
-      else next.add(orderId)
-      return next
-    })
-  }
-
-  const toggleSelectAll = () => {
-    setSelectedIds((prev) => {
-      const cur = new Set(prev || [])
-      if (orders.length > 0 && cur.size === orders.length) return new Set()
-      return new Set((orders || []).map((o) => Number(o.id)).filter((n) => Number.isFinite(n) && n > 0))
-    })
-  }
-
-  const requestDeliver = (ids) => {
-    const list = Array.from(new Set((ids || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)))
-    if (!list.length) return
-    if (delivering) return
-    setDeliverConfirmIds(list)
-    setDeliverConfirmOpen(true)
-  }
-
-  const deliverIds = async (ids) => {
-    const list = Array.from(new Set((ids || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)))
-    if (!list.length) return
-    if (delivering) return
-
-    setDelivering(true)
-    setMsg(null)
-    setDeliverBusyIds(new Set(list))
-    try {
-      const res = await fetch('/api/rep/ram-orders/update-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ids: list, status: 'Delivered' }),
-      })
-      const json = await safeJson(res, '/api/rep/ram-orders/update-status')
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to deliver')
-      const updatedIds = new Set((json.updated || []).map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0))
-      setOrders((prev) => (prev || []).filter((o) => !updatedIds.has(Number(o.id))))
-      setSelectedIds((prev) => {
-        const next = new Set(prev || [])
-        for (const id of updatedIds) next.delete(id)
-        return next
-      })
-      setMsg({ type: 'success', text: `${updatedIds.size} order(s) marked as Delivered` })
-    } catch (e) {
-      setMsg({ type: 'error', text: e?.message || 'Failed to deliver' })
-    } finally {
-      setDelivering(false)
-      setDeliverBusyIds(new Set())
-    }
-  }
-
-  const deliverSelected = async () => {
-    if (!selectedIds.size) return
-    requestDeliver(Array.from(selectedIds))
-  }
-
-  const confirmDeliver = async () => {
-    const ids = Array.from(deliverConfirmIds || [])
-    setDeliverConfirmOpen(false)
-    setDeliverConfirmIds([])
-    await deliverIds(ids)
-  }
 
   const exportExcel = async () => {
     if (!orders.length) return
@@ -217,12 +116,10 @@ function RepRamApprovedContent() {
       const ExcelJSMod = await import('exceljs')
       const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
       const wb = new ExcelJS.Workbook()
-      const ws = wb.addWorksheet('Approved')
+      const ws = wb.addWorksheet('Delivered')
 
-      ws.addRow(['Ram Sales — Approved Orders (Rep)'])
-      ws.addRow([
-        `Delivery Location: ${selectedLocationLabel || 'All'} | Search: ${term || 'All'}`,
-      ])
+      ws.addRow(['Ram Sales — Delivered Orders (Rep)'])
+      ws.addRow([`Delivery Location: ${selectedLocationLabel || 'All'} | Search: ${term || 'All'}`])
 
       const headers = Object.keys(rows[0] || { id: '' })
       ws.addRow(headers)
@@ -233,7 +130,7 @@ function RepRamApprovedContent() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `rep_ram_approved_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `rep_ram_delivered_${new Date().toISOString().split('T')[0]}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -259,7 +156,7 @@ function RepRamApprovedContent() {
       ].join('  |  ')
 
       doc.setFontSize(14)
-      doc.text('Ram Sales — Approved Orders', 12, 12)
+      doc.text('Ram Sales — Delivered Orders', 12, 12)
       doc.setFontSize(9)
       doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
       doc.text(`Filters: ${sanitize(filters)}`, 12, 24)
@@ -349,7 +246,7 @@ function RepRamApprovedContent() {
         margin: { left: 12, right: 12 },
       })
 
-      doc.save(`rep_ram_approved_${new Date().toISOString().split('T')[0]}.pdf`)
+      doc.save(`rep_ram_delivered_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (e) {
       setMsg({ type: 'error', text: e?.message || 'Download failed' })
     } finally {
@@ -357,12 +254,18 @@ function RepRamApprovedContent() {
     }
   }
 
+  const pageCount = useMemo(() => Math.max(1, Math.ceil((orders?.length || 0) / Math.max(1, pageSize))), [orders, pageSize])
+  const safePage = Math.min(Math.max(1, page), pageCount)
+  const startIndex = (safePage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const pageRows = useMemo(() => (orders || []).slice(startIndex, endIndex), [endIndex, orders, startIndex])
+
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Rep — Ram Sales (Approved)</h1>
-          <div className="text-xs sm:text-sm text-gray-600">Approve list for your delivery location(s). Select and mark as Delivered.</div>
+          <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Rep — Ram Sales (Delivered)</h1>
+          <div className="text-xs sm:text-sm text-gray-600">Delivered ram orders for your delivery location(s).</div>
         </div>
       </div>
 
@@ -377,27 +280,22 @@ function RepRamApprovedContent() {
       )}
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
             <div className="flex items-center gap-2 min-w-0">
               <input
                 className="w-full max-w-[420px] border-2 border-gray-200 rounded-xl px-3 py-2 text-sm"
-                placeholder="Search (Order ID / Member ID / Name)"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') fetchOrders()
-                }}
-              />
-              <button
-                type="button"
-                onClick={fetchOrders}
-                className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
-              >
-                Search
-              </button>
-            </div>
-
+              placeholder="Search (Order ID / Member ID / Name)"
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') fetchOrders()
+              }}
+            />
+            <button type="button" onClick={fetchOrders} className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">
+              Search
+            </button>
+          </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
                 className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
@@ -415,45 +313,28 @@ function RepRamApprovedContent() {
                 type="button"
                 onClick={exportExcel}
                 disabled={!orders.length || downloadingExcel || downloadingPdf}
-                className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50"
               >
-                {downloadingExcel ? (
-                  <>
-                    <Spinner className="w-4 h-4" />
-                    Preparing…
-                  </>
-                ) : (
-                  'Download Excel'
-                )}
+                {downloadingExcel ? 'Preparing…' : 'Download Excel'}
               </button>
               <button
                 type="button"
                 onClick={exportPDF}
                 disabled={!orders.length || downloadingExcel || downloadingPdf}
-                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
               >
-                {downloadingPdf ? (
-                  <>
-                    <Spinner className="w-4 h-4" />
-                    Preparing…
-                  </>
-                ) : (
-                  'Download PDF'
-                )}
+                {downloadingPdf ? 'Preparing…' : 'Download PDF'}
               </button>
             </div>
           </div>
-
-          <div className="text-xs text-gray-600">
-            Orders: {orders.length.toLocaleString()} · Selected: {selectedCount.toLocaleString()}
-          </div>
+          <div className="text-xs text-gray-600">Orders: {orders.length.toLocaleString()}</div>
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-semibold">Approved Orders</div>
+            <div className="text-sm font-semibold">Delivered Orders</div>
             <button
               type="button"
               onClick={fetchOrders}
@@ -461,22 +342,6 @@ function RepRamApprovedContent() {
               className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               {loading ? 'Loading…' : 'Refresh'}
-            </button>
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              disabled={!orders.length}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
-            >
-              {allSelected ? 'Deselect All' : 'Select All'}
-            </button>
-            <button
-              type="button"
-              onClick={deliverSelected}
-              disabled={!selectedCount || delivering}
-              className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-            >
-              {delivering && selectedCount ? 'Delivering…' : `Deliver Selected (${selectedCount})`}
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -515,136 +380,57 @@ function RepRamApprovedContent() {
           <table className="w-full text-xs sm:text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="p-2 text-left w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    disabled={!orders.length}
-                    className="h-4 w-4"
-                    aria-label="Select all"
-                  />
-                </th>
                 <th className="p-2 text-left">Order</th>
                 <th className="p-2 text-left">Member</th>
                 <th className="p-2 text-left">Delivery</th>
                 <th className="p-2 text-left">Payment</th>
                 <th className="p-2 text-right">Qty</th>
                 <th className="p-2 text-right">Total</th>
-                <th className="p-2 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {!pageRows.length && (
                 <tr>
-                  <td className="p-3 text-gray-600" colSpan={8}>
-                    {loading ? 'Loading…' : 'No approved orders.'}
+                  <td className="p-3 text-gray-600" colSpan={6}>
+                    {loading ? 'Loading…' : 'No delivered orders.'}
                   </td>
                 </tr>
               )}
-              {pageRows.map((o) => {
-                const id = Number(o.id)
-                const checked = selectedIds.has(id)
-                const busy = deliverBusyIds.has(id)
-                return (
-                  <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                    <td className="p-2 align-top">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSelect(id)}
-                        className="h-4 w-4"
-                        aria-label={`Select order ${id}`}
-                      />
-                    </td>
-                    <td className="p-2 align-top">
-                      <div className="font-medium">#{o.id}</div>
-                      <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
-                    </td>
-                    <td className="p-2 align-top">
-                      <div className="font-medium">{o.member_id}</div>
-                      <div className="text-gray-600">{o.member?.full_name || ''}</div>
-                      <div className="text-gray-600">{o.member?.phone || ''}</div>
-                    </td>
-                    <td className="p-2 align-top whitespace-pre-line">
-                      <div>{o.delivery_location?.delivery_location || ''}</div>
-                      <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
-                      <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
-                    </td>
-                    <td className="p-2 align-top">{o.payment_option || ''}</td>
-                    <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
-                    <td className="p-2 align-top text-right">
-                      <div className="font-medium">{money(o.total_amount)}</div>
-                    </td>
-                    <td className="p-2 align-top text-right">
-                      <button
-                        type="button"
-                        onClick={() => requestDeliver([id])}
-                        disabled={delivering || busy}
-                        className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                      >
-                        {busy ? 'Delivering…' : 'Deliver'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+              {pageRows.map((o) => (
+                <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                  <td className="p-2 align-top">
+                    <div className="font-medium">#{o.id}</div>
+                    <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+                  </td>
+                  <td className="p-2 align-top">
+                    <div className="font-medium">{o.member_id}</div>
+                    <div className="text-gray-600">{o.member?.full_name || ''}</div>
+                    <div className="text-gray-600">{o.member?.phone || ''}</div>
+                  </td>
+                  <td className="p-2 align-top whitespace-pre-line">
+                    <div>{o.delivery_location?.delivery_location || ''}</div>
+                    <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
+                    <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
+                  </td>
+                  <td className="p-2 align-top">{o.payment_option || ''}</td>
+                  <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
+                  <td className="p-2 align-top text-right">
+                    <div className="font-medium">{money(o.total_amount)}</div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      <DraggableModal
-        open={deliverConfirmOpen}
-        onClose={() => {
-          if (delivering) return
-          setDeliverConfirmOpen(false)
-          setDeliverConfirmIds([])
-        }}
-        title="Confirm Delivery"
-        overlayClassName="bg-black/40"
-        footer={
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 disabled:opacity-50"
-              onClick={() => {
-                setDeliverConfirmOpen(false)
-                setDeliverConfirmIds([])
-              }}
-              disabled={delivering}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50"
-              onClick={confirmDeliver}
-              disabled={delivering}
-            >
-              {delivering ? 'Delivering…' : 'Yes, Delivered'}
-            </button>
-          </div>
-        }
-      >
-        <div className="text-sm text-gray-800">
-          <div className="font-semibold text-gray-900">Has the member taken possession of the Ram?</div>
-          <div className="mt-1 text-gray-700">
-            {deliverConfirmIds.length === 1
-              ? `This will mark order #${deliverConfirmIds[0]} as Delivered.`
-              : `This will mark ${deliverConfirmIds.length} order(s) as Delivered.`}
-          </div>
-          <div className="mt-3 text-xs text-gray-600">This action cannot be undone by Rep.</div>
-        </div>
-      </DraggableModal>
     </div>
   )
 }
 
-export default function RepRamApprovedPage() {
+export default function RepRamDeliveredPage() {
   return (
     <ProtectedRoute allowedRoles={['rep']}>
-      <RepRamApprovedContent />
+      <RepRamDeliveredContent />
     </ProtectedRoute>
   )
 }

@@ -79,6 +79,7 @@ export async function GET(req) {
     }
 
     const { searchParams } = new URL(req.url)
+    const statusRaw = (searchParams.get('status') || '').trim()
     const payment = (searchParams.get('payment') || '').trim()
     const memberId = (searchParams.get('member_id') || '').trim().toUpperCase()
     const term = (searchParams.get('term') || '').trim()
@@ -89,6 +90,8 @@ export async function GET(req) {
     const limit = Math.min(Math.max(asInt(searchParams.get('limit'), 300), 1), 1000)
 
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
+    const allowedStatus = new Set(['Approved', 'Delivered'])
+    const status = allowedStatus.has(statusRaw) ? statusRaw : 'Approved'
 
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
     const { cycleId } = await resolveRamCycleId({
@@ -100,7 +103,7 @@ export async function GET(req) {
     let query = supabase
       .from('ram_orders')
       .select('*')
-      .eq('status', 'Approved')
+      .eq('status', status)
       .in('ram_delivery_location_id', ids)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -118,13 +121,6 @@ export async function GET(req) {
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
     let filtered = orders || []
-    if (term) {
-      const t = term.toLowerCase()
-      filtered = filtered.filter((o) => {
-        const idTxt = String(o.id || '')
-        return idTxt.toLowerCase().includes(t)
-      })
-    }
 
     const memberIds = Array.from(new Set(filtered.map((o) => String(o.member_id || '').trim()).filter(Boolean)))
     const locationIds = Array.from(
@@ -175,7 +171,18 @@ export async function GET(req) {
       }
     })
 
-    return NextResponse.json({ ok: true, orders: enriched })
+    let finalOrders = enriched
+    if (term) {
+      const t = term.toLowerCase()
+      finalOrders = enriched.filter((o) => {
+        const idTxt = String(o.id || '').toLowerCase()
+        const mid = String(o.member_id || '').toLowerCase()
+        const name = String(o.member?.full_name || '').toLowerCase()
+        return idTxt.includes(t) || mid.includes(t) || name.includes(t)
+      })
+    }
+
+    return NextResponse.json({ ok: true, orders: finalOrders })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error', orders: [] }, { status: 500 })
   }

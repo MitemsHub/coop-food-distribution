@@ -15,7 +15,7 @@ export async function POST(req) {
     if (!idRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid order id' }, { status: 400 })
 
     const status = String(body.status || '').trim()
-    const allowedStatus = new Set(['Pending', 'Approved', 'Cancelled'])
+    const allowedStatus = new Set(['Pending', 'Approved', 'Delivered', 'Cancelled'])
     if (!allowedStatus.has(status)) {
       return NextResponse.json({ ok: false, error: 'Invalid status' }, { status: 400 })
     }
