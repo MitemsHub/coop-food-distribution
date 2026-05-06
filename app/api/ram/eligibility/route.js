@@ -122,6 +122,11 @@ function isMissingTable(error, tableName) {
   return msg.includes('does not exist') || msg.includes('could not find the table')
 }
 
+async function hasColumn(supabase, table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
 function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInterest }) {
   const price = Number(unitPrice || 0)
   const eligible = Number(eligibleAmount || 0)
@@ -244,29 +249,44 @@ export async function GET(req) {
     let activeRamCycleId = null
     let usedLoanQtyThisCycle = 0
     if (!ramOrdersTableMissing) {
-      const { data: activeRamCycle, error: arcErr } = await supabase
-        .from('ram_cycles')
-        .select('id')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .maybeSingle()
+      const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
 
-      if (arcErr && !isMissingTable(arcErr, 'ram_cycles')) {
-        return NextResponse.json({ ok: false, error: arcErr.message }, { status: 500 })
+      if (ordersHasCycle) {
+        const { data: activeRamCycle, error: arcErr } = await supabase
+          .from('ram_cycles')
+          .select('id')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .maybeSingle()
+
+        if (arcErr && !isMissingTable(arcErr, 'ram_cycles')) {
+          return NextResponse.json({ ok: false, error: arcErr.message }, { status: 500 })
+        }
+        if (activeRamCycle?.id) activeRamCycleId = activeRamCycle.id
+
+        if (activeRamCycleId == null) {
+          const { data: latest, error: lErr } = await supabase
+            .from('ram_cycles')
+            .select('id')
+            .order('created_at', { ascending: false })
+            .maybeSingle()
+          if (!lErr && latest?.id) activeRamCycleId = latest.id
+        }
       }
-      if (activeRamCycle?.id) activeRamCycleId = activeRamCycle.id
 
-      let q = supabase
-        .from('ram_orders')
-        .select('qty')
-        .eq('member_id', memberId)
-        .eq('payment_option', 'Loan')
-        .in('status', ramStatuses)
-      if (activeRamCycleId) q = q.eq('ram_cycle_id', activeRamCycleId)
-
-      const { data: loanQtyRows, error: loanQtyErr } = await q
-      if (loanQtyErr) return NextResponse.json({ ok: false, error: loanQtyErr.message }, { status: 500 })
-      usedLoanQtyThisCycle = sumField(loanQtyRows, 'qty')
+      if (!ordersHasCycle || activeRamCycleId == null) {
+        usedLoanQtyThisCycle = 0
+      } else {
+        const { data: loanQtyRows, error: loanQtyErr } = await supabase
+          .from('ram_orders')
+          .select('qty')
+          .eq('member_id', memberId)
+          .eq('payment_option', 'Loan')
+          .in('status', ramStatuses)
+          .eq('ram_cycle_id', activeRamCycleId)
+        if (loanQtyErr) return NextResponse.json({ ok: false, error: loanQtyErr.message }, { status: 500 })
+        usedLoanQtyThisCycle = sumField(loanQtyRows, 'qty')
+      }
     }
     const loanQtyCap = isPensioner ? 1 : 2
     const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
