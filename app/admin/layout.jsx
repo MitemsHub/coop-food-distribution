@@ -49,8 +49,8 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/ram/pending')) return 'ram_pending'
     if (pathname.startsWith('/admin/ram/approved')) return 'ram_approved'
     if (pathname.startsWith('/admin/ram/delivered')) return 'ram_delivered'
-    if (pathname.startsWith('/admin/ram/inventory')) return 'ram_inventory'
-    if (pathname.startsWith('/admin/ram/reports')) return 'ram_reports'
+    if (pathname.startsWith('/admin/ram/banks')) return 'ram_banks'
+    if (pathname.startsWith('/admin/ram/inventory')) return 'ram_banks'
     if (pathname.startsWith('/admin/ram/data')) return 'ram_data'
     if (pathname.startsWith('/admin/ram-orders')) return 'ram_orders'
     if (pathname.startsWith('/admin/ram/posted')) return 'ram_pending'
@@ -61,7 +61,14 @@ export default function AdminLayout({ children }) {
     if (!activeKey) return 'Admin'
     const [group, rest] = activeKey.split('_')
     const groupLabel = group === 'food' ? 'Food Distribution' : group === 'ram' ? 'Ram Sales' : 'Admin'
-    const pageLabel = rest === 'data' ? 'Data' : rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : ''
+    const pageLabel =
+      group === 'ram' && (rest === 'inventory' || rest === 'banks')
+        ? 'Banks'
+        : rest === 'data'
+          ? 'Data'
+          : rest
+            ? rest.charAt(0).toUpperCase() + rest.slice(1)
+            : ''
     return pageLabel ? `Admin / ${groupLabel} / ${pageLabel}` : `Admin / ${groupLabel}`
   }, [activeKey])
 
@@ -73,7 +80,7 @@ export default function AdminLayout({ children }) {
     }
     if (activeKey.startsWith('ram_')) {
       const rest = activeKey.replace('ram_', '')
-      const label = rest === 'data' ? 'Data' : rest.charAt(0).toUpperCase() + rest.slice(1)
+      const label = rest === 'inventory' || rest === 'banks' ? 'Banks' : rest === 'data' ? 'Data' : rest.charAt(0).toUpperCase() + rest.slice(1)
       return `Ram Sales — ${label}`
     }
     return 'Admin'
@@ -163,8 +170,8 @@ export default function AdminLayout({ children }) {
                   <Link href="/admin/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
                     Delivered
                   </Link>
-                  <Link href="/admin/ram/inventory" className={navItemClass(activeKey === 'ram_inventory')}>
-                    Inventory
+                  <Link href="/admin/ram/banks" className={navItemClass(activeKey === 'ram_banks')}>
+                    Banks
                   </Link>
                   <Link href="/admin/ram/reports" className={navItemClass(activeKey === 'ram_reports')}>
                     Report
