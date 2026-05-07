@@ -337,6 +337,14 @@ function RamReportsContent() {
           headStyles: { fillColor: [75, 85, 99] },
           alternateRowStyles: { fillColor: [249, 250, 251] },
           columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+          didParseCell: (data) => {
+            if (data.section === 'head' && data.column.index >= 1) {
+              data.cell.styles.halign = 'right'
+            }
+            if (data.section === 'body' && data.column.index >= 1) {
+              data.cell.styles.halign = 'right'
+            }
+          },
           margin: { left: 12, right: 12 },
         })
       }
