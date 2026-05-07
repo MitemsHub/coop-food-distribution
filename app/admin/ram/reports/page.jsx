@@ -307,9 +307,14 @@ function RamReportsContent() {
           ['Total', asMoney(totals.amount), ''],
         ].map((r) => r.map(sanitize)),
         startY: 22,
-        styles: { fontSize: 9 },
-        headStyles: { fillColor: [75, 85, 99] },
+        styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
+        headStyles: { fillColor: [75, 85, 99], halign: 'left' },
         alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: {
+          0: { halign: 'left', cellWidth: 48 },
+          1: { halign: 'right', cellWidth: 35 },
+          2: { halign: 'left' },
+        },
         margin: { left: 12, right: 12 },
       })
 
@@ -333,17 +338,15 @@ function RamReportsContent() {
           head: [['Key', 'Orders', 'Rams', 'Principal', 'Interest']],
           body,
           startY,
-          styles: { fontSize: 9 },
-          headStyles: { fillColor: [75, 85, 99] },
+          styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
+          headStyles: { fillColor: [75, 85, 99], halign: 'right' },
           alternateRowStyles: { fillColor: [249, 250, 251] },
-          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
-          didParseCell: (data) => {
-            if (data.section === 'head' && data.column.index >= 1) {
-              data.cell.styles.halign = 'right'
-            }
-            if (data.section === 'body' && data.column.index >= 1) {
-              data.cell.styles.halign = 'right'
-            }
+          columnStyles: {
+            0: { halign: 'left', cellWidth: 48 },
+            1: { halign: 'right', cellWidth: 22 },
+            2: { halign: 'right', cellWidth: 22 },
+            3: { halign: 'right', cellWidth: 48 },
+            4: { halign: 'right', cellWidth: 40 },
           },
           margin: { left: 12, right: 12 },
         })
