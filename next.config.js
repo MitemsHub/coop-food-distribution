@@ -6,6 +6,7 @@ const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
 
 const createConfig = (phase) => {
   const isDevServer = phase === PHASE_DEVELOPMENT_SERVER
+  const isProd = process.env.NODE_ENV === 'production'
   return {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
@@ -43,10 +44,14 @@ const createConfig = (phase) => {
             key: 'X-XSS-Protection',
             value: '1; mode=block'
           },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY'
-          },
+          ...(isProd
+            ? [
+                {
+                  key: 'X-Frame-Options',
+                  value: 'DENY'
+                }
+              ]
+            : []),
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff'

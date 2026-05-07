@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import DraggableModal from '../../../components/DraggableModal'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 
@@ -29,6 +30,7 @@ function maskAccountNumber(s) {
 }
 
 function RamBanksContent() {
+  const searchParams = useSearchParams()
   const [rows, setRows] = useState([])
   const [term, setTerm] = useState('')
   const [msg, setMsg] = useState(null)
@@ -67,6 +69,7 @@ function RamBanksContent() {
   const [invoiceDeleting, setInvoiceDeleting] = useState(false)
 
   const fetchCtl = useRef(null)
+  const autoOpenRef = useRef(false)
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
   const fetchRows = async () => {
@@ -98,9 +101,40 @@ function RamBanksContent() {
   }, [])
 
   useEffect(() => {
+    const wantsActive = String(searchParams?.get('active') || '') === '1'
+    const wantsAll = String(searchParams?.get('active') || '') === '0'
+    if (wantsAll && activeOnly) setActiveOnly(false)
+    if (wantsActive && !activeOnly) setActiveOnly(true)
+  }, [searchParams, activeOnly])
+
+  useEffect(() => {
     fetchRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOnly])
+
+  useEffect(() => {
+    if (autoOpenRef.current) return
+    const locationId =
+      searchParams?.get('delivery_location_id') ||
+      searchParams?.get('ram_delivery_location_id') ||
+      searchParams?.get('location_id') ||
+      ''
+    if (!locationId) return
+
+    const open = String(searchParams?.get('open') || '')
+    const wantsInvoices = open === 'invoices' || String(searchParams?.get('invoices') || '') === '1'
+    if (!wantsInvoices) return
+
+    if (activeOnly) {
+      setActiveOnly(false)
+      return
+    }
+
+    const loc = (rows || []).find((r) => String(r?.id) === String(locationId))
+    if (!loc) return
+    autoOpenRef.current = true
+    loadInvoices(loc)
+  }, [searchParams, rows, activeOnly])
 
   const filtered = useMemo(() => {
     const t = String(term || '').trim().toLowerCase()

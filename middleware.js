@@ -6,9 +6,9 @@ import { NextResponse } from 'next/server'
 const rateLimitStore = new Map()
 
 // Security headers configuration
+const isProd = process.env.NODE_ENV === 'production'
 const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '1; mode=block',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
@@ -91,6 +91,7 @@ export async function middleware(request) {
   Object.entries(securityHeaders).forEach(([key, value]) => {
     response.headers.set(key, value)
   })
+  if (isProd) response.headers.set('X-Frame-Options', 'DENY')
   
   // Global rate limiting (adjust limits as needed)
   const globalRateLimit = checkRateLimit(`global:${clientIP}`, 100, 60000) // 100 requests per minute
@@ -100,7 +101,8 @@ export async function middleware(request) {
       status: 429,
       headers: {
         'Retry-After': '60',
-        ...securityHeaders
+          ...securityHeaders,
+          ...(isProd ? { 'X-Frame-Options': 'DENY' } : {})
       }
     })
   }
@@ -115,7 +117,8 @@ export async function middleware(request) {
         status: 429,
         headers: {
           'Retry-After': '60',
-          ...securityHeaders
+          ...securityHeaders,
+          ...(isProd ? { 'X-Frame-Options': 'DENY' } : {})
         }
       })
     }
@@ -130,7 +133,8 @@ export async function middleware(request) {
           status: 429,
           headers: {
             'Retry-After': '60',
-            ...securityHeaders
+            ...securityHeaders,
+            ...(isProd ? { 'X-Frame-Options': 'DENY' } : {})
           }
         })
       }
@@ -142,7 +146,7 @@ export async function middleware(request) {
           console.warn(`Unauthorized admin API access from IP: ${clientIP}`);
           return new NextResponse('Unauthorized', { 
             status: 401,
-            headers: securityHeaders
+            headers: { ...securityHeaders, ...(isProd ? { 'X-Frame-Options': 'DENY' } : {}) }
           })
         }
       }
@@ -157,7 +161,8 @@ export async function middleware(request) {
           status: 429,
           headers: {
             'Retry-After': '60',
-            ...securityHeaders
+            ...securityHeaders,
+            ...(isProd ? { 'X-Frame-Options': 'DENY' } : {})
           }
         })
       }
@@ -169,7 +174,7 @@ export async function middleware(request) {
           console.warn(`Unauthorized rep API access from IP: ${clientIP}`);
           return new NextResponse('Unauthorized', { 
             status: 401,
-            headers: securityHeaders
+            headers: { ...securityHeaders, ...(isProd ? { 'X-Frame-Options': 'DENY' } : {}) }
           })
         }
       }

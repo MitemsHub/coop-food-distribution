@@ -45,6 +45,12 @@ function downloadBase64({ filename, type, data }) {
   URL.revokeObjectURL(url)
 }
 
+function fileStamp() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
+}
+
 function toApplicationExportRows(orders) {
   return (orders || []).map((o) => ({
     id: o.id,
@@ -361,6 +367,51 @@ function RamReportsContent() {
     return json.orders || []
   }
 
+  const fetchVendorBankMetaByLocationId = async () => {
+    const res = await fetch('/api/admin/ram/vendor-banks/locations?active=0', { cache: 'no-store' })
+    const ct = res.headers.get('content-type') || ''
+    if (!res.ok && res.status === 404) return new Map()
+    if (!ct.includes('application/json')) {
+      if (res.status === 404) return new Map()
+      const text = await res.text()
+      throw new Error(`Non-JSON response from /api/admin/ram/vendor-banks/locations (${res.status}): ${text.slice(0, 300)}`)
+    }
+    const json = await res.json()
+    if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load bank details')
+    const map = new Map()
+    for (const l of json.locations || []) {
+      if (l?.id == null) continue
+      map.set(String(l.id), l)
+    }
+    return map
+  }
+
+  const fetchVendorInvoices = async (deliveryLocationId) => {
+    const qs = new URLSearchParams({ delivery_location_id: String(deliveryLocationId) })
+    const res = await fetch(`/api/admin/ram/vendor-banks/invoices/list?${qs.toString()}`, { cache: 'no-store' })
+    const json = await safeJson(res, '/api/admin/ram/vendor-banks/invoices/list')
+    if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load invoices')
+    return json.invoices || []
+  }
+
+  const resolveInvoiceLink = async (deliveryLocationId, cycleId, fallbackUrl) => {
+    try {
+      const invoices = await fetchVendorInvoices(deliveryLocationId)
+      const filtered = cycleId ? invoices.filter((inv) => String(inv?.ram_cycle_id ?? '') === String(cycleId)) : invoices
+      const firstWithUrl = (filtered.find((inv) => !!inv?.url) || invoices.find((inv) => !!inv?.url)) ?? null
+      return firstWithUrl?.url || fallbackUrl || null
+    } catch {
+      return fallbackUrl || null
+    }
+  }
+
+  const formatDateTime = (v) => {
+    if (!v) return ''
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return String(v)
+    return d.toLocaleString()
+  }
+
   const exportApplicationsExcel = async () => {
     setAppsExcelBusy(true)
     setMsg(null)
@@ -543,6 +594,7 @@ function RamReportsContent() {
     setPackProgress({ current: 0, total: selectedLocations.length })
     setMsg(null)
     try {
+      const bankMetaById = await fetchVendorBankMetaByLocationId()
       const ExcelJSMod = await import('exceljs')
       const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
       const wb = new ExcelJS.Workbook()
@@ -552,6 +604,9 @@ function RamReportsContent() {
       for (const loc of selectedLocations) {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
+        const meta = bankMetaById.get(String(loc.id)) || null
+        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
+        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
         const orders = await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
@@ -564,12 +619,26 @@ function RamReportsContent() {
         ws.addRow(['Ram Sales — Payment to Vendors'])
         ws.addRow([`Location: ${loc.delivery_location || loc.name || `Location ${loc.id}`}`])
         ws.addRow([`Filters: Status ${packStatus || 'All'} | Payment ${packPayment || 'All'} | From ${packFrom || 'Any'} | To ${packTo || 'Any'}`])
+        ws.addRow([])
+        ws.addRow(['Bank Details'])
+        ws.addRow(['Bank Name', meta?.bank?.bank_name || ''])
+        ws.addRow(['Account Name', meta?.bank?.account_name || ''])
+        ws.addRow(['Account Number', meta?.bank?.account_number || ''])
+        ws.addRow(['Paid', meta?.paid?.is_paid ? 'Yes' : 'No'])
+        ws.addRow(['Paid At', meta?.paid?.paid_at ? formatDateTime(meta.paid.paid_at) : ''])
+        ws.addRow([])
         const rows = toVendorPaymentExportRows(orders)
         const headers = Object.keys(rows[0] || { id: '' })
         ws.addRow(headers)
         for (const r of rows) {
           ws.addRow(headers.map((h) => r[h]))
         }
+        ws.addRow([])
+        ws.addRow(['Invoices'])
+        const linkRow = ws.addRow(['To view invoice, click:', 'VIEW INVOICE'])
+        const linkCell = linkRow.getCell(2)
+        linkCell.value = { text: 'VIEW INVOICE', hyperlink: invoiceLink }
+        linkCell.font = { color: { argb: 'FF2563EB' }, underline: true }
       }
 
       const buffer = await wb.xlsx.writeBuffer()
@@ -578,7 +647,7 @@ function RamReportsContent() {
       const a = document.createElement('a')
       a.href = url
       const slug = packLocationId ? `location_${packLocationId}` : 'all_locations'
-      a.download = `ram_payment_to_vendors_${slug}_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `ram_payment_to_vendors_${slug}_${fileStamp()}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -596,6 +665,7 @@ function RamReportsContent() {
     setPackProgress({ current: 0, total: selectedLocations.length })
     setMsg(null)
     try {
+      const bankMetaById = await fetchVendorBankMetaByLocationId()
       const { jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -615,6 +685,9 @@ function RamReportsContent() {
       for (const loc of selectedLocations) {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
+        const meta = bankMetaById.get(String(loc.id)) || null
+        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
+        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
         const orders = await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
@@ -632,6 +705,22 @@ function RamReportsContent() {
         }
         doc.setFontSize(11)
         doc.text(`Location: ${locTitle}`, 12, y)
+
+        autoTable(doc, {
+          head: [['Bank Detail', 'Value']],
+          body: [
+            ['Bank Name', meta?.bank?.bank_name || ''],
+            ['Account Name', meta?.bank?.account_name || ''],
+            ['Account Number', meta?.bank?.account_number || ''],
+            ['Paid', meta?.paid?.is_paid ? 'Yes' : 'No'],
+            ['Paid At', meta?.paid?.paid_at ? formatDateTime(meta.paid.paid_at) : ''],
+          ].map((r) => r.map(sanitize)),
+          startY: y + 4,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [75, 85, 99] },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          margin: { left: 12, right: 12 },
+        })
 
         const head = [[
           'id',
@@ -697,7 +786,7 @@ function RamReportsContent() {
         autoTable(doc, {
           head,
           body,
-          startY: y + 6,
+          startY: (doc.lastAutoTable?.finalY || y + 4) + 6,
           styles: { fontSize: 7 },
           headStyles: { fillColor: [75, 85, 99] },
           alternateRowStyles: { fillColor: [249, 250, 251] },
@@ -710,10 +799,21 @@ function RamReportsContent() {
           },
           margin: { left: 12, right: 12 },
         })
+
+        let invY = (doc.lastAutoTable?.finalY || 0) + 8
+        if (invY > 195) {
+          doc.addPage()
+          invY = 32
+        }
+        doc.setFontSize(9)
+        doc.text('Invoices:', 12, invY)
+        doc.setTextColor(37, 99, 235)
+        doc.textWithLink('CLICK HERE TO VIEW INVOICE', 30, invY, { url: invoiceLink })
+        doc.setTextColor(0, 0, 0)
       }
 
       const slug = packLocationId ? `location_${packLocationId}` : 'all_locations'
-      doc.save(`ram_payment_to_vendors_${slug}_${new Date().toISOString().split('T')[0]}.pdf`)
+      doc.save(`ram_payment_to_vendors_${slug}_${fileStamp()}.pdf`)
     } catch (e) {
       setMsg({ type: 'error', text: e?.message || 'Download failed' })
     } finally {
