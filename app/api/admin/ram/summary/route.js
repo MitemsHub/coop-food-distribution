@@ -90,37 +90,6 @@ export async function GET(req) {
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
     const { cycleId, activeCycleId } = await resolveRamCycleId({ supabase, cycleParam, ordersHasCycle })
 
-    let baseQ = supabase
-      .from('ram_orders')
-      .select('id,status,payment_option,member_category,member_grade,qty,total_amount,interest_amount,ram_delivery_location_id,created_at,ram_cycle_id')
-      .order('created_at', { ascending: false })
-      .limit(2000)
-    if (ordersHasCycle && cycleId != null) baseQ = baseQ.eq('ram_cycle_id', cycleId)
-
-    const { data: orders, error } = await baseQ
-
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-
-    const rows = orders || []
-    const locationIds = Array.from(
-      new Set(
-        rows
-          .map((o) => Number(o.ram_delivery_location_id))
-          .filter((n) => Number.isFinite(n) && n > 0)
-      )
-    )
-
-    const { data: locations, error: locErr } = locationIds.length
-      ? await supabase
-          .from('ram_delivery_locations')
-          .select('id,delivery_location,name,is_active')
-          .in('id', locationIds)
-      : { data: [], error: null }
-
-    if (locErr) return NextResponse.json({ ok: false, error: locErr.message }, { status: 500 })
-
-    const locationsById = new Map((locations || []).map((l) => [Number(l.id), l]))
-
     const byStatus = new Map()
     const byPayment = new Map()
     const byCategory = new Map()
@@ -132,21 +101,54 @@ export async function GET(req) {
     let totalAmount = 0
     let totalLoanInterest = 0
 
-    for (const row of rows) {
-      totalOrders += 1
-      totalQty += Number(row.qty || 0)
-      totalAmount += Number(row.total_amount || 0)
-      totalLoanInterest += Number(row.loan_interest ?? row.interest_amount ?? 0)
+    const { data: allLocations, error: locErr } = await supabase
+      .from('ram_delivery_locations')
+      .select('id,delivery_location,name,is_active')
+      .order('delivery_location', { ascending: true })
 
-      addAgg(byStatus, String(row.status || 'Unknown'), row)
-      addAgg(byPayment, String(row.payment_option || 'Unknown'), row)
-      addAgg(byCategory, String(row.member_category || 'Unknown'), row)
-      addAgg(byGrade, String(row.member_grade || 'Unknown'), row)
+    if (locErr) return NextResponse.json({ ok: false, error: locErr.message }, { status: 500 })
 
-      const loc = locationsById.get(Number(row.ram_delivery_location_id))
-      const locKey = loc?.delivery_location || 'Unknown'
-      addLocationAgg(byLocation, String(locKey), row)
+    const locationsById = new Map((allLocations || []).map((l) => [Number(l.id), l]))
+    const locationIds = new Set()
+
+    const pageSize = 1000
+    let offset = 0
+
+    while (true) {
+      let q = supabase
+        .from('ram_orders')
+        .select('id,status,payment_option,member_category,member_grade,qty,total_amount,interest_amount,ram_delivery_location_id,created_at,ram_cycle_id')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
+      if (ordersHasCycle && cycleId != null) q = q.eq('ram_cycle_id', cycleId)
+
+      const { data: chunk, error } = await q
+      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+
+      const rows = chunk || []
+      for (const row of rows) {
+        totalOrders += 1
+        totalQty += Number(row.qty || 0)
+        totalAmount += Number(row.total_amount || 0)
+        totalLoanInterest += Number(row.loan_interest ?? row.interest_amount ?? 0)
+
+        addAgg(byStatus, String(row.status || 'Unknown'), row)
+        addAgg(byPayment, String(row.payment_option || 'Unknown'), row)
+        addAgg(byCategory, String(row.member_category || 'Unknown'), row)
+        addAgg(byGrade, String(row.member_grade || 'Unknown'), row)
+
+        const locId = Number(row.ram_delivery_location_id)
+        if (Number.isFinite(locId) && locId > 0) locationIds.add(locId)
+        const loc = locationsById.get(locId)
+        const locKey = loc?.delivery_location || 'Unknown'
+        addLocationAgg(byLocation, String(locKey), row)
+      }
+
+      if (rows.length < pageSize) break
+      offset += pageSize
     }
+
+    const usedLocations = (allLocations || []).filter((l) => locationIds.has(Number(l.id)))
 
     const toSorted = (m) => Array.from(m.values()).sort((a, b) => b.orders - a.orders)
 
@@ -161,7 +163,7 @@ export async function GET(req) {
       meta: {
         active_ram_cycle_id: activeCycleId,
         used_ram_cycle_id: ordersHasCycle ? cycleId : null,
-        locations: (locations || []).map((l) => ({
+        locations: usedLocations.map((l) => ({
           id: l.id,
           delivery_location: l.delivery_location || '',
           name: l.name || '',
