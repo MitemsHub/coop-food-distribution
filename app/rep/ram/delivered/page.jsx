@@ -44,8 +44,8 @@ function RepRamDeliveredContent() {
         ...(term ? { term } : {}),
         ...(deliveryLocationId ? { delivery_location_id: deliveryLocationId } : {}),
       })
-      const res = await fetch(`/api/rep/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
-      const json = await safeJson(res, '/api/rep/ram-orders/list')
+      const res = await fetch(`/api/rep/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/rep/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       const nextOrders = json.orders || []
       setOrders(nextOrders)

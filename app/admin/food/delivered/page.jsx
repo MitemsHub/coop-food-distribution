@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import ProtectedRoute from '../../components/ProtectedRoute'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 function DeliveredPageContent() {
   const [orders, setOrders] = useState([])

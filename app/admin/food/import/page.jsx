@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import ProtectedRoute from '../../components/ProtectedRoute'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 function ImportPageContent() {
   const [membersFile, setMembersFile] = useState(null)

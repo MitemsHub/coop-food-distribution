@@ -413,7 +413,7 @@ function CartPageContent() {
                 <div className="flex-shrink-0 w-full md:w-auto">
                   {isAdmin ? (
                     <button
-                      onClick={() => router.push('/admin/cart')}
+                      onClick={() => router.push('/admin/food/cart')}
                       className="w-full md:w-auto px-3 py-2 sm:px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

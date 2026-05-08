@@ -58,8 +58,8 @@ function RepRamApprovedContent() {
         ...(term ? { term } : {}),
         ...(deliveryLocationId ? { delivery_location_id: deliveryLocationId } : {}),
       })
-      const res = await fetch(`/api/rep/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
-      const json = await safeJson(res, '/api/rep/ram-orders/list')
+      const res = await fetch(`/api/rep/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/rep/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       const nextOrders = json.orders || []
       setOrders(nextOrders)
@@ -156,12 +156,12 @@ function RepRamApprovedContent() {
     setMsg(null)
     setDeliverBusyIds(new Set(list))
     try {
-      const res = await fetch('/api/rep/ram-orders/update-status', {
+      const res = await fetch('/api/rep/ram/orders/update-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ids: list, status: 'Delivered' }),
       })
-      const json = await safeJson(res, '/api/rep/ram-orders/update-status')
+      const json = await safeJson(res, '/api/rep/ram/orders/update-status')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to deliver')
       const updatedIds = new Set((json.updated || []).map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0))
       setOrders((prev) => (prev || []).filter((o) => !updatedIds.has(Number(o.id))))

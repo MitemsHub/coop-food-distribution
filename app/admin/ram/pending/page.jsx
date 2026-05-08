@@ -61,8 +61,8 @@ function RamPendingContent() {
         ...(payment ? { payment } : {}),
         ...(memberGrade ? { member_grade: memberGrade.trim() } : {}),
       })
-      const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
-      const json = await safeJson(res, '/api/admin/ram-orders/list')
+      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/admin/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       let rows = json.orders || []
       if (locationId) rows = rows.filter((o) => String(o.delivery_location?.id || '') === String(locationId))
@@ -310,12 +310,12 @@ function RamPendingContent() {
     setBulkBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/ram-orders/update-status-bulk', {
+      const res = await fetch('/api/admin/ram/orders/update-status-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ids, status: nextStatus }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/update-status-bulk')
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status-bulk')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Bulk update failed')
       setMsg({ type: 'success', text: `Updated ${json.updated?.length || 0} order(s) to ${nextStatus}` })
       setShowModal(null)
@@ -333,12 +333,12 @@ function RamPendingContent() {
     setBulkBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/ram-orders/delete', {
+      const res = await fetch('/api/admin/ram/orders/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ids }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/delete')
+      const json = await safeJson(res, '/api/admin/ram/orders/delete')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Delete failed')
       const deleted = Array.isArray(json.deleted) ? json.deleted : ids
       setOrders((prev) => (prev || []).filter((o) => !deleted.includes(o.id)))
@@ -368,7 +368,7 @@ function RamPendingContent() {
         throw new Error('Invalid unit price')
       }
       const phone = String(editPhone || '').trim()
-      const res = await fetch('/api/admin/ram-orders/update', {
+      const res = await fetch('/api/admin/ram/orders/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
@@ -379,7 +379,7 @@ function RamPendingContent() {
           ...(phone ? { member_phone: phone } : {}),
         }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/update')
+      const json = await safeJson(res, '/api/admin/ram/orders/update')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Update failed')
       const updated = json.order
       const loc = (locations || []).find((l) => String(l.id) === String(updated?.ram_delivery_location_id)) || null

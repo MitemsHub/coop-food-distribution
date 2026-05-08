@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import ProtectedRoute from '../../components/ProtectedRoute'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 function AdminCartPageContent() {
   const router = useRouter()
@@ -78,7 +78,7 @@ function AdminCartPageContent() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Select Member</h2>
             <button
-              onClick={() => router.push('/admin/pending')}
+              onClick={() => router.push('/admin/food/pending')}
               className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import ProtectedRoute from '../../components/ProtectedRoute'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 function AdminOrdersPageContent() {
   const router = useRouter()
@@ -230,7 +230,7 @@ function AdminOrdersPageContent() {
                           </button>
                         )}
                         <button
-                          onClick={() => router.push(`/admin/pending`)}
+                          onClick={() => router.push(`/admin/food/pending`)}
                           className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
                         >
                           Manage

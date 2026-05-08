@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import ProtectedRoute from '../../components/ProtectedRoute'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 function ReportsPageContent() {
   const [data, setData] = useState(null)

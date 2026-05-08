@@ -201,9 +201,9 @@ export default function Navbar() {
           {userType === 'admin' && (
             <>
               <Link
-                href="/admin/pending"
+                href="/admin/food/pending"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/pending') 
+                  isActive('/admin/food/pending') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -214,9 +214,9 @@ export default function Navbar() {
                 Pending
               </Link>
               <Link
-                href="/admin/posted"
+                href="/admin/food/posted"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/posted') 
+                  isActive('/admin/food/posted') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -227,9 +227,9 @@ export default function Navbar() {
                 Posted
               </Link>
               <Link
-                href="/admin/delivered"
+                href="/admin/food/delivered"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/delivered') 
+                  isActive('/admin/food/delivered') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -240,9 +240,9 @@ export default function Navbar() {
                 Delivered
               </Link>
               <Link
-                href="/admin/import"
+                href="/admin/food/import"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/import') 
+                  isActive('/admin/food/import') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -253,9 +253,9 @@ export default function Navbar() {
                 Import
               </Link>
               <Link
-                href="/admin/inventory"
+                href="/admin/food/inventory"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/inventory') 
+                  isActive('/admin/food/inventory') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -271,9 +271,9 @@ export default function Navbar() {
                 )}
               </Link>
               <Link
-                href="/admin/markups"
+                href="/admin/food/markups"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/markups') 
+                  isActive('/admin/food/markups') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -284,9 +284,9 @@ export default function Navbar() {
                 Markups
               </Link>
               <Link
-                href="/admin/reports"
+                href="/admin/food/reports"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/reports') 
+                  isActive('/admin/food/reports') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -297,9 +297,9 @@ export default function Navbar() {
                 Reports
               </Link>
               <Link
-                href="/admin/data-management"
+                href="/admin/food/data-management"
                 className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                  isActive('/admin/data-management') 
+                  isActive('/admin/food/data-management') 
                     ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                     : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                 }`}
@@ -445,10 +445,10 @@ export default function Navbar() {
             {userType === 'admin' && (
               <>
                 <Link
-                  href="/admin/pending"
+                  href="/admin/food/pending"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/pending') 
+                    isActive('/admin/food/pending') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -456,10 +456,10 @@ export default function Navbar() {
                   Pending
                 </Link>
                 <Link
-                  href="/admin/posted"
+                  href="/admin/food/posted"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/posted') 
+                    isActive('/admin/food/posted') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -467,10 +467,10 @@ export default function Navbar() {
                   Posted
                 </Link>
                 <Link
-                  href="/admin/delivered"
+                  href="/admin/food/delivered"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/delivered') 
+                    isActive('/admin/food/delivered') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -478,10 +478,10 @@ export default function Navbar() {
                   Delivered
                 </Link>
                 <Link
-                  href="/admin/import"
+                  href="/admin/food/import"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/import') 
+                    isActive('/admin/food/import') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -489,10 +489,10 @@ export default function Navbar() {
                   Import
                 </Link>
                 <Link
-                  href="/admin/inventory"
+                  href="/admin/food/inventory"
                   onClick={closeMobileMenu}
                   className={`flex items-center px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/inventory') 
+                    isActive('/admin/food/inventory') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -505,10 +505,10 @@ export default function Navbar() {
                   )}
                 </Link>
                 <Link
-                  href="/admin/markups"
+                  href="/admin/food/markups"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/markups') 
+                    isActive('/admin/food/markups') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -516,10 +516,10 @@ export default function Navbar() {
                   Markups
                 </Link>
                 <Link
-                  href="/admin/reports"
+                  href="/admin/food/reports"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/reports') 
+                    isActive('/admin/food/reports') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}
@@ -527,10 +527,10 @@ export default function Navbar() {
                   Reports
                 </Link>
                 <Link
-                  href="/admin/data-management"
+                  href="/admin/food/data-management"
                   onClick={closeMobileMenu}
                   className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive('/admin/data-management') 
+                    isActive('/admin/food/data-management') 
                       ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' 
                       : 'text-gray-700 hover:bg-purple-50 hover:text-purple-600'
                   }`}

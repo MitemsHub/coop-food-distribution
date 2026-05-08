@@ -38,21 +38,21 @@ export default function AdminLayout({ children }) {
   }, [sidebarVisible])
 
   const activeKey = useMemo(() => {
-    if (pathname.startsWith('/admin/pending')) return 'food_pending'
-    if (pathname.startsWith('/admin/posted')) return 'food_posted'
-    if (pathname.startsWith('/admin/delivered')) return 'food_delivered'
-    if (pathname.startsWith('/admin/import')) return 'food_import'
-    if (pathname.startsWith('/admin/inventory')) return 'food_inventory'
-    if (pathname.startsWith('/admin/markups')) return 'food_markups'
-    if (pathname.startsWith('/admin/reports')) return 'food_reports'
-    if (pathname.startsWith('/admin/data-management')) return 'food_data'
+    if (pathname.startsWith('/admin/food/pending')) return 'food_pending'
+    if (pathname.startsWith('/admin/food/posted')) return 'food_posted'
+    if (pathname.startsWith('/admin/food/delivered')) return 'food_delivered'
+    if (pathname.startsWith('/admin/food/import')) return 'food_import'
+    if (pathname.startsWith('/admin/food/inventory')) return 'food_inventory'
+    if (pathname.startsWith('/admin/food/markups')) return 'food_markups'
+    if (pathname.startsWith('/admin/food/reports')) return 'food_reports'
+    if (pathname.startsWith('/admin/food/data-management')) return 'food_data'
     if (pathname.startsWith('/admin/ram/pending')) return 'ram_pending'
     if (pathname.startsWith('/admin/ram/approved')) return 'ram_approved'
     if (pathname.startsWith('/admin/ram/delivered')) return 'ram_delivered'
     if (pathname.startsWith('/admin/ram/banks')) return 'ram_banks'
     if (pathname.startsWith('/admin/ram/inventory')) return 'ram_banks'
+    if (pathname.startsWith('/admin/ram/reports')) return 'ram_reports'
     if (pathname.startsWith('/admin/ram/data')) return 'ram_data'
-    if (pathname.startsWith('/admin/ram-orders')) return 'ram_orders'
     if (pathname.startsWith('/admin/ram/posted')) return 'ram_pending'
     return ''
   }, [pathname])
@@ -126,28 +126,28 @@ export default function AdminLayout({ children }) {
               </button>
               {foodOpen && (
                 <div className="mt-2 space-y-1">
-                  <Link href="/admin/pending" className={navItemClass(activeKey === 'food_pending')}>
+                  <Link href="/admin/food/pending" className={navItemClass(activeKey === 'food_pending')}>
                     Pending
                   </Link>
-                  <Link href="/admin/posted" className={navItemClass(activeKey === 'food_posted')}>
+                  <Link href="/admin/food/posted" className={navItemClass(activeKey === 'food_posted')}>
                     Posted
                   </Link>
-                  <Link href="/admin/delivered" className={navItemClass(activeKey === 'food_delivered')}>
+                  <Link href="/admin/food/delivered" className={navItemClass(activeKey === 'food_delivered')}>
                     Delivered
                   </Link>
-                  <Link href="/admin/import" className={navItemClass(activeKey === 'food_import')}>
+                  <Link href="/admin/food/import" className={navItemClass(activeKey === 'food_import')}>
                     Import
                   </Link>
-                  <Link href="/admin/inventory" className={navItemClass(activeKey === 'food_inventory')}>
+                  <Link href="/admin/food/inventory" className={navItemClass(activeKey === 'food_inventory')}>
                     Inventory
                   </Link>
-                  <Link href="/admin/markups" className={navItemClass(activeKey === 'food_markups')}>
+                  <Link href="/admin/food/markups" className={navItemClass(activeKey === 'food_markups')}>
                     Markups
                   </Link>
-                  <Link href="/admin/reports" className={navItemClass(activeKey === 'food_reports')}>
+                  <Link href="/admin/food/reports" className={navItemClass(activeKey === 'food_reports')}>
                     Report
                   </Link>
-                  <Link href="/admin/data-management" className={navItemClass(activeKey === 'food_data')}>
+                  <Link href="/admin/food/data-management" className={navItemClass(activeKey === 'food_data')}>
                     Data
                   </Link>
                 </div>

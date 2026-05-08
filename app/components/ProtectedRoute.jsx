@@ -34,7 +34,7 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
           dest = '/rep/pending'
           break
         case 'admin':
-          dest = '/admin/pending'
+          dest = '/admin/food/pending'
           break
         default:
           dest = '/'

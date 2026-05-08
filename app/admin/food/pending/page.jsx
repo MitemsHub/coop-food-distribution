@@ -1,8 +1,8 @@
 // app/admin/pending/page.jsx
 'use client'
 import { useEffect, useMemo, useState, useRef } from 'react'
-import ProtectedRoute from '../../components/ProtectedRoute'
-import DraggableModal from '../../components/DraggableModal'
+import ProtectedRoute from '../../../components/ProtectedRoute'
+import DraggableModal from '../../../components/DraggableModal'
 
 function PendingAdminPageContent() {
   const [orders, setOrders] = useState([])

@@ -17,7 +17,7 @@ function VerifyContent() {
     ;(async () => {
       const token_hash = search.get('token_hash')
       const type = search.get('type') // 'magiclink' | 'recovery' etc.
-      const next = search.get('next') || '/admin/pending'
+      const next = search.get('next') || '/admin/food/pending'
       if (!token_hash) { setMsg('Invalid token'); return }
       const { error } = await supabase.auth.verifyOtp({ type: type || 'magiclink', token_hash })
       if (error) { setMsg(`Error: ${error.message}`); return }

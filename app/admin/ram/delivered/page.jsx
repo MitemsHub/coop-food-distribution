@@ -53,8 +53,8 @@ function RamDeliveredContent() {
         ...(term ? { term } : {}),
         ...(deliveryLocationId ? { delivery_location_id: deliveryLocationId } : {}),
       })
-      const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
-      const json = await safeJson(res, '/api/admin/ram-orders/list')
+      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/admin/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       const nextOrders = json.orders || []
       setOrders(nextOrders)
@@ -241,12 +241,12 @@ function RamDeliveredContent() {
     setRollbackBusyId(orderId)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/ram-orders/update-status', {
+      const res = await fetch('/api/admin/ram/orders/update-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ id: orderId, status: 'Approved' }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/update-status')
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
       setOrders((prev) => (prev || []).filter((o) => o.id !== orderId))
       setMsg({ type: 'success', text: `Order #${orderId} rolled back to Approved` })

@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import ProtectedRoute from '../../components/ProtectedRoute'
-import ItemManagement from '../../components/ItemManagement'
-import DatabaseMigration from '../../components/DatabaseMigration'
+import ProtectedRoute from '../../../components/ProtectedRoute'
+import ItemManagement from '../../../components/ItemManagement'
+import DatabaseMigration from '../../../components/DatabaseMigration'
 
 function DataManagementPageContent() {
   const [loading, setLoading] = useState(false)

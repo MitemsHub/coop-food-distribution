@@ -289,11 +289,16 @@ function RamReportsContent() {
       const asInt = (v) => Number(v || 0)
       const asMoney = (v) => `NGN ${asInt(v).toLocaleString()}`
       const asPrincipal = (r) => Math.max(0, asInt(r?.amount) - asInt(r?.loan_interest))
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const marginX = 12
 
       doc.setFontSize(14)
       doc.text('Ram Sales — Report', 12, 12)
       doc.setFontSize(9)
       doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
+
+      const metricColW = { metric: 52, value: 36, note: 60 }
+      const metricTableW = metricColW.metric + metricColW.value + metricColW.note
 
       autoTable(doc, {
         head: [['Metric', 'Value', 'Note']],
@@ -307,15 +312,22 @@ function RamReportsContent() {
           ['Total', asMoney(totals.amount), ''],
         ].map((r) => r.map(sanitize)),
         startY: 22,
+        tableWidth: metricTableW,
         styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
-        headStyles: { fillColor: [75, 85, 99], halign: 'left' },
+        headStyles: { fillColor: [75, 85, 99] },
         alternateRowStyles: { fillColor: [249, 250, 251] },
         columnStyles: {
-          0: { halign: 'left', cellWidth: 48 },
-          1: { halign: 'right', cellWidth: 35 },
-          2: { halign: 'left' },
+          0: { cellWidth: metricColW.metric },
+          1: { cellWidth: metricColW.value },
+          2: { cellWidth: metricColW.note, overflow: 'linebreak' },
         },
-        margin: { left: 12, right: 12 },
+        didParseCell: (data) => {
+          if (data.section !== 'head' && data.section !== 'body') return
+          if (data.column.index === 0) data.cell.styles.halign = 'left'
+          if (data.column.index === 1) data.cell.styles.halign = 'right'
+          if (data.column.index === 2) data.cell.styles.halign = 'left'
+        },
+        margin: { left: marginX, right: Math.max(marginX, pageWidth - metricTableW - marginX) },
       })
 
       const addSummarySection = (title, rows) => {
@@ -326,6 +338,9 @@ function RamReportsContent() {
           sanitize(asMoney(asPrincipal(r))),
           sanitize(asMoney(r.loan_interest)),
         ])
+
+        const summaryColW = { key: 50, orders: 22, rams: 22, principal: 52, interest: 42 }
+        const summaryTableW = summaryColW.key + summaryColW.orders + summaryColW.rams + summaryColW.principal + summaryColW.interest
 
         let startY = (doc.lastAutoTable?.finalY || 22) + 10
         if (startY > 180) {
@@ -338,17 +353,23 @@ function RamReportsContent() {
           head: [['Key', 'Orders', 'Rams', 'Principal', 'Interest']],
           body,
           startY,
+          tableWidth: summaryTableW,
           styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
-          headStyles: { fillColor: [75, 85, 99], halign: 'right' },
+          headStyles: { fillColor: [75, 85, 99] },
           alternateRowStyles: { fillColor: [249, 250, 251] },
           columnStyles: {
-            0: { halign: 'left', cellWidth: 48 },
-            1: { halign: 'right', cellWidth: 22 },
-            2: { halign: 'right', cellWidth: 22 },
-            3: { halign: 'right', cellWidth: 48 },
-            4: { halign: 'right', cellWidth: 40 },
+            0: { cellWidth: summaryColW.key },
+            1: { cellWidth: summaryColW.orders },
+            2: { cellWidth: summaryColW.rams },
+            3: { cellWidth: summaryColW.principal },
+            4: { cellWidth: summaryColW.interest },
           },
-          margin: { left: 12, right: 12 },
+          didParseCell: (data) => {
+            if (data.section !== 'head' && data.section !== 'body') return
+            if (data.column.index === 0) data.cell.styles.halign = 'left'
+            if (data.column.index > 0) data.cell.styles.halign = 'right'
+          },
+          margin: { left: marginX, right: Math.max(marginX, pageWidth - summaryTableW - marginX) },
         })
       }
 
@@ -372,8 +393,8 @@ function RamReportsContent() {
     if (opts?.delivery_location_id) qs.set('delivery_location_id', String(opts.delivery_location_id))
     if (opts?.from) qs.set('from', opts.from)
     if (opts?.to) qs.set('to', opts.to)
-    const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store' })
-    const json = await safeJson(res, '/api/admin/ram-orders/list')
+    const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
+    const json = await safeJson(res, '/api/admin/ram/orders/list')
     if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load applications')
     return json.orders || []
   }

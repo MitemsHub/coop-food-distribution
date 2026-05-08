@@ -32,7 +32,7 @@ export default function AdminPinPage() {
       })
       
       // Force a page reload to ensure middleware recognizes the cookie
-      window.location.href = '/admin/pending'
+      window.location.href = '/admin/food/pending'
     } catch (e) {
       setMsg(e.message)
     } finally {

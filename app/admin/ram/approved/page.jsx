@@ -57,8 +57,8 @@ function RamApprovedContent() {
         limit: '1000',
         ...(term ? { term } : {}),
       })
-      const res = await fetch(`/api/admin/ram-orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
-      const json = await safeJson(res, '/api/admin/ram-orders/list')
+      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
+      const json = await safeJson(res, '/api/admin/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       let rows = json.orders || []
       setOrders(rows)
@@ -92,12 +92,12 @@ function RamApprovedContent() {
     setRollbackBusyId(orderId)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/ram-orders/update-status', {
+      const res = await fetch('/api/admin/ram/orders/update-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ id: orderId, status: 'Pending' }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/update-status')
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
       setOrders((prev) => (prev || []).filter((o) => o.id !== orderId))
       setMsg({ type: 'success', text: `Order #${orderId} rolled back to Pending` })
@@ -450,12 +450,12 @@ function RamApprovedContent() {
     setMsg(null)
     setDeliverBusyIds(new Set(list))
     try {
-      const res = await fetch('/api/admin/ram-orders/update-status-bulk', {
+      const res = await fetch('/api/admin/ram/orders/update-status-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ids: list, status: 'Delivered' }),
       })
-      const json = await safeJson(res, '/api/admin/ram-orders/update-status-bulk')
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status-bulk')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to deliver')
       const updatedIds = new Set((json.updated || []).map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0))
       setOrders((prev) => (prev || []).filter((o) => !updatedIds.has(Number(o.id))))

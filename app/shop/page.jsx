@@ -800,7 +800,7 @@ function ShopPageContent() {
                 )}
                 {isAdmin ? (
                   <button
-                    onClick={() => router.push('/admin/cart')}
+                    onClick={() => router.push('/admin/food/cart')}
                     className="inline-flex items-center px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full transition-all duration-200 text-xs sm:text-sm md:text-base whitespace-nowrap"
                   >
                     <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

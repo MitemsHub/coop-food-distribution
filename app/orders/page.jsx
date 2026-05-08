@@ -212,7 +212,7 @@ function OrdersPageContent() {
                 )}
                 {isAdmin && (
                   <button
-                    onClick={() => router.push('/admin/orders')}
+                    onClick={() => router.push('/admin/food/orders')}
                     className="px-3 py-2 sm:px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center text-sm sm:text-base whitespace-nowrap"
                   >
                     <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
