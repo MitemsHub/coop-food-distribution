@@ -29,6 +29,8 @@ function RamApprovedContent() {
   const [orders, setOrders] = useState([])
   const [term, setTerm] = useState('')
   const [deliveryLocationId, setDeliveryLocationId] = useState('')
+  const [deliveryLocations, setDeliveryLocations] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [rollbackBusyId, setRollbackBusyId] = useState(null)
@@ -45,36 +47,54 @@ function RamApprovedContent() {
   const fetchCtl = useRef(null)
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (opts = {}) => {
     setLoading(true)
     setMsg(null)
     try {
       if (fetchCtl.current) fetchCtl.current.abort()
       const ctl = new AbortController()
       fetchCtl.current = ctl
+      const nextPage = Number(opts.page || page || 1)
+      const nextPageSize = Number(opts.pageSize || pageSize || 50)
+      const nextTerm = typeof opts.term === 'string' ? opts.term : term
+      const nextLocationId = typeof opts.locationId === 'string' ? opts.locationId : deliveryLocationId
       const qs = new URLSearchParams({
         status: 'Approved',
-        limit: '1000',
-        ...(term ? { term } : {}),
+        page: String(Math.max(1, nextPage)),
+        page_size: String(Math.max(1, nextPageSize)),
+        ...(nextTerm ? { term: nextTerm } : {}),
+        ...(nextLocationId ? { delivery_location_id: String(nextLocationId) } : {}),
       })
       const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
-      let rows = json.orders || []
+      const rows = json.orders || []
       setOrders(rows)
+      setTotalCount(Number(json?.meta?.total_count ?? rows.length))
       setSelectedIds(new Set())
-      setPage(1)
     } catch (e) {
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
+      setTotalCount(0)
       setSelectedIds(new Set())
     } finally {
       setLoading(false)
     }
   }
 
+  const fetchLocations = async () => {
+    try {
+      const res = await fetch('/api/admin/ram/delivery-locations', { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/ram/delivery-locations')
+      if (json?.ok) setDeliveryLocations(json.locations || [])
+    } catch {
+      setDeliveryLocations([])
+    }
+  }
+
   useEffect(() => {
-    fetchOrders()
+    fetchLocations()
+    fetchOrders({ page: 1, pageSize })
     return () => {
       if (fetchCtl.current) fetchCtl.current.abort()
     }
@@ -83,6 +103,7 @@ function RamApprovedContent() {
   useEffect(() => {
     setSelectedIds(new Set())
     setPage(1)
+    fetchOrders({ page: 1, locationId: deliveryLocationId })
   }, [deliveryLocationId])
 
   const rollbackToPending = async (id) => {
@@ -221,35 +242,55 @@ function RamApprovedContent() {
     }
   }
 
-  const locations = useMemo(() => {
-    const byId = new Map()
-    for (const o of orders || []) {
-      const loc = o?.delivery_location
-      const id = Number(loc?.id ?? o?.ram_delivery_location_id)
-      if (!Number.isFinite(id) || id <= 0) continue
-      if (byId.has(id)) continue
-      const title = String(loc?.delivery_location || '').trim()
-      const name = String(loc?.name || '').trim()
-      const label = [title, name].filter(Boolean).join(' — ')
-      byId.set(id, { id, label: label || `Location ${id}` })
-    }
-    return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label))
-  }, [orders])
+  const locationOptions = useMemo(() => {
+    const options = (deliveryLocations || [])
+      .filter((l) => l.is_active !== false)
+      .map((l) => {
+        const id = Number(l.id)
+        const label = [String(l.delivery_location || '').trim(), String(l.name || '').trim()].filter(Boolean).join(' — ')
+        return { id, label: label || `Location ${id}` }
+      })
+      .filter((l) => Number.isFinite(l.id) && l.id > 0)
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return options
+  }, [deliveryLocations])
 
   const selectedLocationLabel = useMemo(() => {
     const id = Number(deliveryLocationId)
     if (!Number.isFinite(id) || id <= 0) return ''
-    return locations.find((l) => l.id === id)?.label || ''
-  }, [deliveryLocationId, locations])
+    return locationOptions.find((l) => l.id === id)?.label || ''
+  }, [deliveryLocationId, locationOptions])
 
-  const filteredOrders = useMemo(() => {
-    const id = Number(deliveryLocationId)
-    if (!Number.isFinite(id) || id <= 0) return orders || []
-    return (orders || []).filter((o) => Number(o?.ram_delivery_location_id) === id)
-  }, [deliveryLocationId, orders])
+  const fetchAllForExport = async () => {
+    const pageSizeForExport = 1000
+    const all = []
+    let nextPage = 1
+    let total = 0
+    while (true) {
+      const qs = new URLSearchParams({
+        status: 'Approved',
+        page: String(nextPage),
+        page_size: String(pageSizeForExport),
+        ...(term ? { term } : {}),
+        ...(deliveryLocationId ? { delivery_location_id: String(deliveryLocationId) } : {}),
+      })
+      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/ram/orders/list (export)')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load orders for export')
+      const chunk = json.orders || []
+      const t = Number(json?.meta?.total_count ?? 0)
+      if (Number.isFinite(t) && t > 0) total = t
+      all.push(...chunk)
+      if (!chunk.length) break
+      if (total && all.length >= total) break
+      nextPage += 1
+      if (nextPage > 200) break
+    }
+    return all
+  }
 
   const exportExcel = async () => {
-    const list = filteredOrders || []
+    const list = await fetchAllForExport()
     const rows = list.map((o) => ({
       id: o.id,
       created_at: o.created_at,
@@ -293,7 +334,8 @@ function RamApprovedContent() {
   }
 
   const exportPDF = async () => {
-    if (!filteredOrders.length) return
+    const list = await fetchAllForExport()
+    if (!list.length) return
     const { jsPDF } = await import('jspdf')
     const { default: autoTable } = await import('jspdf-autotable')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -328,7 +370,7 @@ function RamApprovedContent() {
       ],
     ]
 
-    const body = filteredOrders.map((o) => [
+    const body = list.map((o) => [
       String(o.id ?? ''),
       o.created_at ? new Date(o.created_at).toLocaleString() : '',
       sanitize(o.member_id),
@@ -344,7 +386,7 @@ function RamApprovedContent() {
       '',
     ])
 
-    const totals = filteredOrders.reduce(
+    const totals = list.reduce(
       (acc, o) => {
         acc.qty += Number(o.qty || 0)
         acc.principal += Number(o.principal_amount || 0)
@@ -398,22 +440,19 @@ function RamApprovedContent() {
     doc.save(`ram_approved_orders_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
-  const pageCount = useMemo(() => Math.max(1, Math.ceil((orders?.length || 0) / Math.max(1, pageSize))), [orders, pageSize])
-  const filteredPageCount = useMemo(
-    () => Math.max(1, Math.ceil((filteredOrders?.length || 0) / Math.max(1, pageSize))),
-    [filteredOrders, pageSize]
-  )
-  const safePage = Math.min(Math.max(1, page), filteredPageCount)
-  const startIndex = (safePage - 1) * pageSize
-  const endIndex = startIndex + pageSize
-  const pagedOrders = useMemo(() => (filteredOrders || []).slice(startIndex, endIndex), [filteredOrders, startIndex, endIndex])
+  const pageCount = useMemo(() => Math.max(1, Math.ceil((totalCount || 0) / Math.max(1, pageSize))), [totalCount, pageSize])
+  const safePage = Math.min(Math.max(1, page), pageCount)
+  const pagedOrders = orders || []
 
   useEffect(() => {
-    if (page !== safePage) setPage(safePage)
+    if (page !== safePage) {
+      setPage(safePage)
+      fetchOrders({ page: safePage })
+    }
   }, [page, safePage])
 
   const selectedCount = selectedIds.size
-  const allSelected = filteredOrders.length > 0 && selectedCount === filteredOrders.length
+  const allSelected = pagedOrders.length > 0 && pagedOrders.every((o) => selectedIds.has(Number(o.id)))
 
   const toggleSelect = (id) => {
     const orderId = Number(id)
@@ -429,8 +468,15 @@ function RamApprovedContent() {
   const toggleSelectAll = () => {
     setSelectedIds((prev) => {
       const cur = new Set(prev || [])
-      if (filteredOrders.length > 0 && cur.size === filteredOrders.length) return new Set()
-      return new Set((filteredOrders || []).map((o) => Number(o.id)).filter((n) => Number.isFinite(n) && n > 0))
+      const ids = (pagedOrders || []).map((o) => Number(o.id)).filter((n) => Number.isFinite(n) && n > 0)
+      if (!ids.length) return cur
+      const everySelected = ids.every((id) => cur.has(id))
+      if (everySelected) {
+        for (const id of ids) cur.delete(id)
+        return cur
+      }
+      for (const id of ids) cur.add(id)
+      return cur
     })
   }
 
@@ -531,12 +577,18 @@ function RamApprovedContent() {
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') fetchOrders()
+                  if (e.key === 'Enter') {
+                    setPage(1)
+                    fetchOrders({ page: 1 })
+                  }
                 }}
               />
               <button
                 type="button"
-                onClick={fetchOrders}
+                onClick={() => {
+                  setPage(1)
+                  fetchOrders({ page: 1 })
+                }}
                 className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
               >
                 Search
@@ -550,7 +602,7 @@ function RamApprovedContent() {
                 onChange={(e) => setDeliveryLocationId(e.target.value)}
               >
                 <option value="">All locations</option>
-                {locations.map((l) => (
+                {locationOptions.map((l) => (
                   <option key={l.id} value={String(l.id)}>
                     {l.label}
                   </option>
@@ -559,7 +611,7 @@ function RamApprovedContent() {
               <button
                 type="button"
                 onClick={exportExcel}
-                disabled={!filteredOrders.length}
+                disabled={!totalCount}
                 className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50"
               >
                 Download Excel
@@ -567,7 +619,7 @@ function RamApprovedContent() {
               <button
                 type="button"
                 onClick={exportPDF}
-                disabled={!filteredOrders.length}
+                disabled={!totalCount}
                 className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
               >
                 Download PDF
@@ -575,7 +627,7 @@ function RamApprovedContent() {
             </div>
           </div>
 
-          <div className="text-xs text-gray-600">Orders: {filteredOrders.length.toLocaleString()} · Selected: {selectedCount.toLocaleString()}</div>
+          <div className="text-xs text-gray-600">Orders: {Number(totalCount || 0).toLocaleString()} · Selected: {selectedCount.toLocaleString()}</div>
         </div>
       </div>
 
@@ -594,7 +646,7 @@ function RamApprovedContent() {
             <button
               type="button"
               onClick={toggleSelectAll}
-              disabled={!orders.length}
+              disabled={!pagedOrders.length}
               className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
             >
               {allSelected ? 'Deselect All' : 'Select All'}
@@ -609,7 +661,16 @@ function RamApprovedContent() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <select className="border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value) || 50)}>
+            <select
+              className="border-2 border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+              value={pageSize}
+              onChange={(e) => {
+                const next = Number(e.target.value) || 50
+                setPageSize(next)
+                setPage(1)
+                fetchOrders({ page: 1, pageSize: next })
+              }}
+            >
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -617,19 +678,27 @@ function RamApprovedContent() {
             <button
               type="button"
               className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => {
+                const next = Math.max(1, safePage - 1)
+                setPage(next)
+                fetchOrders({ page: next })
+              }}
               disabled={safePage <= 1}
             >
               Prev
             </button>
             <div className="text-xs text-gray-500">
-              Page {safePage} / {filteredPageCount}
+              Page {safePage} / {pageCount}
             </div>
             <button
               type="button"
               className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
-              onClick={() => setPage((p) => Math.min(filteredPageCount, p + 1))}
-              disabled={safePage >= filteredPageCount}
+              onClick={() => {
+                const next = Math.min(pageCount, safePage + 1)
+                setPage(next)
+                fetchOrders({ page: next })
+              }}
+              disabled={safePage >= pageCount}
             >
               Next
             </button>
@@ -645,7 +714,7 @@ function RamApprovedContent() {
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleSelectAll}
-                    disabled={!orders.length}
+                    disabled={!pagedOrders.length}
                     className="h-4 w-4"
                     aria-label="Select all"
                   />

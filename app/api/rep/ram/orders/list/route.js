@@ -40,7 +40,7 @@ async function resolveRamCycleId({ supabase, cycleParam, ordersHasCycle }) {
     if (!isMissingTable(aErr, 'ram_cycles')) throw aErr
     return { cycleId: null, activeCycleId: null }
   }
-  if (active?.id) return { cycleId: active.id, activeCycleId: active.id }
+  if (active?.id) return { cycleId: null, activeCycleId: active.id }
 
   const { data: latest, error: lErr } = await supabase
     .from('ram_cycles')
@@ -51,7 +51,7 @@ async function resolveRamCycleId({ supabase, cycleParam, ordersHasCycle }) {
     if (!isMissingTable(lErr, 'ram_cycles')) throw lErr
     return { cycleId: null, activeCycleId: null }
   }
-  return { cycleId: latest?.id || null, activeCycleId: null }
+  return { cycleId: null, activeCycleId: latest?.id || null }
 }
 
 function asInt(value, fallback) {
