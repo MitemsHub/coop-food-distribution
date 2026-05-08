@@ -80,6 +80,8 @@ export async function GET(req) {
     const to = (searchParams.get('to') || '').trim()
     const ramCycleParam = (searchParams.get('ram_cycle_id') || searchParams.get('cycle_id') || '').trim()
     const limit = Math.min(Math.max(asInt(searchParams.get('limit'), 300), 1), 1000)
+    const pageSize = Math.min(Math.max(asInt(searchParams.get('page_size') || searchParams.get('pageSize'), limit), 1), 1000)
+    const page = Math.max(1, asInt(searchParams.get('page'), 1))
 
     const allowedStatus = new Set(['Pending', 'Approved', 'Delivered', 'Cancelled'])
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
@@ -91,7 +93,7 @@ export async function GET(req) {
       ordersHasCycle
     })
 
-    let query = supabase.from('ram_orders').select('*').order('created_at', { ascending: false }).limit(limit)
+    let query = supabase.from('ram_orders').select('*', { count: 'exact' }).order('created_at', { ascending: false })
     if (statusRaw && allowedStatus.has(statusRaw)) query = query.eq('status', statusRaw)
     if (payment && allowedPayment.has(payment)) query = query.eq('payment_option', payment)
     if (memberId) query = query.eq('member_id', memberId)
@@ -100,19 +102,20 @@ export async function GET(req) {
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', `${to}T23:59:59`)
     if (ordersHasCycle && cycleId != null) query = query.eq('ram_cycle_id', cycleId)
+    if (term) {
+      const safeTerm = term.replace(/,/g, '')
+      const orParts = [`member_id.ilike.%${safeTerm}%`]
+      if (/^\d+$/.test(safeTerm)) orParts.push(`id.eq.${Math.trunc(Number(safeTerm))}`)
+      query = query.or(orParts.join(','))
+    }
 
-    const { data: orders, error } = await query
+    const offset = (page - 1) * pageSize
+    query = query.range(offset, offset + pageSize - 1)
+
+    const { data: orders, count, error } = await query
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
-    let filtered = orders || []
-    if (term) {
-      const t = term.toLowerCase()
-      filtered = filtered.filter((o) => {
-        const idTxt = String(o.id || '')
-        const mid = String(o.member_id || '')
-        return idTxt.toLowerCase().includes(t) || mid.toLowerCase().includes(t)
-      })
-    }
+    const filtered = orders || []
 
     const memberIds = Array.from(new Set(filtered.map((o) => String(o.member_id || '').trim()).filter(Boolean)))
     const locationIds = Array.from(
@@ -169,6 +172,9 @@ export async function GET(req) {
       meta: {
         active_ram_cycle_id: activeCycleId,
         used_ram_cycle_id: ordersHasCycle ? cycleId : null,
+        page,
+        page_size: pageSize,
+        total_count: Number(count ?? 0),
       }
     })
   } catch (e) {
