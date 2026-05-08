@@ -228,7 +228,7 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
 
   let activeRamCycleId = null
   let usedLoanQtyThisCycle = 0
-  if (!ramOrdersTableMissing && !isPensioner) {
+  if (!ramOrdersTableMissing) {
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
 
     if (ordersHasCycle) {
@@ -262,10 +262,9 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
 
   let maxRamsAllowedForLoan = 0
   if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
-    if (isPensioner) {
-      maxRamsAllowedForLoan = 1
-    } else if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
-      maxRamsAllowedForLoan = 1
+    const graceUnused = usedLoanQtyThisCycle <= 0
+    if (loanEligible < unitPrice) {
+      maxRamsAllowedForLoan = graceUnused ? 1 : 0
     } else if (loanEligible > 0) {
       const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
       maxRamsAllowedForLoan = computeMaxAffordableQty({
@@ -415,10 +414,10 @@ export async function POST(req) {
     }
     if (paymentOption === 'Loan' && principalAmount > eligibility.loanEligible) {
       const allowFallbackOne =
-        !eligibility.isRetiree &&
         qty === 1 &&
         eligibility.remainingLoanQtyThisCycle > 0 &&
-        eligibility.loanEligible < unitPrice
+        eligibility.loanEligible < unitPrice &&
+        eligibility.usedLoanQtyThisCycle <= 0
       if (!allowFallbackOne) {
         return NextResponse.json({ ok: false, error: 'Insufficient loan eligibility for this purchase' }, { status: 400 })
       }

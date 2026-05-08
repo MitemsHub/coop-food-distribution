@@ -248,7 +248,7 @@ export async function GET(req) {
 
     let activeRamCycleId = null
     let usedLoanQtyThisCycle = 0
-    if (!ramOrdersTableMissing && !isPensioner) {
+    if (!ramOrdersTableMissing) {
       const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
 
       if (ordersHasCycle) {
@@ -290,10 +290,9 @@ export async function GET(req) {
 
     let maxRamsAllowedForLoan = 0
     if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
-      if (isPensioner) {
-        maxRamsAllowedForLoan = 1
-      } else if (!isRetiree && !isPensioner && loanEligible < unitPrice) {
-        maxRamsAllowedForLoan = 1
+      const graceUnused = usedLoanQtyThisCycle <= 0
+      if (loanEligible < unitPrice) {
+        maxRamsAllowedForLoan = graceUnused ? 1 : 0
       } else if (loanEligible > 0) {
         const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
         maxRamsAllowedForLoan = computeMaxAffordableQty({
