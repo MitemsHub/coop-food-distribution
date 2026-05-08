@@ -34,6 +34,7 @@ function RamShopPageContent() {
   const [message, setMessage] = useState(null)
   const [popupText, setPopupText] = useState('')
   const retireePopupKeyRef = useRef('')
+  const submitLockRef = useRef(false)
   const [phoneDraft, setPhoneDraft] = useState('')
   const [phoneSaving, setPhoneSaving] = useState(false)
 
@@ -433,6 +434,7 @@ function RamShopPageContent() {
   }, [categoryTouched, derivedRamCategory, memberId, paymentOption, selectedRamCategory])
 
   const placeOrder = async () => {
+    if (submitLockRef.current) return
     setMessage(null)
 
     const memberPhone = String(member?.phone || '').trim()
@@ -477,6 +479,7 @@ function RamShopPageContent() {
       return
     }
 
+    submitLockRef.current = true
     setSubmitting(true)
     try {
       const res = await fetch('/api/ram/orders', {
@@ -507,6 +510,7 @@ function RamShopPageContent() {
       setMessage({ type: 'error', text: e.message || 'Network error' })
     } finally {
       setSubmitting(false)
+      submitLockRef.current = false
     }
   }
 

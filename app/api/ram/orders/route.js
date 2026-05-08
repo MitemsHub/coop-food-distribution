@@ -469,6 +469,27 @@ export async function POST(req) {
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
     let ramCycleId = ordersHasCycle ? eligibility.activeRamCycleId : null
 
+    const createdSince = new Date(Date.now() - 30_000).toISOString()
+    let dupeQ = supabase
+      .from('ram_orders')
+      .select('id')
+      .eq('member_id', memberId)
+      .eq('payment_option', paymentOption)
+      .eq('status', 'Pending')
+      .eq('qty', qty)
+      .eq('unit_price', unitPrice)
+      .eq('ram_delivery_location_id', deliveryLocation.id)
+      .gte('created_at', createdSince)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (ordersHasCycle && ramCycleId != null) dupeQ = dupeQ.eq('ram_cycle_id', ramCycleId)
+    const { data: dupeRows, error: dupeErr } = await dupeQ
+    if (dupeErr) return NextResponse.json({ ok: false, error: dupeErr.message }, { status: 500 })
+    const dupe = (dupeRows || [])[0]
+    if (dupe?.id) {
+      return NextResponse.json({ ok: true, order: { id: dupe.id } })
+    }
+
     const { data: inserted, error: insErr } = await supabase
       .from('ram_orders')
       .insert({
