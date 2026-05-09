@@ -6,6 +6,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const LOAN_INTEREST_RATE = 0.06
+const ALLOWED_PAYMENTS = new Set(['Cash', 'Loan', 'Savings'])
 
 function normalizeGrade(grade) {
   return String(grade || '')
@@ -51,6 +52,11 @@ export async function POST(req) {
     const phoneRes = phoneRaw ? sanitizePhone(phoneRaw) : null
     if (phoneRes && !phoneRes.ok) return NextResponse.json({ ok: false, error: phoneRes.error }, { status: 400 })
 
+    const paymentRaw = body.payment_option === undefined || body.payment_option === null ? '' : String(body.payment_option || '').trim()
+    if (paymentRaw && !ALLOWED_PAYMENTS.has(paymentRaw)) {
+      return NextResponse.json({ ok: false, error: 'Invalid payment option' }, { status: 400 })
+    }
+
     const supabase = createClient()
 
     const { data: order, error: selErr } = await supabase
@@ -66,7 +72,7 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Only Pending orders can be edited' }, { status: 400 })
     }
 
-    const payment = String(order.payment_option || '').trim()
+    const payment = paymentRaw || String(order.payment_option || '').trim()
     if (payment === 'Loan') {
       const cap = isPensionerGrade(order.member_grade) ? 1 : 2
       if (qtyRes.value > cap) {
@@ -100,6 +106,7 @@ export async function POST(req) {
     const { data: updated, error: updErr } = await supabase
       .from('ram_orders')
       .update({
+        ...(paymentRaw ? { payment_option: paymentRaw } : {}),
         qty: qtyRes.value,
         unit_price: unitPrice,
         principal_amount: principalAmount,

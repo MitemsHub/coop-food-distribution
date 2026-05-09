@@ -42,6 +42,7 @@ function RamPendingContent() {
   const [showModal, setShowModal] = useState(null)
   const [editQty, setEditQty] = useState('')
   const [editLocationId, setEditLocationId] = useState('')
+  const [editPaymentOption, setEditPaymentOption] = useState('')
   const [editUnitPrice, setEditUnitPrice] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editBusy, setEditBusy] = useState(false)
@@ -340,6 +341,7 @@ function RamPendingContent() {
     if (!order?.id) return
     setEditQty(String(order.qty || 1))
     setEditLocationId(String(order.delivery_location?.id || order.ram_delivery_location_id || ''))
+    setEditPaymentOption(String(order.payment_option || ''))
     setEditUnitPrice(String(order.unit_price ?? ''))
     setEditPhone(String(order.member?.phone || ''))
     setShowModal({ type: 'edit', id: order.id })
@@ -398,9 +400,11 @@ function RamPendingContent() {
     const id = showModal?.id
     const qty = Number(editQty)
     const deliveryLocationId = Number(editLocationId)
+    const paymentOption = String(editPaymentOption || '').trim()
     if (!Number.isFinite(id) || id <= 0) return
     if (!Number.isFinite(qty) || qty <= 0) return
     if (!Number.isFinite(deliveryLocationId) || deliveryLocationId <= 0) return
+    if (!paymentOption) return
 
     setEditBusy(true)
     setMsg(null)
@@ -415,6 +419,7 @@ function RamPendingContent() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           id,
+          payment_option: paymentOption,
           qty,
           delivery_location_id: deliveryLocationId,
           ...(unitPriceNum != null ? { unit_price: unitPriceNum } : {}),
@@ -815,7 +820,7 @@ function RamPendingContent() {
       >
         {showModal?.type === 'edit' ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-1">Delivery Location</div>
                 <select
@@ -830,6 +835,20 @@ function RamPendingContent() {
                       {l.delivery_location}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-700 mb-1">Payment</div>
+                <select
+                  className="w-full border rounded px-3 py-2 text-sm bg-white"
+                  value={editPaymentOption}
+                  onChange={(e) => setEditPaymentOption(e.target.value)}
+                  disabled={editBusy || bulkBusy}
+                >
+                  <option value="">Select...</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Savings">Savings</option>
+                  <option value="Loan">Loan</option>
                 </select>
               </div>
               <div>
@@ -862,7 +881,9 @@ function RamPendingContent() {
                 />
               </div>
             </div>
-            <div className="text-xs text-gray-600">Loan is limited to 2 rams (1 for pensioners).</div>
+            <div className="text-xs text-gray-600">
+              {editPaymentOption === 'Loan' ? 'Loan is limited to 2 rams (1 for pensioners) and includes 6% interest.' : null}
+            </div>
           </div>
         ) : showModal?.type === 'delete' ? (
           <div className="text-sm text-gray-700">
