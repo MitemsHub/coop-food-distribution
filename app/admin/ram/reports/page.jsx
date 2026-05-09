@@ -387,16 +387,34 @@ function RamReportsContent() {
   }
 
   const fetchApplications = async (opts) => {
-    const qs = new URLSearchParams({ limit: String(opts?.limit || '1000') })
-    if (opts?.status) qs.set('status', opts.status)
-    if (opts?.payment) qs.set('payment', opts.payment)
-    if (opts?.delivery_location_id) qs.set('delivery_location_id', String(opts.delivery_location_id))
-    if (opts?.from) qs.set('from', opts.from)
-    if (opts?.to) qs.set('to', opts.to)
-    const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
-    const json = await safeJson(res, '/api/admin/ram/orders/list')
-    if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load applications')
-    return json.orders || []
+    const pageSize = 1000
+    const hardLimit = Number(opts?.limit || 0)
+    let page = 1
+    let totalCount = 0
+    const all = []
+
+    while (true) {
+      const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+      if (opts?.status) qs.set('status', opts.status)
+      if (opts?.payment) qs.set('payment', opts.payment)
+      if (opts?.delivery_location_id) qs.set('delivery_location_id', String(opts.delivery_location_id))
+      if (opts?.from) qs.set('from', opts.from)
+      if (opts?.to) qs.set('to', opts.to)
+      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/ram/orders/list')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load applications')
+      const chunk = json.orders || []
+      const nextTotal = Number(json?.meta?.total_count ?? 0)
+      if (Number.isFinite(nextTotal) && nextTotal > 0) totalCount = nextTotal
+      all.push(...chunk)
+      if (!chunk.length) break
+      if (hardLimit > 0 && all.length >= hardLimit) break
+      if (totalCount > 0 && all.length >= totalCount) break
+      page += 1
+      if (page > 200) break
+    }
+
+    return hardLimit > 0 ? all.slice(0, hardLimit) : all
   }
 
   const fetchVendorBankMetaByLocationId = async () => {
