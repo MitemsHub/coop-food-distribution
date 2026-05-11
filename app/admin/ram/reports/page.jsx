@@ -75,8 +75,9 @@ function toApplicationExportRows(orders) {
 function computePaymentVendor(o) {
   const payment = String(o?.payment_option || '').trim()
   const principal = Number(o?.principal_amount || 0)
-  if (payment !== 'Loan') return principal
-  const interest = Number(o?.interest_amount || 0) || Math.round(principal * 0.06)
+  const fee = Math.round(principal * 0.06)
+  if (payment !== 'Loan') return Math.max(0, principal - fee)
+  const interest = Number(o?.interest_amount || 0) || fee
   return Math.max(0, principal - interest)
 }
 
