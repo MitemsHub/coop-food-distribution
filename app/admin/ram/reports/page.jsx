@@ -401,7 +401,17 @@ function RamReportsContent() {
       if (opts?.delivery_location_id) qs.set('delivery_location_id', String(opts.delivery_location_id))
       if (opts?.from) qs.set('from', opts.from)
       if (opts?.to) qs.set('to', opts.to)
-      const res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
+
+      let res = null
+      let attempt = 0
+      while (true) {
+        res = await fetch(`/api/admin/ram/orders/list?${qs.toString()}`, { cache: 'no-store' })
+        if (res.status !== 429) break
+        attempt += 1
+        if (attempt > 5) break
+        await new Promise((r) => setTimeout(r, 400 * attempt))
+      }
+
       const json = await safeJson(res, '/api/admin/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load applications')
       const chunk = json.orders || []
@@ -651,21 +661,37 @@ function RamReportsContent() {
       const wb = new ExcelJS.Workbook()
       const safeName = (name) => String(name || 'Sheet').replace(/[\\/?*\[\]]/g, ' ').slice(0, 31) || 'Sheet'
 
+      const ordersByLocationId = new Map()
+      if (!packLocationId) {
+        const allOrders = await fetchApplications({
+          status: packStatus,
+          payment: packPayment,
+          from: packFrom,
+          to: packTo,
+        })
+        for (const o of allOrders || []) {
+          const id = String(o?.delivery_location?.id ?? o?.ram_delivery_location_id ?? '')
+          if (!id) continue
+          const arr = ordersByLocationId.get(id) || []
+          arr.push(o)
+          ordersByLocationId.set(id, arr)
+        }
+      }
+
       let i = 0
       for (const loc of selectedLocations) {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
         const meta = bankMetaById.get(String(loc.id)) || null
         const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
-        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
-        const orders = await fetchApplications({
+        const orders = packLocationId ? await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
           payment: packPayment,
           from: packFrom,
           to: packTo,
-          limit: 10000,
-        })
+        }) : (ordersByLocationId.get(String(loc.id)) || [])
+        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
         const ws = wb.addWorksheet(safeName(loc.delivery_location || loc.name || `Location ${loc.id}`))
         ws.addRow(['Ram Sales — Payment to Vendors'])
         ws.addRow([`Location: ${loc.delivery_location || loc.name || `Location ${loc.id}`}`])
@@ -732,21 +758,37 @@ function RamReportsContent() {
         24
       )
 
+      const ordersByLocationId = new Map()
+      if (!packLocationId) {
+        const allOrders = await fetchApplications({
+          status: packStatus,
+          payment: packPayment,
+          from: packFrom,
+          to: packTo,
+        })
+        for (const o of allOrders || []) {
+          const id = String(o?.delivery_location?.id ?? o?.ram_delivery_location_id ?? '')
+          if (!id) continue
+          const arr = ordersByLocationId.get(id) || []
+          arr.push(o)
+          ordersByLocationId.set(id, arr)
+        }
+      }
+
       let i = 0
       for (const loc of selectedLocations) {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
         const meta = bankMetaById.get(String(loc.id)) || null
         const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
-        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
-        const orders = await fetchApplications({
+        const orders = packLocationId ? await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
           payment: packPayment,
           from: packFrom,
           to: packTo,
-          limit: 10000,
-        })
+        }) : (ordersByLocationId.get(String(loc.id)) || [])
+        const invoiceLink = await resolveInvoiceLink(loc.id, meta?.paid?.ram_cycle_id ?? null, invoicesUrl)
         const rows = toVendorPaymentExportRows(orders)
         const locTitle = sanitize(loc.delivery_location || loc.name || `Location ${loc.id}`)
         let y = (doc.lastAutoTable?.finalY || 0) ? (doc.lastAutoTable.finalY + 8) : 32
