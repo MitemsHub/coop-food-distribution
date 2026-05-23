@@ -39,6 +39,21 @@ async function resolveActiveRamCycleId(supabase) {
   return latest?.id || null
 }
 
+function isMissingColumn(error, columnName) {
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const c = String(columnName || '').toLowerCase()
+  if (!msg.includes(c)) return false
+  return msg.includes('column') && (msg.includes('does not exist') || msg.includes('could not find'))
+}
+
+async function hasColumn(supabase, tableName, columnName) {
+  const { error } = await supabase.from(tableName).select(columnName).limit(1)
+  if (!error) return true
+  if (isMissingTable(error, tableName)) return false
+  if (isMissingColumn(error, columnName)) return false
+  throw error
+}
+
 export async function GET(req) {
   try {
     const session = await validateSession(req, 'admin')
@@ -47,24 +62,51 @@ export async function GET(req) {
     const supabase = createClient()
     const { searchParams } = new URL(req.url)
     const onlyActive = String(searchParams.get('active') || '1') !== '0'
+    const cycleIdParam = asInt(searchParams.get('cycle_id') || searchParams.get('ram_cycle_id'), null)
+
+    const cycleId = Number.isFinite(cycleIdParam) && cycleIdParam != null && cycleIdParam > 0 ? cycleIdParam : await resolveActiveRamCycleId(supabase).catch(() => null)
+
+    let allowedIds = null
+    if (cycleId) {
+      const { data: links, error: linkErr } = await supabase
+        .from('ram_cycle_delivery_locations')
+        .select('ram_delivery_location_id,is_active')
+        .eq('ram_cycle_id', cycleId)
+        .eq('is_active', true)
+      if (linkErr) {
+        if (!isMissingTable(linkErr, 'ram_cycle_delivery_locations')) return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
+      } else {
+        allowedIds = new Set((links || []).map((r) => asInt(r?.ram_delivery_location_id, null)).filter((n) => Number.isFinite(n) && n > 0))
+      }
+    }
 
     let q = supabase.from('ram_delivery_locations').select('id,delivery_location,name,phone,is_active,rep_code').order('id', { ascending: true })
     if (onlyActive) q = q.eq('is_active', true)
+    if (allowedIds) q = q.in('id', Array.from(allowedIds))
     const { data: locations, error: locErr } = await q
     if (locErr) return NextResponse.json({ ok: false, error: locErr.message }, { status: 500 })
 
     const ids = (locations || []).map((l) => asInt(l?.id, null)).filter((n) => Number.isFinite(n) && n > 0)
     if (!ids.length) return NextResponse.json({ ok: true, locations: [] })
 
-    const cycleId = await resolveActiveRamCycleId(supabase).catch(() => null)
+    const bankHasCycle = await hasColumn(supabase, 'ram_vendor_bank_accounts', 'ram_cycle_id').catch(() => false)
+    const invoicesHasCycle = await hasColumn(supabase, 'ram_vendor_invoices', 'ram_cycle_id').catch(() => false)
 
     const [banksRes, invoicesRes, paidRes] = await Promise.all([
-      supabase
-        .from('ram_vendor_bank_accounts')
-        .select('id,ram_delivery_location_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
-        .in('ram_delivery_location_id', ids)
-        .eq('is_current', true),
-      supabase.from('ram_vendor_invoices').select('id,ram_delivery_location_id').in('ram_delivery_location_id', ids),
+      (() => {
+        let bq = supabase
+          .from('ram_vendor_bank_accounts')
+          .select('id,ram_delivery_location_id,ram_cycle_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
+          .in('ram_delivery_location_id', ids)
+          .eq('is_current', true)
+        if (bankHasCycle && cycleId) bq = bq.eq('ram_cycle_id', cycleId)
+        return bq
+      })(),
+      (() => {
+        let iq = supabase.from('ram_vendor_invoices').select('id,ram_delivery_location_id,ram_cycle_id').in('ram_delivery_location_id', ids)
+        if (invoicesHasCycle && cycleId) iq = iq.eq('ram_cycle_id', cycleId)
+        return iq
+      })(),
       cycleId
         ? supabase
             .from('ram_vendor_payment_status')

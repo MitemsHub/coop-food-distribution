@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sanitizeString, validateSession, validateNumber } from '@/lib/validation'
+import { sanitizeString, validateSession, validateNumber, validateMemberId } from '@/lib/validation'
 import { createClient } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
@@ -21,6 +21,36 @@ function isPensionerGrade(grade) {
   return g.includes('pensioner')
 }
 
+function isRetireeGrade(grade) {
+  const g = normalizeGrade(grade)
+  if (!g) return false
+  return g.includes('retiree')
+}
+
+function isMissingTable(error, tableName) {
+  const code = String(error?.code || '')
+  if (code === '42P01') return true
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const t = String(tableName || '').toLowerCase()
+  if (!msg.includes(t)) return false
+  return msg.includes('does not exist') || msg.includes('could not find the table')
+}
+
+function isMissingColumn(error, columnName) {
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const c = String(columnName || '').toLowerCase()
+  if (!msg.includes(c)) return false
+  return msg.includes('column') && (msg.includes('does not exist') || msg.includes('could not find'))
+}
+
+async function hasColumn(supabase, tableName, columnName) {
+  const { error } = await supabase.from(tableName).select(columnName).limit(1)
+  if (!error) return true
+  if (isMissingTable(error, tableName)) return false
+  if (isMissingColumn(error, columnName)) return false
+  throw error
+}
+
 function sanitizePhone(phoneRaw) {
   const phone = sanitizeString(String(phoneRaw || ''), { maxLength: 50, encodeHtml: false })
   const digits = phone.replace(/\D/g, '')
@@ -37,6 +67,12 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}))
     const idRes = validateNumber(body.id, { min: 1, integer: true })
     if (!idRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid order id' }, { status: 400 })
+
+    const memberIdRaw = body.member_id === undefined || body.member_id === null ? '' : String(body.member_id || '').trim().toUpperCase()
+    if (memberIdRaw) {
+      const memberIdRes = validateMemberId(memberIdRaw)
+      if (!memberIdRes.isValid) return NextResponse.json({ ok: false, error: memberIdRes.error || 'Invalid member id' }, { status: 400 })
+    }
 
     const qtyRes = validateNumber(body.qty, { min: 1, max: 1000, integer: true })
     if (!qtyRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid quantity' }, { status: 400 })
@@ -61,7 +97,7 @@ export async function POST(req) {
 
     const { data: order, error: selErr } = await supabase
       .from('ram_orders')
-      .select('id,status,payment_option,unit_price,member_grade,member_id')
+      .select('id,status,payment_option,unit_price,member_grade,member_id,ram_cycle_id')
       .eq('id', idRes.value)
       .single()
 
@@ -72,9 +108,58 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Only Pending orders can be edited' }, { status: 400 })
     }
 
+    const nextMemberId = memberIdRaw || String(order.member_id || '').trim().toUpperCase()
+    let nextMember = null
+    let nextMemberGrade = String(order.member_grade || '')
+    if (memberIdRaw && nextMemberId !== String(order.member_id || '').trim().toUpperCase()) {
+      const { data: m, error: mErr } = await supabase
+        .from('members')
+        .select('member_id,grade,full_name,phone,branches:branch_id(code,name)')
+        .eq('member_id', nextMemberId)
+        .maybeSingle()
+      if (mErr) return NextResponse.json({ ok: false, error: mErr.message }, { status: 500 })
+      if (!m?.member_id) return NextResponse.json({ ok: false, error: 'Member not found' }, { status: 400 })
+      nextMember = m
+      nextMemberGrade = String(m.grade || '')
+    }
+
     const payment = paymentRaw || String(order.payment_option || '').trim()
     if (payment === 'Loan') {
-      const cap = isPensionerGrade(order.member_grade) ? 1 : 2
+      const cycleId = order?.ram_cycle_id ?? null
+      let eligibleP = 1
+      let eligibleR = 2
+      let eligibleA = 2
+      const cyclesHasExplicit = await hasColumn(supabase, 'ram_cycles', 'eligible_loan_qty_active').catch(() => false)
+      if (cyclesHasExplicit && cycleId != null) {
+        const { data: cycleRow, error: cErr } = await supabase
+          .from('ram_cycles')
+          .select('eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active')
+          .eq('id', cycleId)
+          .maybeSingle()
+        if (cErr) return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 })
+        eligibleP = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_pensioner ?? eligibleP)))
+        eligibleR = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_retiree ?? eligibleR)))
+        eligibleA = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_active ?? eligibleA)))
+      } else {
+        let pensionerCap = 1
+        let otherCap = 2
+        const cyclesHasPolicy = await hasColumn(supabase, 'ram_cycles', 'loan_qty_cap_pensioner').catch(() => false)
+        if (cyclesHasPolicy && cycleId != null) {
+          const { data: cycleRow, error: cErr } = await supabase
+            .from('ram_cycles')
+            .select('loan_qty_cap_pensioner, loan_qty_cap_other')
+            .eq('id', cycleId)
+            .maybeSingle()
+          if (cErr) return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 })
+          pensionerCap = Math.max(0, Math.trunc(Number(cycleRow?.loan_qty_cap_pensioner ?? pensionerCap)))
+          otherCap = Math.max(0, Math.trunc(Number(cycleRow?.loan_qty_cap_other ?? otherCap)))
+        }
+        eligibleP = pensionerCap
+        eligibleR = otherCap
+        eligibleA = otherCap
+      }
+
+      const cap = isPensionerGrade(nextMemberGrade) ? eligibleP : isRetireeGrade(nextMemberGrade) ? eligibleR : eligibleA
       if (qtyRes.value > cap) {
         return NextResponse.json({ ok: false, error: `Maximum allowed is ${cap} ram(s) for Loan` }, { status: 400 })
       }
@@ -99,13 +184,14 @@ export async function POST(req) {
       const { error: phoneUpdErr } = await supabase
         .from('members')
         .update({ phone: phoneRes.value })
-        .eq('member_id', String(order.member_id || '').trim())
+        .eq('member_id', nextMemberId)
       if (phoneUpdErr) return NextResponse.json({ ok: false, error: phoneUpdErr.message }, { status: 500 })
     }
 
     const { data: updated, error: updErr } = await supabase
       .from('ram_orders')
       .update({
+        ...(memberIdRaw ? { member_id: nextMemberId, member_grade: nextMemberGrade } : {}),
         ...(paymentRaw ? { payment_option: paymentRaw } : {}),
         qty: qtyRes.value,
         unit_price: unitPrice,
@@ -121,7 +207,26 @@ export async function POST(req) {
     if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 })
     if (!updated) return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 })
 
-    return NextResponse.json({ ok: true, order: updated })
+    if (!nextMember) {
+      const { data: m, error: mErr } = await supabase
+        .from('members')
+        .select('member_id,full_name,phone,branches:branch_id(code,name)')
+        .eq('member_id', nextMemberId)
+        .maybeSingle()
+      if (!mErr && m?.member_id) nextMember = m
+    }
+
+    const member =
+      nextMember && nextMember.member_id
+        ? {
+            member_id: nextMember.member_id,
+            full_name: nextMember.full_name,
+            phone: phoneRes?.ok ? phoneRes.value : nextMember.phone || '',
+            branch: nextMember.branches?.code ? { code: nextMember.branches.code, name: nextMember.branches.name || '' } : null,
+          }
+        : null
+
+    return NextResponse.json({ ok: true, order: updated, member })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error' }, { status: 500 })
   }

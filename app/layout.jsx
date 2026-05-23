@@ -9,6 +9,11 @@ const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-san
 
 export const metadata = {
   title: 'CBN Coop • Food Distribution',
+  icons: {
+    icon: '/logo.png?v=2',
+    shortcut: '/logo.png?v=2',
+    apple: '/logo.png?v=2',
+  },
 }
 
 export default function RootLayout({ children }) {

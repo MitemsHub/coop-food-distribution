@@ -48,7 +48,8 @@ export async function POST(req) {
     const isPaid = body?.is_paid === true || body?.is_paid === 'true' || body?.is_paid === 1 || body?.is_paid === '1'
 
     const supabase = createClient()
-    const cycleId = await resolveActiveRamCycleId(supabase)
+    const cycleIdRaw = Math.trunc(Number(body?.ram_cycle_id || body?.cycle_id || 0))
+    const cycleId = Number.isFinite(cycleIdRaw) && cycleIdRaw > 0 ? cycleIdRaw : await resolveActiveRamCycleId(supabase)
     if (!cycleId) return NextResponse.json({ ok: false, error: 'No active Ram cycle found' }, { status: 400 })
 
     const nowIso = new Date().toISOString()
@@ -74,4 +75,3 @@ export async function POST(req) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error' }, { status: 500 })
   }
 }
-

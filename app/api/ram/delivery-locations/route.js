@@ -20,6 +20,26 @@ function isMissingColumn(error, columnName) {
   return msg.includes('column') && (msg.includes('does not exist') || msg.includes('could not find'))
 }
 
+async function resolveActiveRamCycleId(supabase) {
+  const { data: active, error: aErr } = await supabase
+    .from('ram_cycles')
+    .select('id')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .maybeSingle()
+  if (aErr) {
+    if (isMissingTable(aErr, 'ram_cycles')) return null
+    throw aErr
+  }
+  if (active?.id) return active.id
+  const { data: latest, error: lErr } = await supabase.from('ram_cycles').select('id').order('created_at', { ascending: false }).maybeSingle()
+  if (lErr) {
+    if (isMissingTable(lErr, 'ram_cycles')) return null
+    throw lErr
+  }
+  return latest?.id || null
+}
+
 export async function GET() {
   try {
     const supabase = createClient()
@@ -54,7 +74,25 @@ export async function GET() {
       return NextResponse.json({ ok: true, locations, tableMissing: false })
     }
 
-    const locations = (data || []).map((l) => ({ ...l, delivery_location: l.delivery_location || l.name || '' }))
+    let locations = (data || []).map((l) => ({ ...l, delivery_location: l.delivery_location || l.name || '' }))
+
+    const cycleId = await resolveActiveRamCycleId(supabase).catch(() => null)
+    if (cycleId) {
+      const { data: rows, error: cErr } = await supabase
+        .from('ram_cycle_delivery_locations')
+        .select('ram_delivery_location_id,is_active')
+        .eq('ram_cycle_id', cycleId)
+        .eq('is_active', true)
+      if (cErr) {
+        if (!isMissingTable(cErr, 'ram_cycle_delivery_locations')) {
+          return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 })
+        }
+      } else {
+        const allowed = new Set((rows || []).map((r) => Number(r.ram_delivery_location_id)).filter((n) => Number.isFinite(n) && n > 0))
+        locations = locations.filter((l) => allowed.has(Number(l.id)))
+      }
+    }
+
     return NextResponse.json({ ok: true, locations, tableMissing: false })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Unknown error' }, { status: 500 })

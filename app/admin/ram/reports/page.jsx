@@ -113,16 +113,16 @@ function toVendorPaymentExportRows(orders) {
   }))
 }
 
-function SummaryTable({ title, rows, pagination }) {
+function SummaryTable({ title, rows, pagination, loading }) {
   const pageSize = Number(pagination?.pageSize || 0)
   const pageCount = pageSize ? Math.max(1, Math.ceil((rows?.length || 0) / pageSize)) : 1
   const safePage = pageSize ? Math.min(Math.max(1, Number(pagination?.page || 1)), pageCount) : 1
   const pagedRows = pageSize ? (rows || []).slice((safePage - 1) * pageSize, safePage * pageSize) : rows
 
   return (
-    <div className="bg-white border rounded-lg overflow-hidden">
-      <div className="px-3 py-2 border-b bg-gray-50 text-sm font-medium flex items-center justify-between gap-2">
-        <div>{title}</div>
+    <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b border-gray-100 bg-gray-50/60 text-sm font-semibold flex items-center justify-between gap-2">
+        <div className="text-gray-900">{title}</div>
         {pageSize ? (
           <div className="flex items-center gap-2 text-xs font-normal text-gray-700">
             <button
@@ -148,33 +148,45 @@ function SummaryTable({ title, rows, pagination }) {
         ) : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-white">
+        <table className="w-full text-xs sm:text-sm">
+          <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="p-2 border-b text-left">Key</th>
-              <th className="p-2 border-b text-right">Orders</th>
-              <th className="p-2 border-b text-right">Rams</th>
-              <th className="p-2 border-b text-right">Principal</th>
-              <th className="p-2 border-b text-right">Interest</th>
+              <th className="p-2 text-left">Key</th>
+              <th className="p-2 text-right">Orders</th>
+              <th className="p-2 text-right">Rams</th>
+              <th className="p-2 text-right">Principal</th>
+              <th className="p-2 text-right">Interest</th>
             </tr>
           </thead>
           <tbody>
-            {!rows?.length && (
+            {!!loading && (
+              <>
+                {Array.from({ length: pageSize ? Math.min(3, pageSize) : 5 }).map((_, i) => (
+                  <tr key={`sk-${title}-${i}`} className="animate-pulse border-b last:border-b-0">
+                    <td className="p-2" colSpan={5}>
+                      <div className="h-4 bg-gray-100 rounded w-full" />
+                    </td>
+                  </tr>
+                ))}
+              </>
+            )}
+            {!loading && !rows?.length && (
               <tr>
                 <td className="p-3 text-gray-600" colSpan={5}>
                   No data.
                 </td>
               </tr>
             )}
-            {(pagedRows || []).map((r) => (
-              <tr key={r.key} className="hover:bg-gray-50">
-                <td className="p-2 border-b">{r.key}</td>
-                <td className="p-2 border-b text-right">{r.orders}</td>
-                <td className="p-2 border-b text-right">{r.qty}</td>
-                <td className="p-2 border-b text-right">{money(Math.max(0, Number(r.amount || 0) - Number(r.loan_interest || 0)))}</td>
-                <td className="p-2 border-b text-right">{money(r.loan_interest)}</td>
+            {!loading &&
+              (pagedRows || []).map((r) => (
+                <tr key={r.key} className="border-b last:border-b-0 hover:bg-gray-50">
+                  <td className="p-2">{r.key}</td>
+                  <td className="p-2 text-right">{r.orders}</td>
+                  <td className="p-2 text-right">{r.qty}</td>
+                  <td className="p-2 text-right">{money(Math.max(0, Number(r.amount || 0) - Number(r.loan_interest || 0)))}</td>
+                  <td className="p-2 text-right">{money(r.loan_interest)}</td>
               </tr>
-            ))}
+              ))}
           </tbody>
         </table>
       </div>
@@ -683,7 +695,10 @@ function RamReportsContent() {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
         const meta = bankMetaById.get(String(loc.id)) || null
-        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
+        const cycleForInvoices = meta?.paid?.ram_cycle_id ?? meta?.active_ram_cycle_id ?? null
+        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0${
+          cycleForInvoices != null ? `&cycle_id=${encodeURIComponent(String(cycleForInvoices))}` : ''
+        }`
         const orders = packLocationId ? await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
@@ -780,7 +795,10 @@ function RamReportsContent() {
         i += 1
         setPackProgress({ current: i, total: selectedLocations.length })
         const meta = bankMetaById.get(String(loc.id)) || null
-        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0`
+        const cycleForInvoices = meta?.paid?.ram_cycle_id ?? meta?.active_ram_cycle_id ?? null
+        const invoicesUrl = `${window.location.origin}/admin/ram/banks?open=invoices&delivery_location_id=${encodeURIComponent(String(loc.id))}&active=0${
+          cycleForInvoices != null ? `&cycle_id=${encodeURIComponent(String(cycleForInvoices))}` : ''
+        }`
         const orders = packLocationId ? await fetchApplications({
           delivery_location_id: loc.id,
           status: packStatus,
@@ -971,44 +989,49 @@ function RamReportsContent() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3 mb-4">
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Total Orders</div>
-          <div className="text-lg font-semibold">{loading ? '...' : totals.orders}</div>
+          {loading ? <div className="mt-2 h-6 w-20 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{totals.orders}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Total Rams</div>
-          <div className="text-lg font-semibold">{loading ? '...' : totals.qty}</div>
+          {loading ? <div className="mt-2 h-6 w-20 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{totals.qty}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Cash</div>
-          <div className="text-lg font-semibold">{loading ? '...' : money(cashPrincipalAmount)}</div>
-          <div className="text-xs text-gray-500 mt-1">{loading ? '' : `${Number(cashAgg.orders || 0)} order(s)`}</div>
+          {loading ? <div className="mt-2 h-6 w-28 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{money(cashPrincipalAmount)}</div>}
+          {loading ? <div className="mt-2 h-3 w-24 bg-gray-100 rounded animate-pulse" /> : <div className="text-xs text-gray-500 mt-1">{`${Number(cashAgg.orders || 0)} order(s)`}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Savings</div>
-          <div className="text-lg font-semibold">{loading ? '...' : money(savingsPrincipalAmount)}</div>
-          <div className="text-xs text-gray-500 mt-1">{loading ? '' : `${Number(savingsAgg.orders || 0)} order(s)`}</div>
+          {loading ? <div className="mt-2 h-6 w-28 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{money(savingsPrincipalAmount)}</div>}
+          {loading ? <div className="mt-2 h-3 w-24 bg-gray-100 rounded animate-pulse" /> : <div className="text-xs text-gray-500 mt-1">{`${Number(savingsAgg.orders || 0)} order(s)`}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Loan</div>
-          <div className="text-lg font-semibold">{loading ? '...' : money(loanPrincipalAmount)}</div>
-          <div className="text-xs text-gray-500 mt-1">{loading ? '' : `${Number(loanAgg.orders || 0)} order(s)`}</div>
+          {loading ? <div className="mt-2 h-6 w-28 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{money(loanPrincipalAmount)}</div>}
+          {loading ? <div className="mt-2 h-3 w-24 bg-gray-100 rounded animate-pulse" /> : <div className="text-xs text-gray-500 mt-1">{`${Number(loanAgg.orders || 0)} order(s)`}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Loan Interest</div>
-          <div className="text-lg font-semibold">{loading ? '...' : money(totals.loan_interest)}</div>
+          {loading ? <div className="mt-2 h-6 w-28 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{money(totals.loan_interest)}</div>}
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-500">Total</div>
-          <div className="text-lg font-semibold">{loading ? '...' : money(totals.amount)}</div>
+          {loading ? <div className="mt-2 h-6 w-28 bg-gray-100 rounded animate-pulse" /> : <div className="text-lg font-semibold">{money(totals.amount)}</div>}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SummaryTable title="By Status" rows={byStatus} />
-        <SummaryTable title="By Payment" rows={byPayment} />
-        <SummaryTable title="By Category" rows={byCategory} />
-        <SummaryTable title="By Delivery Location" rows={byLocation} pagination={{ page: byLocationPage, pageSize: 3, onChange: setByLocationPage }} />
+        <SummaryTable title="By Status" rows={byStatus} loading={loading} />
+        <SummaryTable title="By Payment" rows={byPayment} loading={loading} />
+        <SummaryTable title="By Category" rows={byCategory} loading={loading} />
+        <SummaryTable
+          title="By Delivery Location"
+          rows={byLocation}
+          pagination={{ page: byLocationPage, pageSize: 3, onChange: setByLocationPage }}
+          loading={loading}
+        />
       </div>
 
       <div className="mt-6 bg-white border rounded-lg p-3 sm:p-4">

@@ -14,6 +14,26 @@ function isMissingTable(error, tableName) {
   return msg.includes('does not exist') || msg.includes('could not find the table')
 }
 
+async function resolveActiveRamCycleId(supabase) {
+  const { data: active, error: aErr } = await supabase
+    .from('ram_cycles')
+    .select('id')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .maybeSingle()
+  if (aErr) {
+    if (isMissingTable(aErr, 'ram_cycles')) return null
+    throw aErr
+  }
+  if (active?.id) return active.id
+  const { data: latest, error: lErr } = await supabase.from('ram_cycles').select('id').order('created_at', { ascending: false }).maybeSingle()
+  if (lErr) {
+    if (isMissingTable(lErr, 'ram_cycles')) return null
+    throw lErr
+  }
+  return latest?.id || null
+}
+
 export async function DELETE() {
   const res = NextResponse.json({ ok: true })
   res.cookies.set('rep_token', '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 })
@@ -42,9 +62,30 @@ export async function POST(req) {
         )
       }
       if (error) return NextResponse.json({ ok: false, error: error.message || 'Invalid passcode' }, { status: 401 })
-      const list = Array.isArray(vendors) ? vendors.filter((v) => v && v.id) : []
+      let list = Array.isArray(vendors) ? vendors.filter((v) => v && v.id) : []
       if (!list.length) return NextResponse.json({ ok: false, error: 'Invalid passcode' }, { status: 401 })
-      const ids = list.map((v) => Number(v.id)).filter((n) => Number.isFinite(n) && n > 0)
+      let ids = list.map((v) => Number(v.id)).filter((n) => Number.isFinite(n) && n > 0)
+
+      const cycleId = await resolveActiveRamCycleId(supabase).catch(() => null)
+      if (cycleId) {
+        const { data: links, error: linkErr } = await supabase
+          .from('ram_cycle_delivery_locations')
+          .select('ram_delivery_location_id,is_active')
+          .eq('ram_cycle_id', cycleId)
+          .eq('is_active', true)
+          .in('ram_delivery_location_id', ids)
+        if (linkErr) {
+          if (!isMissingTable(linkErr, 'ram_cycle_delivery_locations')) {
+            return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
+          }
+        } else {
+          const allowed = new Set((links || []).map((r) => Number(r.ram_delivery_location_id)).filter((n) => Number.isFinite(n) && n > 0))
+          list = list.filter((v) => allowed.has(Number(v.id)))
+          ids = list.map((v) => Number(v.id)).filter((n) => Number.isFinite(n) && n > 0)
+        }
+      }
+
+      if (!list.length) return NextResponse.json({ ok: false, error: 'Invalid passcode for this cycle' }, { status: 401 })
       const first = list[0]
 
       const token = await sign(

@@ -74,7 +74,8 @@ export async function POST(req) {
     const invoiceRef = cleanText(fd.get('invoice_ref'), 120)
     const notes = cleanText(fd.get('notes'), 1000)
 
-    const cycleId = await resolveActiveRamCycleId(supabase).catch(() => null)
+    const cycleIdRaw = Math.trunc(Number(fd.get('cycle_id') || fd.get('ram_cycle_id') || 0))
+    const cycleId = Number.isFinite(cycleIdRaw) && cycleIdRaw > 0 ? cycleIdRaw : await resolveActiveRamCycleId(supabase).catch(() => null)
     const now = new Date()
     const day = now.toISOString().slice(0, 10)
     const rand = Math.random().toString(16).slice(2, 10)
@@ -114,4 +115,3 @@ export async function POST(req) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error' }, { status: 500 })
   }
 }
-

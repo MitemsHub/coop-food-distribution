@@ -93,30 +93,10 @@ async function getRamCategory(supabase, memberGrade) {
   return fallbackRamCategoryFromGrade(memberGrade)
 }
 
-function sumAmt(rows) {
-  return (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
-}
-
 function sumField(rows, field) {
   const f = String(field || '').trim()
   if (!f) return 0
   return (rows || []).reduce((s, r) => s + Number(r?.[f] || 0), 0)
-}
-
-function invertTotalToPrincipal(total, interestRate) {
-  const t = Math.max(0, Math.trunc(Number(total || 0)))
-  const r = Number(interestRate || 0)
-  if (!Number.isFinite(r) || r <= 0) return t
-  const guess = Math.max(0, Math.trunc(t / (1 + r)))
-  for (let p = Math.max(0, guess - 5); p <= guess + 5; p += 1) {
-    const computed = p + Math.round(p * r)
-    if (computed === t) return p
-  }
-  return guess
-}
-
-function sumFoodLoanPrincipal(rows) {
-  return (rows || []).reduce((s, r) => s + invertTotalToPrincipal(r?.total_amount, 0.13), 0)
 }
 
 function isMissingTable(error, tableName) {
@@ -178,21 +158,8 @@ function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInt
 }
 
 async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, unitPrice) {
-  const foodStatuses = ['Pending', 'Posted', 'Delivered']
   const ramStatuses = ['Pending', 'Approved']
-  const [foodLoanExp, foodSavExp, ramLoanExp, ramSavExp] = await Promise.all([
-    supabase
-      .from('orders')
-      .select('total_amount')
-      .eq('member_id', memberId)
-      .eq('payment_option', 'Loan')
-      .in('status', foodStatuses),
-    supabase
-      .from('orders')
-      .select('total_amount')
-      .eq('member_id', memberId)
-      .eq('payment_option', 'Savings')
-      .in('status', foodStatuses),
+  const [ramLoanExp, ramSavExp] = await Promise.all([
     supabase
       .from('ram_orders')
       .select('principal_amount')
@@ -207,9 +174,6 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
       .in('status', ramStatuses),
   ])
 
-  if (foodLoanExp.error) throw new Error(foodLoanExp.error.message)
-  if (foodSavExp.error) throw new Error(foodSavExp.error.message)
-
   const ramOrdersTableMissing =
     isMissingTable(ramLoanExp.error, 'ram_orders') || isMissingTable(ramSavExp.error, 'ram_orders')
 
@@ -218,8 +182,8 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
     if (ramSavExp.error) throw new Error(ramSavExp.error.message)
   }
 
-  const loanExposure = sumFoodLoanPrincipal(foodLoanExp.data) + (ramOrdersTableMissing ? 0 : sumField(ramLoanExp.data, 'principal_amount'))
-  const savingsExposure = sumAmt(foodSavExp.data) + (ramOrdersTableMissing ? 0 : sumField(ramSavExp.data, 'principal_amount'))
+  const loanExposure = ramOrdersTableMissing ? 0 : sumField(ramLoanExp.data, 'principal_amount')
+  const savingsExposure = ramOrdersTableMissing ? 0 : sumField(ramSavExp.data, 'principal_amount')
 
   const savings = Number(memberSnapshot.savings || 0)
   const loans = Number(memberSnapshot.loans || 0)
@@ -234,23 +198,17 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
   const isPensioner = isPensionerGrade(memberSnapshot.grade)
   let exceededLoanLimit = false
   let loanEligible = 0
+  const baseLimit = isRetiree ? savings : savings * 5
+  const effectiveLimit = globalLimit > 0 ? Math.min(baseLimit, globalLimit) : baseLimit
   if (isRetiree) {
-    loanEligible = Math.max(0, savings - outstandingLoansTotal)
+    loanEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
     exceededLoanLimit = loanEligible <= 0
   } else if (isPensioner) {
-    loanEligible = Math.max(0, savings * 5 - outstandingLoansTotal)
+    loanEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
     exceededLoanLimit = loanEligible <= 0
   } else {
-    const ADDITIONAL_FACILITY = 300000
-    const LOAN_CAP = 1000000
-    const rawLoanLimit = savings * 5
-    const effectiveLimit = Math.min(rawLoanLimit, globalLimit)
-    const baseRemaining = effectiveLimit - outstandingLoansTotal
-    exceededLoanLimit = baseRemaining <= 0
-    const baseEligible = Math.max(0, baseRemaining)
-    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
-    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
-    loanEligible = Math.min(baseEligible + facilityRemaining, capRemaining)
+    loanEligible = Math.max(0, effectiveLimit - outstandingLoansTotal)
+    exceededLoanLimit = loanEligible <= 0
   }
 
   let activeRamCycleId = null
@@ -273,14 +231,62 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
     if (loanQtyErr) throw new Error(loanQtyErr.message)
     usedLoanQtyThisCycle = sumField(loanQtyRows, 'qty')
   }
-  const loanQtyCap = isPensioner ? 1 : 2
+  let eligibleP = 1
+  let eligibleR = 2
+  let eligibleA = 2
+  let graceP = 1
+  let graceR = 0
+  let graceA = 1
+  const cyclesHasExplicit = await hasColumn(supabase, 'ram_cycles', 'eligible_loan_qty_active')
+  if (cyclesHasExplicit && activeRamCycleId != null) {
+    const { data: cycleRow, error: cErr } = await supabase
+      .from('ram_cycles')
+      .select(
+        'eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active'
+      )
+      .eq('id', activeRamCycleId)
+      .maybeSingle()
+    if (cErr) throw new Error(cErr.message)
+    eligibleP = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_pensioner ?? eligibleP)))
+    eligibleR = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_retiree ?? eligibleR)))
+    eligibleA = Math.max(0, Math.trunc(Number(cycleRow?.eligible_loan_qty_active ?? eligibleA)))
+    graceP = Math.max(0, Math.trunc(Number(cycleRow?.grace_loan_qty_pensioner ?? graceP)))
+    graceR = Math.max(0, Math.trunc(Number(cycleRow?.grace_loan_qty_retiree ?? graceR)))
+    graceA = Math.max(0, Math.trunc(Number(cycleRow?.grace_loan_qty_active ?? graceA)))
+  } else {
+    let loanQtyCapPensioner = 1
+    let loanQtyCapOther = 2
+    let loanGraceQty = 1
+    const cyclesHasPolicy = await hasColumn(supabase, 'ram_cycles', 'loan_qty_cap_pensioner')
+    if (cyclesHasPolicy && activeRamCycleId != null) {
+      const { data: cycleRow, error: cErr } = await supabase
+        .from('ram_cycles')
+        .select('loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty')
+        .eq('id', activeRamCycleId)
+        .maybeSingle()
+      if (cErr) throw new Error(cErr.message)
+      loanQtyCapPensioner = Math.max(0, Math.trunc(Number(cycleRow?.loan_qty_cap_pensioner ?? loanQtyCapPensioner)))
+      loanQtyCapOther = Math.max(0, Math.trunc(Number(cycleRow?.loan_qty_cap_other ?? loanQtyCapOther)))
+      loanGraceQty = Math.max(0, Math.trunc(Number(cycleRow?.loan_grace_qty ?? loanGraceQty)))
+    }
+    eligibleP = loanQtyCapPensioner
+    eligibleR = loanQtyCapOther
+    eligibleA = loanQtyCapOther
+    graceP = loanGraceQty
+    graceR = 0
+    graceA = loanGraceQty
+  }
+
+  const loanQtyCap = isPensioner ? eligibleP : isRetiree ? eligibleR : eligibleA
+  const graceQty = isPensioner ? graceP : isRetiree ? graceR : graceA
+  const effectiveGraceQty = Math.min(graceQty, loanQtyCap)
   const remainingLoanQtyThisCycle = Math.max(0, loanQtyCap - usedLoanQtyThisCycle)
 
   let maxRamsAllowedForLoan = 0
   if (remainingLoanQtyThisCycle > 0 && unitPrice > 0) {
     const graceUnused = usedLoanQtyThisCycle <= 0
     if (loanEligible < unitPrice) {
-      maxRamsAllowedForLoan = graceUnused ? 1 : 0
+      maxRamsAllowedForLoan = graceUnused ? Math.min(effectiveGraceQty, remainingLoanQtyThisCycle) : 0
     } else if (loanEligible > 0) {
       const cap = Math.min(loanQtyCap, remainingLoanQtyThisCycle)
       maxRamsAllowedForLoan = computeMaxAffordableQty({
@@ -315,6 +321,8 @@ async function calculateEligibilityForRam(supabase, memberId, memberSnapshot, un
     ramOrdersTableMissing,
     isRetiree,
     isPensioner,
+    loanQtyCap,
+    loanGraceQty: effectiveGraceQty,
   }
 }
 
@@ -380,7 +388,26 @@ export async function POST(req) {
     const derivedRamCategory = await getRamCategory(supabase, member.grade)
     const canOverrideCategory = (paymentOption === 'Cash' || paymentOption === 'Savings') && !!requestedCategory
     const ramCategory = canOverrideCategory ? requestedCategory : derivedRamCategory
-    const unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
+    let unitPrice = CATEGORY_PRICES[ramCategory] ?? CATEGORY_PRICES.Undefined
+    const cyclesHasPrices = await hasColumn(supabase, 'ram_cycles', 'price_junior')
+    if (cyclesHasPrices) {
+      const cycleId = await resolveActiveOrLatestRamCycleId(supabase).catch(() => null)
+      if (cycleId != null) {
+        const { data: cycleRow, error: pErr } = await supabase
+          .from('ram_cycles')
+          .select('price_junior, price_senior, price_executive, price_undefined')
+          .eq('id', cycleId)
+          .maybeSingle()
+        if (pErr) return NextResponse.json({ ok: false, error: pErr.message }, { status: 500 })
+        const prices = {
+          Junior: Number(cycleRow?.price_junior ?? CATEGORY_PRICES.Junior),
+          Senior: Number(cycleRow?.price_senior ?? CATEGORY_PRICES.Senior),
+          Executive: Number(cycleRow?.price_executive ?? CATEGORY_PRICES.Executive),
+          Undefined: Number(cycleRow?.price_undefined ?? CATEGORY_PRICES.Undefined),
+        }
+        unitPrice = Number.isFinite(prices[ramCategory]) ? Math.max(0, Math.trunc(prices[ramCategory])) : CATEGORY_PRICES.Undefined
+      }
+    }
     if (unitPrice <= 0) {
       return NextResponse.json({ ok: false, error: 'Member is not eligible for ram pricing' }, { status: 400 })
     }
@@ -404,9 +431,8 @@ export async function POST(req) {
     }
 
     if (paymentOption === 'Loan') {
-      if (eligibility.isPensioner && qty > 1) {
-        return NextResponse.json({ ok: false, error: 'Maximum allowed is 1 ram(s) for Loan' }, { status: 400 })
-      }
+      const loanCap = Number(eligibility.loanQtyCap || 0)
+      if (qty > loanCap) return NextResponse.json({ ok: false, error: `Maximum allowed is ${loanCap} ram(s) for Loan` }, { status: 400 })
       if (eligibility.isRetiree && principalAmount > eligibility.loanEligible) {
         const shortfall = Math.max(0, principalAmount - Number(eligibility.loanEligible || 0))
         return NextResponse.json(
@@ -429,8 +455,10 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'Insufficient savings eligibility for this purchase' }, { status: 400 })
     }
     if (paymentOption === 'Loan' && principalAmount > eligibility.loanEligible) {
+      const graceQty = Number(eligibility.loanGraceQty || 0)
       const allowFallbackOne =
-        qty === 1 &&
+        qty > 0 &&
+        qty <= graceQty &&
         eligibility.remainingLoanQtyThisCycle > 0 &&
         eligibility.loanEligible < unitPrice &&
         eligibility.usedLoanQtyThisCycle <= 0
@@ -457,6 +485,24 @@ export async function POST(req) {
     }
     if (!deliveryLocation) {
       return NextResponse.json({ ok: false, error: 'Delivery location not found' }, { status: 404 })
+    }
+
+    if (eligibility.activeRamCycleId != null) {
+      const { data: link, error: linkErr } = await supabase
+        .from('ram_cycle_delivery_locations')
+        .select('id,is_active')
+        .eq('ram_cycle_id', eligibility.activeRamCycleId)
+        .eq('ram_delivery_location_id', deliveryLocation.id)
+        .maybeSingle()
+      if (linkErr) {
+        if (!isMissingTable(linkErr, 'ram_cycle_delivery_locations')) {
+          return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
+        }
+      } else {
+        if (!link?.id || link?.is_active === false) {
+          return NextResponse.json({ ok: false, error: 'Delivery location is not available for the current cycle' }, { status: 400 })
+        }
+      }
     }
 
     if (eligibility.ramOrdersTableMissing) {

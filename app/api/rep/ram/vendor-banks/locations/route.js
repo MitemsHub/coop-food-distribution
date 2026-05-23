@@ -39,6 +39,21 @@ async function resolveActiveRamCycleId(supabase) {
   return latest?.id || null
 }
 
+function isMissingColumn(error, columnName) {
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const c = String(columnName || '').toLowerCase()
+  if (!msg.includes(c)) return false
+  return msg.includes('column') && (msg.includes('does not exist') || msg.includes('could not find'))
+}
+
+async function hasColumn(supabase, tableName, columnName) {
+  const { error } = await supabase.from(tableName).select(columnName).limit(1)
+  if (!error) return true
+  if (isMissingTable(error, tableName)) return false
+  if (isMissingColumn(error, columnName)) return false
+  throw error
+}
+
 function getRepLocationIds(claims) {
   const rawIds = Array.isArray(claims?.ram_delivery_location_ids) ? claims.ram_delivery_location_ids : []
   const ids = rawIds.length ? rawIds : [claims?.ram_delivery_location_id]
@@ -56,26 +71,55 @@ export async function GET(req) {
 
     const supabase = createClient()
     const cycleId = await resolveActiveRamCycleId(supabase).catch(() => null)
+    let scopedLocIds = locIds
+    if (cycleId) {
+      const { data: links, error: linkErr } = await supabase
+        .from('ram_cycle_delivery_locations')
+        .select('ram_delivery_location_id,is_active')
+        .eq('ram_cycle_id', cycleId)
+        .eq('is_active', true)
+        .in('ram_delivery_location_id', locIds)
+      if (linkErr) {
+        if (!isMissingTable(linkErr, 'ram_cycle_delivery_locations')) return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
+      } else {
+        const allowed = new Set((links || []).map((r) => asInt(r?.ram_delivery_location_id, null)).filter((n) => Number.isFinite(n) && n > 0))
+        scopedLocIds = locIds.filter((id) => allowed.has(id))
+      }
+    }
+
+    if (!scopedLocIds.length) return NextResponse.json({ ok: true, locations: [] })
+
     const { data: locations, error: locErr } = await supabase
       .from('ram_delivery_locations')
       .select('id,delivery_location,name,phone,is_active,rep_code')
-      .in('id', locIds)
+      .in('id', scopedLocIds)
       .order('id', { ascending: true })
     if (locErr) return NextResponse.json({ ok: false, error: locErr.message }, { status: 500 })
 
+    const bankHasCycle = await hasColumn(supabase, 'ram_vendor_bank_accounts', 'ram_cycle_id').catch(() => false)
+    const invoicesHasCycle = await hasColumn(supabase, 'ram_vendor_invoices', 'ram_cycle_id').catch(() => false)
+
     const [banksRes, invoicesRes, paidRes] = await Promise.all([
-      supabase
-        .from('ram_vendor_bank_accounts')
-        .select('id,ram_delivery_location_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
-        .in('ram_delivery_location_id', locIds)
-        .eq('is_current', true),
-      supabase.from('ram_vendor_invoices').select('id,ram_delivery_location_id').in('ram_delivery_location_id', locIds),
+      (() => {
+        let bq = supabase
+          .from('ram_vendor_bank_accounts')
+          .select('id,ram_delivery_location_id,ram_cycle_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
+          .in('ram_delivery_location_id', scopedLocIds)
+          .eq('is_current', true)
+        if (bankHasCycle && cycleId) bq = bq.eq('ram_cycle_id', cycleId)
+        return bq
+      })(),
+      (() => {
+        let iq = supabase.from('ram_vendor_invoices').select('id,ram_delivery_location_id,ram_cycle_id').in('ram_delivery_location_id', scopedLocIds)
+        if (invoicesHasCycle && cycleId) iq = iq.eq('ram_cycle_id', cycleId)
+        return iq
+      })(),
       cycleId
         ? supabase
             .from('ram_vendor_payment_status')
             .select('ram_delivery_location_id,is_paid,paid_at,ram_cycle_id')
             .eq('ram_cycle_id', cycleId)
-            .in('ram_delivery_location_id', locIds)
+            .in('ram_delivery_location_id', scopedLocIds)
         : Promise.resolve({ data: [], error: null }),
     ])
 

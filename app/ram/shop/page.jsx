@@ -65,24 +65,17 @@ function RamShopPageContent() {
   const canOverrideRamCategory =
     (paymentOption === 'Cash' || paymentOption === 'Savings') && (paymentOption !== 'Savings' || savingsEligible > 0)
 
-  const pensionerLoanGraceActive =
-    isPensioner &&
+  const usedLoanQtyThisCycle = Number(eligibility?.eligibility?.usedLoanQtyThisCycle || 0)
+  const loanGraceQty = Number(eligibility?.eligibility?.loanGraceQty || 0)
+  const allowLoanGrace =
     paymentOption === 'Loan' &&
-    safeQty === 1 &&
+    safeQty > 0 &&
+    safeQty <= loanGraceQty &&
     unitPrice > 0 &&
     remainingLoanQtyThisCycle > 0 &&
-    maxRamsAllowed >= 1
-
-  const allowLoanFallbackOne =
-    pensionerLoanGraceActive ||
-    (!isRetiree &&
-      !isPensioner &&
-      paymentOption === 'Loan' &&
-      safeQty === 1 &&
-      unitPrice > 0 &&
-      remainingLoanQtyThisCycle > 0 &&
-      maxRamsAllowed >= 1 &&
-      loanEligible < unitPrice)
+    maxRamsAllowed >= safeQty &&
+    loanEligible < unitPrice &&
+    usedLoanQtyThisCycle <= 0
 
   const selectedLocation = useMemo(() => {
     const idNum = Number(deliveryLocationId)
@@ -100,50 +93,32 @@ function RamShopPageContent() {
   }, [paymentOption, maxRamsAllowed])
   const loanShortfall = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
-    if (allowLoanFallbackOne) return 0
+    if (allowLoanGrace) return 0
     if (!Number.isFinite(principal) || principal <= 0) return 0
     return Math.max(0, principal - loanEligible)
-  }, [allowLoanFallbackOne, paymentOption, principal, loanEligible])
+  }, [allowLoanGrace, paymentOption, principal, loanEligible])
   const savingsIncreaseNeeded = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
-    if (allowLoanFallbackOne) return 0
-    if (isPensioner && safeQty === 1 && remainingLoanQtyThisCycle > 0 && maxRamsAllowed >= 1) return 0
+    if (allowLoanGrace) return 0
     if (!Number.isFinite(principal) || principal <= 0) return 0
     if (principal <= loanEligible) return 0
 
     const outstandingLoansTotal = Number(eligibility?.eligibility?.outstandingLoansTotal || 0)
     const savingsNow = Number(savingsBalance || 0)
+    const globalLimit = Number(member?.global_limit || 0)
+    const requiredLimit = principal + outstandingLoansTotal
 
     if (isRetiree) {
-      const requiredSavings = principal + outstandingLoansTotal
+      if (globalLimit > 0 && globalLimit < requiredLimit) return 0
+      const requiredSavings = requiredLimit
       return Math.max(0, requiredSavings - savingsNow)
     }
 
-    if (isPensioner) {
-      const requiredSavings = Math.ceil((principal + outstandingLoansTotal) / 5)
-      return Math.max(0, requiredSavings - savingsNow)
-    }
-
-    const loanExposure = Number(eligibility?.eligibility?.loanExposure || 0)
-    const globalLimit = Number(member?.global_limit || 0)
-    const ADDITIONAL_FACILITY = 300000
-    const LOAN_CAP = 1000000
-
-    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
-    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
-    const desiredPrincipal = Math.min(principal, capRemaining)
-    const requiredBaseEligible = Math.max(0, desiredPrincipal - facilityRemaining)
-    const requiredEffectiveLimit = requiredBaseEligible + outstandingLoansTotal
-
-    if (principal > capRemaining) return 0
-    if (globalLimit <= 0) return 0
-    if (globalLimit < requiredEffectiveLimit) return 0
-
-    const requiredSavings = Math.ceil(requiredEffectiveLimit / 5)
+    if (globalLimit > 0 && globalLimit < requiredLimit) return 0
+    const requiredSavings = Math.ceil(requiredLimit / 5)
     return Math.max(0, requiredSavings - savingsNow)
   }, [
-    allowLoanFallbackOne,
-    eligibility?.eligibility?.loanExposure,
+    allowLoanGrace,
     eligibility?.eligibility?.outstandingLoansTotal,
     isPensioner,
     isRetiree,
@@ -159,45 +134,28 @@ function RamShopPageContent() {
 
   const minLoanSavingsIncreaseNeeded = useMemo(() => {
     if (paymentOption !== 'Loan') return 0
-    if (allowLoanFallbackOne) return 0
+    if (allowLoanGrace) return 0
     if (maxRamsAllowed > 0) return 0
-    if (isPensioner && remainingLoanQtyThisCycle > 0 && maxRamsAllowed >= 1) return 0
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0
     if (!Number.isFinite(loanEligible) || loanEligible <= 0) return 0
     if (unitPrice <= loanEligible) return 0
 
     const outstandingLoansTotal = Number(eligibility?.eligibility?.outstandingLoansTotal || 0)
     const savingsNow = Number(savingsBalance || 0)
+    const globalLimit = Number(member?.global_limit || 0)
+    const requiredLimit = unitPrice + outstandingLoansTotal
 
     if (isRetiree) {
-      const requiredSavings = unitPrice + outstandingLoansTotal
+      if (globalLimit > 0 && globalLimit < requiredLimit) return 0
+      const requiredSavings = requiredLimit
       return Math.max(0, requiredSavings - savingsNow)
     }
 
-    if (isPensioner) {
-      const requiredSavings = Math.ceil((unitPrice + outstandingLoansTotal) / 5)
-      return Math.max(0, requiredSavings - savingsNow)
-    }
-
-    const loanExposure = Number(eligibility?.eligibility?.loanExposure || 0)
-    const globalLimit = Number(member?.global_limit || 0)
-    const ADDITIONAL_FACILITY = 300000
-    const LOAN_CAP = 1000000
-
-    const facilityRemaining = Math.max(0, ADDITIONAL_FACILITY - loanExposure)
-    const capRemaining = Math.max(0, LOAN_CAP - loanExposure)
-    if (unitPrice > capRemaining) return 0
-    if (globalLimit <= 0) return 0
-
-    const requiredBaseEligible = Math.max(0, unitPrice - facilityRemaining)
-    const requiredEffectiveLimit = requiredBaseEligible + outstandingLoansTotal
-    if (globalLimit < requiredEffectiveLimit) return 0
-
-    const requiredSavings = Math.ceil(requiredEffectiveLimit / 5)
+    if (globalLimit > 0 && globalLimit < requiredLimit) return 0
+    const requiredSavings = Math.ceil(requiredLimit / 5)
     return Math.max(0, requiredSavings - savingsNow)
   }, [
-    allowLoanFallbackOne,
-    eligibility?.eligibility?.loanExposure,
+    allowLoanGrace,
     eligibility?.eligibility?.outstandingLoansTotal,
     isPensioner,
     isRetiree,
@@ -213,7 +171,7 @@ function RamShopPageContent() {
     paymentOption === 'Savings'
       ? total > savingsEligible
       : paymentOption === 'Loan'
-        ? principal > loanEligible && !allowLoanFallbackOne
+        ? principal > loanEligible && !allowLoanGrace
         : false
 
   const placeOrderDisabledReason = useMemo(() => {
@@ -228,8 +186,7 @@ function RamShopPageContent() {
     if (paymentOption !== 'Cash' && qtyCapApplies && maxRamsAllowed > 0 && safeQty > maxRamsAllowed) {
       return `Max for ${paymentOption}: ${maxRamsAllowed} ram(s).`
     }
-    if (pensionerLoanGraceActive) return null
-    if (paymentOption === 'Loan' && allowLoanFallbackOne && safeQty === 1) return null
+    if (paymentOption === 'Loan' && allowLoanGrace) return null
     if (paymentOption === 'Savings' && notEligibleForPayment) return 'Your total exceeds your available savings eligibility.'
     if (paymentOption === 'Loan' && savingsIncreaseNeeded > 0) {
       return `Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify for this loan purchase.`
@@ -240,7 +197,7 @@ function RamShopPageContent() {
     if (paymentOption === 'Loan' && notEligibleForPayment) return 'Your principal exceeds your loan eligibility.'
     return null
   }, [
-    allowLoanFallbackOne,
+    allowLoanGrace,
     deliveryLocationId,
     isPensioner,
     isRetiree,
@@ -248,7 +205,6 @@ function RamShopPageContent() {
     minLoanSavingsIncreaseNeeded,
     notEligibleForPayment,
     paymentOption,
-    pensionerLoanGraceActive,
     phoneMissing,
     qtyCapApplies,
     remainingLoanQtyThisCycle,
@@ -263,21 +219,21 @@ function RamShopPageContent() {
     if (paymentOption !== 'Loan') return
     if (!Number.isFinite(safeQty) || safeQty <= 0) return
     if (!Number.isFinite(savingsIncreaseNeeded) || savingsIncreaseNeeded <= 0) return
-    if (pensionerLoanGraceActive) return
+    if (allowLoanGrace) return
 
     const nextText = `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
     const key = `${paymentOption}|${safeQty}|${loanEligible}|${unitPrice}|${savingsIncreaseNeeded}`
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [loanEligible, loanShortfall, paymentOption, pensionerLoanGraceActive, safeQty, savingsIncreaseNeeded, unitPrice])
+  }, [allowLoanGrace, loanEligible, loanShortfall, paymentOption, safeQty, savingsIncreaseNeeded, unitPrice])
 
   useEffect(() => {
     if (paymentOption !== 'Loan') return
     if (!Number.isFinite(safeQty) || safeQty !== 0) return
     if (!Number.isFinite(minLoanSavingsIncreaseNeeded) || minLoanSavingsIncreaseNeeded <= 0) return
     if (remainingLoanQtyThisCycle <= 0) return
-    if (pensionerLoanGraceActive) return
+    if (allowLoanGrace) return
     if (maxRamsAllowed > 0) return
 
     const nextText = `You are not eligible for a 1-ram loan purchase yet. Increase savings by ₦${Number(minLoanSavingsIncreaseNeeded).toLocaleString()} to qualify.`
@@ -285,7 +241,7 @@ function RamShopPageContent() {
     if (retireePopupKeyRef.current === key) return
     retireePopupKeyRef.current = key
     setPopupText(nextText)
-  }, [loanEligible, maxRamsAllowed, minLoanSavingsIncreaseNeeded, paymentOption, pensionerLoanGraceActive, remainingLoanQtyThisCycle, safeQty, unitPrice])
+  }, [allowLoanGrace, loanEligible, maxRamsAllowed, minLoanSavingsIncreaseNeeded, paymentOption, remainingLoanQtyThisCycle, safeQty, unitPrice])
 
   useEffect(() => {
     let cancelled = false
@@ -463,7 +419,7 @@ function RamShopPageContent() {
       return
     }
 
-    if (paymentOption === 'Loan' && !pensionerLoanGraceActive && savingsIncreaseNeeded > 0) {
+    if (paymentOption === 'Loan' && !allowLoanGrace && savingsIncreaseNeeded > 0) {
       setPopupText(
         `Your purchase will exceed your loan limit by ₦${Number(loanShortfall).toLocaleString()}. Increase savings by ₦${Number(savingsIncreaseNeeded).toLocaleString()} to qualify.`
       )
@@ -474,7 +430,7 @@ function RamShopPageContent() {
       setMessage({ type: 'error', text: 'Insufficient savings eligibility for this purchase' })
       return
     }
-    if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanFallbackOne && !pensionerLoanGraceActive) {
+    if (paymentOption === 'Loan' && principal > loanEligible && !allowLoanGrace) {
       setMessage({ type: 'error', text: 'Insufficient loan eligibility for this purchase' })
       return
     }

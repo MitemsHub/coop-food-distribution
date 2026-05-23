@@ -92,6 +92,7 @@ export async function GET(req) {
       cycleParam: ramCycleParam,
       ordersHasCycle
     })
+    const effectiveCycleId = ordersHasCycle ? (cycleId != null ? cycleId : activeCycleId) : null
 
     let query = supabase.from('ram_orders').select('*', { count: 'exact' }).order('created_at', { ascending: false })
     if (statusRaw && allowedStatus.has(statusRaw)) query = query.eq('status', statusRaw)
@@ -101,7 +102,7 @@ export async function GET(req) {
     if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) query = query.eq('ram_delivery_location_id', deliveryLocationId)
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', `${to}T23:59:59`)
-    if (ordersHasCycle && cycleId != null) query = query.eq('ram_cycle_id', cycleId)
+    if (ordersHasCycle && effectiveCycleId != null) query = query.eq('ram_cycle_id', effectiveCycleId)
     if (term) {
       const safeTerm = term.replace(/,/g, '')
       const orParts = [`member_id.ilike.%${safeTerm}%`]
@@ -171,7 +172,7 @@ export async function GET(req) {
       orders: enriched,
       meta: {
         active_ram_cycle_id: activeCycleId,
-        used_ram_cycle_id: ordersHasCycle ? cycleId : null,
+        used_ram_cycle_id: ordersHasCycle ? effectiveCycleId : null,
         page,
         page_size: pageSize,
         total_count: Number(count ?? 0),

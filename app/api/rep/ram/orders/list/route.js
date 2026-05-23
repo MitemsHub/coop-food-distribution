@@ -94,11 +94,12 @@ export async function GET(req) {
     const status = allowedStatus.has(statusRaw) ? statusRaw : 'Approved'
 
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
-    const { cycleId } = await resolveRamCycleId({
+    const { cycleId, activeCycleId } = await resolveRamCycleId({
       supabase,
       cycleParam: ramCycleParam,
       ordersHasCycle
     })
+    const effectiveCycleId = ordersHasCycle ? (cycleId != null ? cycleId : activeCycleId) : null
 
     let query = supabase
       .from('ram_orders')
@@ -115,7 +116,7 @@ export async function GET(req) {
     }
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', `${to}T23:59:59`)
-    if (ordersHasCycle && cycleId != null) query = query.eq('ram_cycle_id', cycleId)
+    if (ordersHasCycle && effectiveCycleId != null) query = query.eq('ram_cycle_id', effectiveCycleId)
 
     const { data: orders, error } = await query
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })

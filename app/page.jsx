@@ -52,9 +52,7 @@ export default function MemberVerification() {
             <div className="px-6 md:px-10 pt-10 pb-8 text-center">
               <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white/90">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.9 6.4 20.5l1.1-6.2L3 9.9 9 9l3-6z" />
-                  </svg>
+                  <Image src="/logo.png" alt="CBN Coop" width={16} height={16} className="h-4 w-4 object-contain" />
                 </span>
                 <span className="text-sm font-semibold tracking-wide">CBN Coop</span>
               </div>

@@ -44,6 +44,7 @@ function RamPendingContent() {
   const [editLocationId, setEditLocationId] = useState('')
   const [editPaymentOption, setEditPaymentOption] = useState('')
   const [editUnitPrice, setEditUnitPrice] = useState('')
+  const [editMemberId, setEditMemberId] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const fetchCtl = useRef(null)
@@ -343,6 +344,7 @@ function RamPendingContent() {
     setEditLocationId(String(order.delivery_location?.id || order.ram_delivery_location_id || ''))
     setEditPaymentOption(String(order.payment_option || ''))
     setEditUnitPrice(String(order.unit_price ?? ''))
+    setEditMemberId(String(order.member_id || ''))
     setEditPhone(String(order.member?.phone || ''))
     setShowModal({ type: 'edit', id: order.id })
   }
@@ -401,10 +403,12 @@ function RamPendingContent() {
     const qty = Number(editQty)
     const deliveryLocationId = Number(editLocationId)
     const paymentOption = String(editPaymentOption || '').trim()
+    const memberId = String(editMemberId || '').trim().toUpperCase()
     if (!Number.isFinite(id) || id <= 0) return
     if (!Number.isFinite(qty) || qty <= 0) return
     if (!Number.isFinite(deliveryLocationId) || deliveryLocationId <= 0) return
     if (!paymentOption) return
+    if (!memberId) return
 
     setEditBusy(true)
     setMsg(null)
@@ -419,6 +423,7 @@ function RamPendingContent() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           id,
+          member_id: memberId,
           payment_option: paymentOption,
           qty,
           delivery_location_id: deliveryLocationId,
@@ -447,7 +452,11 @@ function RamPendingContent() {
                   is_active: loc.is_active,
                 }
               : o.delivery_location,
-            member: phone ? { ...(o.member || {}), phone } : o.member,
+            member: json?.member
+              ? json.member
+              : phone
+                ? { ...(o.member || {}), phone }
+                : o.member,
           }
         })
       )
@@ -784,6 +793,7 @@ function RamPendingContent() {
       <DraggableModal
         open={!!showModal}
         onClose={() => (bulkBusy || editBusy ? null : setShowModal(null))}
+        widthClass="max-w-4xl w-full mx-4"
         title={
           showModal?.type === 'edit'
             ? `Edit Order #${showModal?.id}`
@@ -820,7 +830,7 @@ function RamPendingContent() {
       >
         {showModal?.type === 'edit' ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-1">Delivery Location</div>
                 <select
@@ -872,6 +882,15 @@ function RamPendingContent() {
                 />
               </div>
               <div>
+                <div className="text-xs font-medium text-gray-700 mb-1">Member ID</div>
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={editMemberId}
+                  onChange={(e) => setEditMemberId(e.target.value)}
+                  disabled={editBusy || bulkBusy}
+                />
+              </div>
+              <div>
                 <div className="text-xs font-medium text-gray-700 mb-1">Member Phone</div>
                 <input
                   className="w-full border rounded px-3 py-2 text-sm"
@@ -882,7 +901,7 @@ function RamPendingContent() {
               </div>
             </div>
             <div className="text-xs text-gray-600">
-              {editPaymentOption === 'Loan' ? 'Loan is limited to 2 rams (1 for pensioners) and includes 6% interest.' : null}
+              {editPaymentOption === 'Loan' ? 'Loan has a per-cycle max quantity limit and includes 6% interest.' : null}
             </div>
           </div>
         ) : showModal?.type === 'delete' ? (

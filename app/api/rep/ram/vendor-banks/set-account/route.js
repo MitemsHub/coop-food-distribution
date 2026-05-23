@@ -14,6 +14,21 @@ function isMissingTable(error, tableName) {
   return msg.includes('does not exist') || msg.includes('could not find the table')
 }
 
+function isMissingColumn(error, columnName) {
+  const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase()
+  const c = String(columnName || '').toLowerCase()
+  if (!msg.includes(c)) return false
+  return msg.includes('column') && (msg.includes('does not exist') || msg.includes('could not find'))
+}
+
+async function hasColumn(supabase, tableName, columnName) {
+  const { error } = await supabase.from(tableName).select(columnName).limit(1)
+  if (!error) return true
+  if (isMissingTable(error, tableName)) return false
+  if (isMissingColumn(error, columnName)) return false
+  throw error
+}
+
 async function resolveActiveRamCycleId(supabase) {
   const { data: active, error: aErr } = await supabase
     .from('ram_cycles')
@@ -99,17 +114,22 @@ export async function POST(req) {
     const locked = await isPaidLocked(supabase, locationId, cycleId).catch(() => false)
     if (locked) return NextResponse.json({ ok: false, error: 'Vendor is marked as Paid. Editing is locked.' }, { status: 403 })
 
-    const { error: updErr } = await supabase
+    const bankHasCycle = await hasColumn(supabase, 'ram_vendor_bank_accounts', 'ram_cycle_id').catch(() => false)
+
+    let updQ = supabase
       .from('ram_vendor_bank_accounts')
       .update({ is_current: false })
       .eq('ram_delivery_location_id', locationId)
       .eq('is_current', true)
+    if (bankHasCycle && cycleId) updQ = updQ.eq('ram_cycle_id', cycleId)
+    const { error: updErr } = await updQ
     if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 })
 
     const { data: inserted, error: insErr } = await supabase
       .from('ram_vendor_bank_accounts')
       .insert({
         ram_delivery_location_id: locationId,
+        ...(bankHasCycle ? { ram_cycle_id: cycleId } : {}),
         bank_name: bankName,
         account_name: accountName,
         account_number: accountNumber,
@@ -117,7 +137,7 @@ export async function POST(req) {
         created_by_role: 'rep',
         created_by_code: String(session?.claims?.ram_vendor_code || '').trim() || null,
       })
-      .select('id,ram_delivery_location_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
+      .select('id,ram_delivery_location_id,ram_cycle_id,bank_name,account_name,account_number,is_current,created_at,created_by_role,created_by_code')
       .single()
 
     if (insErr) return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 })

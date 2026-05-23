@@ -100,10 +100,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-3 lg:px-4 xl:px-6 h-12 lg:h-14 flex items-center gap-2 lg:gap-4">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-2 group">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-green-500 rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-            </svg>
+          <div className="w-8 h-8 bg-white border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="/logo.png" alt="CBN Coop" className="w-7 h-7 object-contain" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">CBN Coop</span>

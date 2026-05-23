@@ -17,6 +17,18 @@ function money(n) {
   return `₦${Number(n || 0).toLocaleString()}`
 }
 
+function computePaymentVendor(o) {
+  const principal = Number(o?.principal_amount || 0)
+  const payment = String(o?.payment_option || '').trim()
+  const fee = Math.round(principal * 0.06)
+  if (payment === 'Loan') {
+    const interest = Number(o?.interest_amount || 0)
+    const deduction = interest > 0 ? interest : fee
+    return Math.max(0, principal - deduction)
+  }
+  return Math.max(0, principal - fee)
+}
+
 function Spinner({ className = '' }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" aria-hidden="true">
@@ -207,6 +219,7 @@ function RepRamApprovedContent() {
         unit_price: o.unit_price,
         principal_amount: o.principal_amount,
         interest_amount: o.interest_amount,
+        payment_vendor: computePaymentVendor(o),
         total_amount: o.total_amount,
         delivery_location: o.delivery_location?.delivery_location || '',
         vendor_name: o.delivery_location?.name || '',
@@ -276,6 +289,7 @@ function RepRamApprovedContent() {
           'Unit Price',
           'Principal',
           'Interest',
+          'Pay Vendor',
           'Total',
           'Delivery',
           'Signature',
@@ -293,6 +307,7 @@ function RepRamApprovedContent() {
         `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
         `NGN ${Number(o.principal_amount || 0).toLocaleString()}`,
         `NGN ${Number(o.interest_amount || 0).toLocaleString()}`,
+        `NGN ${Number(computePaymentVendor(o) || 0).toLocaleString()}`,
         `NGN ${Number(o.total_amount || 0).toLocaleString()}`,
         sanitize([o.delivery_location?.delivery_location || '', o.delivery_location?.name || '', o.delivery_location?.phone || ''].filter(Boolean).join('\n')),
         '',
@@ -303,10 +318,11 @@ function RepRamApprovedContent() {
           acc.qty += Number(o.qty || 0)
           acc.principal += Number(o.principal_amount || 0)
           acc.interest += Number(o.interest_amount || 0)
+          acc.payment_vendor += Number(computePaymentVendor(o) || 0)
           acc.total += Number(o.total_amount || 0)
           return acc
         },
-        { qty: 0, principal: 0, interest: 0, total: 0 }
+        { qty: 0, principal: 0, interest: 0, payment_vendor: 0, total: 0 }
       )
 
       const totalsRowIndex = body.length
@@ -321,6 +337,7 @@ function RepRamApprovedContent() {
         '',
         `NGN ${totals.principal.toLocaleString()}`,
         `NGN ${totals.interest.toLocaleString()}`,
+        `NGN ${totals.payment_vendor.toLocaleString()}`,
         `NGN ${totals.total.toLocaleString()}`,
         '',
         '',
@@ -339,6 +356,7 @@ function RepRamApprovedContent() {
           8: { halign: 'right' },
           9: { halign: 'right' },
           10: { halign: 'right' },
+          11: { halign: 'right' },
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.row.index === totalsRowIndex) {

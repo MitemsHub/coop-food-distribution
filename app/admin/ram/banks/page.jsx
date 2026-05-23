@@ -79,7 +79,9 @@ function RamBanksContent() {
       if (fetchCtl.current) fetchCtl.current.abort()
       const ctl = new AbortController()
       fetchCtl.current = ctl
-      const qs = new URLSearchParams({ active: activeOnly ? '1' : '0' })
+      const qs = new URLSearchParams({
+        active: activeOnly ? '1' : '0',
+      })
       const res = await fetch(`/api/admin/ram/vendor-banks/locations?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/ram/vendor-banks/locations')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
