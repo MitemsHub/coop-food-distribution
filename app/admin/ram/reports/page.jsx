@@ -958,8 +958,19 @@ function RamReportsContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Admin — Ram Sales — Report</h1>
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={refreshAll}>
-            Refresh
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={refreshAll}
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner className="w-4 h-4" />
+                Refreshing…
+              </span>
+            ) : (
+              'Refresh'
+            )}
           </button>
           <button
             className="px-4 py-2 bg-gray-700 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm disabled:opacity-50"
@@ -1034,165 +1045,231 @@ function RamReportsContent() {
         />
       </div>
 
-      <div className="mt-6 bg-white border rounded-lg p-3 sm:p-4">
-        <div className="text-sm font-semibold text-gray-900">Applications by Delivery Location</div>
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={appsLocationId} onChange={(e) => setAppsLocationId(e.target.value)}>
+      <div className="mt-6 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60">
+          <div className="text-sm font-semibold text-gray-900">Applications by Delivery Location</div>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={appsLocationId}
+              onChange={(e) => setAppsLocationId(e.target.value)}
+            >
             <option value="">All delivery locations</option>
             {locations.map((l) => (
               <option key={l.id} value={String(l.id)}>
                 {l.delivery_location || l.name}
               </option>
             ))}
-          </select>
+            </select>
 
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={appsStatus} onChange={(e) => setAppsStatus(e.target.value)}>
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={appsStatus}
+              onChange={(e) => setAppsStatus(e.target.value)}
+            >
             <option value="">All statuses</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
             <option value="Cancelled">Cancelled</option>
-          </select>
+            </select>
 
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={appsPayment} onChange={(e) => setAppsPayment(e.target.value)}>
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={appsPayment}
+              onChange={(e) => setAppsPayment(e.target.value)}
+            >
             <option value="">All payments</option>
             <option value="Cash">Cash</option>
             <option value="Loan">Loan</option>
             <option value="Savings">Savings</option>
-          </select>
+            </select>
 
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={appsFrom} onChange={(e) => setAppsFrom(e.target.value)} />
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={appsTo} onChange={(e) => setAppsTo(e.target.value)} />
-        </div>
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={appsFrom}
+              onChange={(e) => setAppsFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={appsTo}
+              onChange={(e) => setAppsTo(e.target.value)}
+            />
+          </div>
 
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
-          <button
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
-            onClick={exportApplicationsExcel}
-            disabled={appsBusy}
-          >
-            {appsExcelBusy ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Preparing…
-              </span>
-            ) : (
-              'Download Excel'
-            )}
-          </button>
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-            onClick={exportApplicationsPdf}
-            disabled={appsBusy}
-          >
-            {appsPdfBusy ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Preparing…
-              </span>
-            ) : (
-              'Download PDF'
-            )}
-          </button>
+          <div className="mt-3 flex flex-col sm:flex-row gap-2">
+            <button
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+              onClick={exportApplicationsExcel}
+              disabled={appsBusy}
+            >
+              {appsExcelBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  Preparing…
+                </span>
+              ) : (
+                'Download Excel'
+              )}
+            </button>
+            <button
+              className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
+              onClick={exportApplicationsPdf}
+              disabled={appsBusy}
+            >
+              {appsPdfBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  Preparing…
+                </span>
+              ) : (
+                'Download PDF'
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 bg-white border rounded-lg p-3 sm:p-4">
-        <div className="text-sm font-semibold text-gray-900">Applications Pack by Payment to Vendors</div>
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={packLocationId} onChange={(e) => setPackLocationId(e.target.value)}>
+      <div className="mt-4 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60">
+          <div className="text-sm font-semibold text-gray-900">Applications Pack by Payment to Vendors</div>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={packLocationId}
+              onChange={(e) => setPackLocationId(e.target.value)}
+            >
             <option value="">All delivery locations</option>
             {locations.map((l) => (
               <option key={l.id} value={String(l.id)}>
                 {l.delivery_location || l.name}
               </option>
             ))}
-          </select>
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={packStatus} onChange={(e) => setPackStatus(e.target.value)}>
+            </select>
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={packStatus}
+              onChange={(e) => setPackStatus(e.target.value)}
+            >
             <option value="">All statuses</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
             <option value="Cancelled">Cancelled</option>
-          </select>
-          <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={packPayment} onChange={(e) => setPackPayment(e.target.value)}>
+            </select>
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={packPayment}
+              onChange={(e) => setPackPayment(e.target.value)}
+            >
             <option value="">All payments</option>
             <option value="Cash">Cash</option>
             <option value="Loan">Loan</option>
             <option value="Savings">Savings</option>
-          </select>
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={packFrom} onChange={(e) => setPackFrom(e.target.value)} />
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={packTo} onChange={(e) => setPackTo(e.target.value)} />
-        </div>
+            </select>
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={packFrom}
+              onChange={(e) => setPackFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={packTo}
+              onChange={(e) => setPackTo(e.target.value)}
+            />
+          </div>
 
-        <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          <button
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
-            onClick={exportVendorPaymentsPackExcel}
-            disabled={packBusy || !locations.length}
-          >
-            {packExcelBusy ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Preparing…
-              </span>
-            ) : (
-              'Download Excel'
-            )}
-          </button>
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-            onClick={exportVendorPaymentsPackPdf}
-            disabled={packBusy || !locations.length}
-          >
-            {packPdfBusy ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Preparing…
-              </span>
-            ) : (
-              'Download PDF'
-            )}
-          </button>
-          {packBusy && packProgress?.total ? (
-            <div className="text-xs sm:text-sm text-gray-600">
-              {packProgress.current}/{packProgress.total}
-            </div>
-          ) : null}
+          <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <button
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+              onClick={exportVendorPaymentsPackExcel}
+              disabled={packBusy || !locations.length}
+            >
+              {packExcelBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  Preparing…
+                </span>
+              ) : (
+                'Download Excel'
+              )}
+            </button>
+            <button
+              className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
+              onClick={exportVendorPaymentsPackPdf}
+              disabled={packBusy || !locations.length}
+            >
+              {packPdfBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  Preparing…
+                </span>
+              ) : (
+                'Download PDF'
+              )}
+            </button>
+            {packBusy && packProgress?.total ? (
+              <div className="text-xs sm:text-sm text-gray-600">
+                {packProgress.current}/{packProgress.total}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 bg-white border rounded-lg p-3 sm:p-4">
-        <div className="text-sm font-semibold text-gray-900">Delivery Pack (Master/Cash/Loan/Savings)</div>
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <select
-            className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
-            value={deliveryPackLocationId}
-            onChange={(e) => setDeliveryPackLocationId(e.target.value)}
-          >
+      <div className="mt-4 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60">
+          <div className="text-sm font-semibold text-gray-900">Delivery Pack (Master/Cash/Loan/Savings)</div>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <select
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={deliveryPackLocationId}
+              onChange={(e) => setDeliveryPackLocationId(e.target.value)}
+            >
             <option value="">All delivery locations</option>
             {locations.map((l) => (
               <option key={l.id} value={String(l.id)}>
                 {l.delivery_location || l.name}
               </option>
             ))}
-          </select>
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={deliveryPackFrom} onChange={(e) => setDeliveryPackFrom(e.target.value)} />
-          <input type="date" className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={deliveryPackTo} onChange={(e) => setDeliveryPackTo(e.target.value)} />
-        </div>
-        <div className="mt-3">
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-            onClick={downloadDeliveryPack}
-            disabled={deliveryPackBusy}
-          >
-            {deliveryPackBusy ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Preparing…
-              </span>
-            ) : (
-              'Download Delivery Pack'
-            )}
-          </button>
+            </select>
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={deliveryPackFrom}
+              onChange={(e) => setDeliveryPackFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+              value={deliveryPackTo}
+              onChange={(e) => setDeliveryPackTo(e.target.value)}
+            />
+          </div>
+          <div className="mt-3">
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+              onClick={downloadDeliveryPack}
+              disabled={deliveryPackBusy}
+            >
+              {deliveryPackBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  Preparing…
+                </span>
+              ) : (
+                'Download Delivery Pack'
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
