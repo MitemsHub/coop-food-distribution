@@ -133,6 +133,14 @@ function OrdersPageContent() {
     }
   }
 
+  useEffect(() => {
+    try {
+      if (!memberId) return
+      const total = Number(orders?.length || 0) + Number(ramOrders?.length || 0)
+      localStorage.setItem(`ordersCount_${memberId}`, String(total))
+    } catch {}
+  }, [memberId, orders?.length, ramOrders?.length])
+
   const filteredOrders =
     selectedStatus === 'All'
       ? activeTab === 'ram'
@@ -174,46 +182,86 @@ function OrdersPageContent() {
 
   return (
     <ProtectedRoute allowedRoles={['member', 'rep', 'admin']}>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-3 sm:p-4">
         {/* Header */}
-        <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-2 lg:mb-3">
-              <div className="text-center md:text-left">
-                <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 break-words">
+        <div className="max-w-6xl mx-auto mb-4">
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+              <div className="text-left">
+                <h1 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 break-words">
                   {isAdmin ? 'Admin - Member Orders' : 'My Orders'}
                 </h1>
-                <p className="text-xs sm:text-sm md:text-base text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600">
                   {isAdmin ? 'Viewing orders for member' : 'Track your order history and status'}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-row">
-                {shoppingOpen && (
-                <button
-                  onClick={() => router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')}
-                  className="px-2 py-2 sm:px-3 md:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
-                >
-                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M8 11v6a2 2 0 002 2h4a2 2 0 002-2v-6M8 11h8" />
-                  </svg>
-                  {isAdmin ? 'Shop for Member' : 'Shop'}
-                </button>
-                )}
-                {shoppingOpen && (
-                <button
-                  onClick={() => router.push(isAdmin ? `/cart?member_id=${memberId}&admin=true` : '/cart')}
-                  className="px-2 py-2 sm:px-3 md:px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center text-xs sm:text-sm md:text-base whitespace-nowrap"
-                >
-                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-                  </svg>
-                  Cart
-                </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=food` : '/orders?tab=food')
+                    }
+                    className={`px-3 py-2 text-xs sm:text-sm font-semibold ${
+                      activeTab === 'food' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Food Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=ram` : '/orders?tab=ram')
+                    }
+                    className={`px-3 py-2 text-xs sm:text-sm font-semibold border-l border-gray-200 ${
+                      activeTab === 'ram' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Ram Orders
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">Status</span>
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-xs sm:text-sm bg-white"
+                  >
+                    <option key="all" value="All">All Orders</option>
+                    <option key="pending" value="Pending">Pending</option>
+                    {activeTab === 'ram' ? (
+                      <option key="approved" value="Approved">Approved</option>
+                    ) : (
+                      <>
+                        <option key="posted" value="Posted">Posted</option>
+                        <option key="delivered" value="Delivered">Delivered</option>
+                      </>
+                    )}
+                    <option key="cancelled" value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {!isAdmin && (
+                  <button
+                    onClick={() => router.push('/shop')}
+                    disabled={!shoppingOpen || shoppingStatusLoading}
+                    className={`px-3 py-2 rounded-lg border flex items-center justify-center text-xs sm:text-sm whitespace-nowrap ${
+                      shoppingOpen && !shoppingStatusLoading
+                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200'
+                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    {shoppingOpen ? 'Back to Shop' : 'Shopping Closed'}
+                  </button>
                 )}
                 {isAdmin && (
                   <button
                     onClick={() => router.push('/admin/food/orders')}
-                    className="px-3 py-2 sm:px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center text-sm sm:text-base whitespace-nowrap"
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg border border-gray-200 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
                   >
                     <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -225,13 +273,13 @@ function OrdersPageContent() {
             </div>
             
             {/* Member Info */}
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs sm:text-sm text-blue-600">Member ID: {memberId}</p>
+                  <p className="text-xs sm:text-sm text-gray-700">Member ID: {memberId}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs sm:text-sm text-blue-600">
+                  <div className="text-xs sm:text-sm text-gray-700">
                     Food: {orders.length} · Ram: {ramOrders.length}
                   </div>
                 </div>
@@ -240,77 +288,9 @@ function OrdersPageContent() {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-2">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=food` : '/orders?tab=food')
-                }
-                className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
-                  activeTab === 'food' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Food Orders
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(isAdmin ? `/orders?member_id=${encodeURIComponent(memberId)}&admin=true&tab=ram` : '/orders?tab=ram')
-                }
-                className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold ${
-                  activeTab === 'ram' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Ram Orders
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="max-w-6xl mx-auto mb-6">
-          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 items-end">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                <label className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Status:</label>
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-xs sm:text-sm w-full sm:w-auto"
-                >
-                  <option key="all" value="All">All Orders</option>
-                  <option key="pending" value="Pending">Pending</option>
-                  {activeTab === 'ram' ? (
-                    <option key="approved" value="Approved">Approved</option>
-                  ) : (
-                    <>
-                      <option key="posted" value="Posted">Posted</option>
-                      <option key="delivered" value="Delivered">Delivered</option>
-                    </>
-                  )}
-                  <option key="cancelled" value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div className="flex justify-end items-end">
-                <button
-                  onClick={loadAll}
-                  className="px-3 py-2 sm:px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap h-10"
-                >
-                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Orders List */}
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
             {message && (
               <div className={`mb-4 p-3 rounded-lg ${
                 message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-600'
@@ -327,84 +307,56 @@ function OrdersPageContent() {
                 <p className="text-gray-500 mb-2 lg:mb-3">
                   {selectedStatus === 'All' ? 'No orders found' : `No ${selectedStatus.toLowerCase()} orders found`}
                 </p>
-                {shoppingOpen ? (
+                {!isAdmin && (
                   <button
-                    onClick={() => router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    onClick={() => router.push('/shop')}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg border border-gray-200 text-sm"
                   >
-                    Start Shopping
+                    Back to Shop
                   </button>
-                ) : (
-                  <div className="text-gray-600 text-sm">Shopping is currently closed.</div>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 {filteredOrders.map((order) => (
                   activeTab === 'ram' ? (
-                    <div key={order.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between mb-2 lg:mb-3">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Ram Order #{order.id}</h3>
-                            <p className="text-xs sm:text-sm text-gray-600">
-                              {new Date(order.created_at).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
-                          </div>
-                          <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
-                            {order.status}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
-                          <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
+                    <div key={order.id} className="border rounded-lg p-3 bg-white hover:shadow-sm transition-shadow">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-sm text-gray-600">Vendor</div>
-                          <div className="font-medium">{ramLocationMap.get(String(order.ram_delivery_location_id))?.name || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Delivery Location</div>
-                          <div className="font-medium">
-                            {ramLocationMap.get(String(order.ram_delivery_location_id))?.delivery_location || 'N/A'}
+                          <div className="text-xs font-semibold text-gray-800">Ram Order #{order.id}</div>
+                          <div className="text-[11px] text-gray-500">
+                            {new Date(order.created_at).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
                           </div>
                         </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="text-[11px] text-gray-600">{order.payment_option}</div>
+                        <div className="text-xs font-semibold text-gray-900">₦{Number(order.total_amount || 0).toLocaleString()}</div>
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-gray-700 space-y-1">
                         <div>
-                          <div className="text-sm text-gray-600">Quantity</div>
-                          <div className="font-medium">{Number(order.qty || 0)} ram(s)</div>
+                          Vendor: <span className="font-medium text-gray-900">{ramLocationMap.get(String(order.ram_delivery_location_id))?.name || 'N/A'}</span>
+                        </div>
+                        <div>
+                          Qty: <span className="font-medium text-gray-900">{Number(order.qty || 0)}</span>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
-                        <div>
-                          <div className="text-sm text-gray-600">Unit Price</div>
-                          <div className="font-medium">₦{Number(order.unit_price || 0).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Principal</div>
-                          <div className="font-medium">₦{Number(order.principal_amount || 0).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Interest</div>
-                          <div className="font-medium">₦{Number(order.interest_amount || 0).toLocaleString()}</div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-end">
+                      <div className="mt-3 flex justify-end">
                         <button
                           onClick={() => downloadRamReceipt(order.id)}
-                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center"
+                          className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg border border-gray-200 text-xs flex items-center"
                         >
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                           Receipt
@@ -412,139 +364,52 @@ function OrdersPageContent() {
                       </div>
                     </div>
                   ) : (
-                    <div key={order.order_id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between mb-2 lg:mb-3">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">Order #{order.order_id}</h3>
-                            <p className="text-xs sm:text-sm text-gray-600">
-                              {new Date(order.created_at).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
+                    <div key={order.order_id} className="border rounded-lg p-3 bg-white hover:shadow-sm transition-shadow">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-semibold text-gray-800">Order #{order.order_id}</div>
+                          <div className="text-[11px] text-gray-500">
+                            {new Date(order.created_at).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
                           </div>
-                          <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(order.status)}`}>
-                            {order.status}
-                          </span>
                         </div>
-                        <div className="text-right">
-                          <div className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">₦{Number(order.total_amount || 0).toLocaleString()}</div>
-                          <div className="text-xs sm:text-sm text-gray-600">{order.payment_option}</div>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="text-[11px] text-gray-600">{order.payment_option}</div>
+                        <div className="text-xs font-semibold text-gray-900">₦{Number(order.total_amount || 0).toLocaleString()}</div>
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-gray-700 space-y-1">
+                        <div>
+                          Branch: <span className="font-medium text-gray-900">{order.delivery?.name || 'N/A'}</span>
+                        </div>
+                        <div>
+                          Dept: <span className="font-medium text-gray-900">{order.departments?.name || order.department || 'N/A'}</span>
+                        </div>
+                        <div>
+                          Items: <span className="font-medium text-gray-900">{order.order_lines?.length || 0}</span>
                         </div>
                       </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 lg:mb-3">
-                        <div>
-                          <div className="text-sm text-gray-600">Delivery Branch</div>
-                          <div className="font-medium">{order.delivery?.name || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Department</div>
-                          <div className="font-medium">{order.departments?.name || order.department || 'N/A'}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Items</div>
-                          <div className="font-medium">{order.order_lines?.length || 0} items</div>
-                        </div>
-                      </div>
-                      
-                      {order.order_lines && order.order_lines.length > 0 && (
-                        <div className="mb-2 lg:mb-3">
-                          <div className="text-sm font-medium text-gray-700 mb-2">Items:</div>
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <div className="space-y-2">
-                              {order.order_lines.map((line, index) => (
-                                <div key={`${order.order_id}-${line.sku || line.item_id || index}`} className="flex justify-between items-center text-sm">
-                                  <div>
-                                    <span className="font-medium">{line.items?.name || 'Unknown Item'}</span>
-                                    <span className="text-gray-600 ml-2">x{line.qty}</span>
-                                  </div>
-                                  <div className="font-medium">₦{Number(line.amount || 0).toLocaleString()}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {order.payment_option === 'Loan' && (
-                        <div className="mb-2 lg:mb-3">
-                          <div className="text-sm font-medium text-gray-700 mb-2">Payment Breakdown:</div>
-                          <div className="bg-blue-50 rounded-lg p-3">
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Principal Amount:</span>
-                                <span className="font-medium">
-                                  ₦{Number(
-                                    Number.isFinite(Number(order.principal_amount))
-                                      ? Number(order.principal_amount)
-                                      : (order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)
-                                  ).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">
-                                  {Number.isFinite(Number(order.loan_interest_rate_pct))
-                                    ? `Interest (${Number(order.loan_interest_rate_pct)}%):`
-                                    : 'Interest:'}
-                                </span>
-                                <span className="font-medium text-orange-600">
-                                  ₦{Number(
-                                    Number.isFinite(Number(order.loan_interest_amount))
-                                      ? Number(order.loan_interest_amount)
-                                      : Math.max(
-                                          0,
-                                          Number(order.total_amount || 0) -
-                                            (Number.isFinite(Number(order.principal_amount))
-                                              ? Number(order.principal_amount)
-                                              : (order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))
-                                        )
-                                  ).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="border-t pt-1 mt-1">
-                                <div className="flex justify-between items-center text-sm font-semibold">
-                                  <span>Total (incl. Interest):</span>
-                                  <span>
-                                    ₦{Number(order.total_amount || 0).toLocaleString()}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          {order.posted_at && (
-                            <span>Posted: {new Date(order.posted_at).toLocaleDateString()}</span>
-                          )}
-                          {order.delivered_at && (
-                            <span>Delivered: {new Date(order.delivered_at).toLocaleDateString()}</span>
-                          )}
-                          {order.cancelled_at && (
-                            <span>Cancelled: {new Date(order.cancelled_at).toLocaleDateString()}</span>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          {(order.status === 'Delivered' || order.status === 'Posted') && (
-                            <button
-                              onClick={() => downloadReceipt(order.order_id)}
-                              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Receipt
-                            </button>
-                          )}
-                        </div>
+
+                      <div className="mt-3 flex items-center justify-end">
+                        {(order.status === 'Delivered' || order.status === 'Posted') && (
+                          <button
+                            onClick={() => downloadReceipt(order.order_id)}
+                            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg border border-gray-200 text-xs flex items-center"
+                          >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Receipt
+                          </button>
+                        )}
                       </div>
                     </div>
                   )

@@ -10,6 +10,7 @@ function RamPageContent() {
   const searchParams = useSearchParams()
   const { user } = useAuth()
   const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [foodShoppingOpen, setFoodShoppingOpen] = useState(true)
   const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
 
   const memberId = user?.id || ''
@@ -24,12 +25,29 @@ function RamPageContent() {
     const load = async () => {
       try {
         setShoppingStatusLoading(true)
-        const res = await fetch('/api/system/ram-shopping', { cache: 'no-store' })
-        const json = await res.json()
-        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load shopping status')
-        if (!cancelled) setShoppingOpen(!!json.open)
+        const [ramRes, foodRes] = await Promise.allSettled([
+          fetch('/api/system/ram-shopping', { cache: 'no-store' }),
+          fetch('/api/system/shopping', { cache: 'no-store' }),
+        ])
+
+        if (ramRes.status === 'fulfilled') {
+          const json = await ramRes.value.json()
+          if (!ramRes.value.ok || !json?.ok) throw new Error(json?.error || 'Failed to load ram shopping status')
+          if (!cancelled) setShoppingOpen(!!json.open)
+        } else {
+          throw new Error(ramRes.reason?.message || 'Failed to load ram shopping status')
+        }
+
+        if (foodRes.status === 'fulfilled') {
+          const json = await foodRes.value.json()
+          if (!foodRes.value.ok || !json?.ok) throw new Error(json?.error || 'Failed to load food shopping status')
+          if (!cancelled) setFoodShoppingOpen(!!json.open)
+        } else {
+          throw new Error(foodRes.reason?.message || 'Failed to load food shopping status')
+        }
       } catch {
         if (!cancelled) setShoppingOpen(false)
+        if (!cancelled) setFoodShoppingOpen(false)
       } finally {
         if (!cancelled) setShoppingStatusLoading(false)
       }
@@ -69,9 +87,14 @@ function RamPageContent() {
             <button
               type="button"
               onClick={() => router.push('/shop')}
-              className="w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+              disabled={!foodShoppingOpen || shoppingStatusLoading}
+              className={`w-full inline-flex items-center justify-center px-4 py-3 text-white text-sm md:text-base font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl ${
+                foodShoppingOpen && !shoppingStatusLoading
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
             >
-              Go to Food Distribution
+              {foodShoppingOpen ? 'Go to Food Distribution' : 'Food Distribution (Closed)'}
             </button>
           </div>
           <button

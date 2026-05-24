@@ -17,23 +17,6 @@ function SuccessContent() {
   const [order, setOrder] = useState(null)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
-  const [shoppingOpen, setShoppingOpen] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    const loadStatus = async () => {
-      try {
-        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
-        const json = await res.json()
-        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load shopping status')
-        if (!cancelled) setShoppingOpen(!!json.open)
-      } catch (e) {
-        if (!cancelled) setShoppingOpen(false)
-      }
-    }
-    loadStatus()
-    return () => { cancelled = true }
-  }, [])
 
   useEffect(() => {
     if (!mid) return
@@ -156,129 +139,20 @@ function SuccessContent() {
     }
   }
 
-  const downloadExcel = async () => {
-    if (!order) return
-    setDownloading(true)
-    try {
-      const xlsxMod = await import('xlsx')
-      const XLSX = xlsxMod?.default ?? xlsxMod
-
-      // Removed SKU column for member-facing export
-      const rows = (order.order_lines || []).map((l) => ({
-        OrderID: order.order_id,
-        CreatedAt: order.created_at,
-        PostedAt: order.posted_at,
-        Status: order.status,
-        MemberID: order.member_id,
-        MemberName: order.member_name_snapshot,
-        MemberBranch: order.member_branch?.name || '',
-        Delivery: order.delivery?.name || '',
-        RepPhone: order.delivery?.rep_phone || '',
-        Department: order.departments?.name || '',
-        Payment: order.payment_option,
-        Item: l.items?.name || '',
-        Qty: l.qty,
-        UnitPrice: Number(l.unit_price || 0),
-        Amount: Number(l.amount || 0),
-      }))
-      const principal = Number(order.principal_amount ?? (order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
-      const interest = order.payment_option === 'Loan' ? Number(order.loan_interest_amount || 0) : 0
-      const ratePct = Number(order.loan_interest_rate_pct ?? 13)
-      const totalWithInterest = order.payment_option === 'Loan' ? principal + interest : principal
-
-      // Footer rows with breakdown (for Loan payments)
-      rows.push({
-        OrderID: order.order_id,
-        CreatedAt: '',
-        PostedAt: '',
-        Status: '',
-        MemberID: '',
-        MemberName: '',
-        MemberBranch: '',
-        Delivery: '',
-        RepPhone: '',
-        Department: '',
-        Payment: '',
-        Item: 'PRINCIPAL',
-        Qty: '',
-        UnitPrice: '',
-        Amount: principal,
-      })
-      if (order.payment_option === 'Loan') {
-        rows.push({
-          OrderID: order.order_id,
-          CreatedAt: '',
-          PostedAt: '',
-          Status: '',
-          MemberID: '',
-          MemberName: '',
-          MemberBranch: '',
-          Delivery: '',
-          RepPhone: '',
-          Department: '',
-          Payment: '',
-          Item: `INTEREST (${ratePct}%)`,
-          Qty: '',
-          UnitPrice: '',
-          Amount: interest,
-        })
-        rows.push({
-          OrderID: order.order_id,
-          CreatedAt: '',
-          PostedAt: '',
-          Status: '',
-          MemberID: '',
-          MemberName: '',
-          MemberBranch: '',
-          Delivery: '',
-          RepPhone: '',
-          Department: '',
-          Payment: '',
-          Item: 'TOTAL (incl. Interest)',
-          Qty: '',
-          UnitPrice: '',
-          Amount: totalWithInterest,
-        })
-      } else {
-        rows.push({
-          OrderID: order.order_id,
-          CreatedAt: '',
-          PostedAt: '',
-          Status: '',
-          MemberID: '',
-          MemberName: '',
-          MemberBranch: '',
-          Delivery: '',
-          RepPhone: '',
-          Department: '',
-          Payment: '',
-          Item: 'TOTAL',
-          Qty: '',
-          UnitPrice: '',
-          Amount: Number(order.total_amount || 0),
-        })
-      }
-
-      const ws = XLSX.utils.json_to_sheet(rows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Order')
-      XLSX.writeFile(wb, `Order_${order.order_id}.xlsx`)
-    } catch (e) {
-      alert(`Excel error: ${e.message}`)
-    } finally {
-      setDownloading(false)
-    }
-  }
-
   if (error) return <div className="p-6">Error: {error}</div>
   if (!order) return <div className="p-6">Loading…</div>
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">Order Confirmed</h1>
-      <p className="text-sm text-gray-600 mb-4">
-        Order #{order.order_id} • {order.status} • {new Date(order.created_at).toLocaleString()}
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Order Confirmed</h1>
+          <p className="text-sm text-gray-600">
+            Order #{order.order_id} • {order.status} • {new Date(order.created_at).toLocaleString()}
+          </p>
+        </div>
+        <div />
+      </div>
 
       <div className="mb-3 text-sm">
         <div><b>Member:</b> {order.member_name_snapshot} ({order.member_id})</div>
@@ -335,15 +209,13 @@ function SuccessContent() {
         </div>
       )}
 
-      <div className="flex gap-2">
-        {shoppingOpen && (
-          <a href={mid ? `/shop?mid=${encodeURIComponent(mid)}&admin=true` : '/shop'} className="px-4 py-2 border rounded">Back to Shop</a>
-        )}
-        <button onClick={downloadPDF} className="px-4 py-2 bg-blue-600 text-white rounded" disabled={downloading}>
+      <div className="flex justify-center">
+        <button
+          onClick={downloadPDF}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          disabled={downloading}
+        >
           {downloading ? 'Preparing…' : 'Download PDF'}
-        </button>
-        <button onClick={downloadExcel} className="px-4 py-2 bg-emerald-600 text-white rounded" disabled={downloading}>
-          {downloading ? 'Preparing…' : 'Download Excel'}
         </button>
       </div>
     </div>

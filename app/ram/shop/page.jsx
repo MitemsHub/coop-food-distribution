@@ -41,6 +41,13 @@ function RamShopPageContent() {
   const qtyNumber = Number(qty)
   const safeQty = Number.isFinite(qtyNumber) ? Math.trunc(qtyNumber) : 0
 
+  useEffect(() => {
+    try {
+      if (!memberId) return
+      localStorage.setItem(`ramCart_${String(memberId).trim().toUpperCase()}`, JSON.stringify({ qty: Math.max(0, Number(safeQty || 0)) }))
+    } catch {}
+  }, [memberId, safeQty])
+
   const unitPrice = Number(eligibility?.pricing?.unit_price || 0)
   const interestRate = Number.isFinite(Number(eligibility?.rules?.loan_interest_rate)) ? Number(eligibility?.rules?.loan_interest_rate) : 0
   const interestRatePct = Number.isFinite(Number(eligibility?.rules?.loan_interest_rate_pct))
@@ -464,6 +471,10 @@ function RamShopPageContent() {
         return
       }
 
+      try {
+        localStorage.setItem(`ramCart_${String(memberId).trim().toUpperCase()}`, JSON.stringify({ qty: 0 }))
+      } catch {}
+
       router.push(`/ram/success/${encodeURIComponent(json.order.id)}`)
     } catch (e) {
       setMessage({ type: 'error', text: e.message || 'Network error' })
@@ -557,15 +568,6 @@ function RamShopPageContent() {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Ram Sales ({shoppingOpen ? 'Opened' : 'Closed'})
           </h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push('/orders?tab=ram')}
-              className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-semibold text-gray-700"
-            >
-              View Orders
-            </button>
-          </div>
         </div>
 
         <AnimatePresence mode="wait">

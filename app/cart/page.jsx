@@ -19,6 +19,7 @@ function CartPageContent() {
   const [message, setMessage] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [itemsBusy, setItemsBusy] = useState(false)
   const [eligibility, setEligibility] = useState({
     savingsEligible: 0,
     loanEligible: 0,
@@ -219,6 +220,7 @@ function CartPageContent() {
   const loadItems = async () => {
     if (!deliveryBranch) return
     try {
+      setItemsBusy(true)
       const res = await fetch(`/api/items/prices?branch=${encodeURIComponent(deliveryBranch)}`, {
         headers: { 'Accept': 'application/json' },
       })
@@ -228,6 +230,8 @@ function CartPageContent() {
       }
     } catch (error) {
       console.error('Error loading items:', error)
+    } finally {
+      setItemsBusy(false)
     }
   }
 
@@ -431,13 +435,13 @@ function CartPageContent() {
 
   return (
     <ProtectedRoute allowedRoles={['member', 'rep', 'admin']}>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-3 sm:p-4">
         {/* Header */}
         <div className="max-w-6xl mx-auto mb-6">
           <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 md:p-6">
               <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-center md:justify-between mb-4 sm:mb-6">
-                <div className="text-center md:text-left">
-                  <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 mb-2 break-words">
+                <div className="text-left">
+                  <h1 className="text-base sm:text-lg md:text-xl font-bold text-gray-800 mb-2 break-words">
                     {isAdmin ? 'Admin - Member Cart' : 'Shopping Cart'}
                   </h1>
                   <p className="text-gray-600 text-xs sm:text-sm">
@@ -476,8 +480,8 @@ function CartPageContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3 xl:gap-4 pt-2 lg:pt-3 xl:pt-4 border-t border-gray-100">
               {/* Delivery Details */}
               <div>
-                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Delivery Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">Delivery Details</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   <div>
                     <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
                     <select
@@ -520,7 +524,7 @@ function CartPageContent() {
 
               {/* Payment Method */}
               <div>
-                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Payment Method</h3>
+                <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">Payment Method</h3>
                 <select
                   value={paymentOption}
                   onChange={(e) => {
@@ -538,12 +542,12 @@ function CartPageContent() {
                 </select>
                 
                 {/* Quick Summary */}
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between text-sm mb-1">
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between text-xs sm:text-sm mb-1">
                     <span>Items:</span>
                     <span className="font-medium">{cartItems.length}</span>
                   </div>
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="flex justify-between text-xs sm:text-sm mb-1">
                     <span>Total:</span>
                     <span className="font-semibold">₦{cartTotal.toLocaleString()}</span>
                   </div>
@@ -557,12 +561,18 @@ function CartPageContent() {
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-2 lg:gap-3 xl:gap-4">
           {/* Cart Items */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-2 lg:p-3 xl:p-4">
-              <div className="flex items-center justify-between mb-2 lg:mb-3">
-                <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">Cart Items</h2>
+            <div className="bg-white rounded-xl shadow-lg p-2 lg:p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-semibold text-gray-800">Cart Items</h2>
+                  {itemsBusy && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-400 border-t-transparent"></div>
+                  )}
+                </div>
                 <button
                   onClick={addNewItem}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm md:text-sm"
+                  disabled={itemsBusy || items.length === 0}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Add Item
                 </button>
@@ -585,22 +595,27 @@ function CartPageContent() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
                   {cartItems.map((item, index) => (
-                    <div key={item.sku} className="border rounded-lg p-3 sm:p-4 bg-gray-50 hover:bg-white transition-colors">
-                      <div className="space-y-3 sm:space-y-4">
+                    <div key={item.sku} className="border rounded-lg p-2 sm:p-3 bg-gray-50 hover:bg-white transition-colors">
+                      <div className="space-y-2 sm:space-y-3">
                         {/* Item Selection */}
                         <div>
                           <select
                             value={item.sku}
                             onChange={(e) => updateItemSku(item.sku, e.target.value)}
-                            className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            disabled={itemsBusy || items.length === 0}
+                            className="w-full border rounded-lg px-2 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                           >
-                            {items.map(availableItem => (
-                              <option key={availableItem.sku} value={availableItem.sku}>
-                                {availableItem.name} - ₦{availableItem.price.toLocaleString()}
-                              </option>
-                            ))}
+                            {itemsBusy ? (
+                              <option key="loading-items" value={item.sku}>Loading items…</option>
+                            ) : (
+                              items.map(availableItem => (
+                                <option key={availableItem.sku} value={availableItem.sku}>
+                                  {availableItem.name} - ₦{availableItem.price.toLocaleString()}
+                                </option>
+                              ))
+                            )}
                           </select>
                           <div className="text-xs sm:text-xs md:text-xs text-gray-500 mt-1">
                             {item.unit} • {item.category}
@@ -608,9 +623,9 @@ function CartPageContent() {
                         </div>
                         
                         {/* Price */}
-                        <div className="text-center bg-blue-50 rounded-lg p-2 sm:p-3">
-                          <div className="text-sm sm:text-base md:text-lg font-bold text-blue-800">₦{item.price.toLocaleString()}</div>
-                          <div className="text-xs sm:text-xs md:text-xs text-blue-600">per {item.unit}</div>
+                        <div className="text-center bg-blue-50 rounded-lg p-2">
+                          <div className="text-xs sm:text-sm font-bold text-blue-800">₦{item.price.toLocaleString()}</div>
+                          <div className="text-[11px] text-blue-700">per {item.unit}</div>
                         </div>
                         
                         {/* Quantity Controls - Mobile Optimized */}
@@ -618,16 +633,16 @@ function CartPageContent() {
                           <div className="flex items-center bg-white border-2 border-gray-200 rounded-lg overflow-hidden">
                             <button
                               onClick={() => updateQuantity(item.sku, item.qty - 1)}
-                              className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 hover:bg-red-50 text-gray-700 hover:text-red-600 font-semibold transition-colors border-r border-gray-200 min-w-[36px] sm:min-w-[40px] text-xs sm:text-sm md:text-sm"
+                              className="px-3 py-2 bg-gray-50 hover:bg-red-50 text-gray-700 hover:text-red-600 font-semibold transition-colors border-r border-gray-200 min-w-[34px] text-xs sm:text-sm"
                             >
                               −
                             </button>
-                            <div className="w-12 sm:w-16 py-2 sm:py-3 text-center font-bold text-gray-800 text-xs sm:text-sm md:text-sm tabular-nums">
+                            <div className="w-12 sm:w-14 py-2 text-center font-bold text-gray-800 text-xs sm:text-sm tabular-nums">
                               {Number(item.qty || 0)}
                             </div>
                             <button
                               onClick={() => updateQuantity(item.sku, item.qty + 1)}
-                              className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 hover:bg-green-50 text-gray-700 hover:text-green-600 font-semibold transition-colors border-l border-gray-200 min-w-[36px] sm:min-w-[40px] text-xs sm:text-sm md:text-sm"
+                              className="px-3 py-2 bg-gray-50 hover:bg-green-50 text-gray-700 hover:text-green-600 font-semibold transition-colors border-l border-gray-200 min-w-[34px] text-xs sm:text-sm"
                             >
                               +
                             </button>
@@ -635,17 +650,17 @@ function CartPageContent() {
                         </div>
                         
                         {/* Total Price */}
-                        <div className="text-center bg-green-50 rounded-lg p-2 sm:p-3">
-                          <div className="text-sm sm:text-base md:text-lg font-bold text-green-800">
+                        <div className="text-center bg-green-50 rounded-lg p-2">
+                          <div className="text-xs sm:text-sm font-bold text-green-800">
                             ₦{(item.price * item.qty).toLocaleString()}
                           </div>
-                          <div className="text-xs sm:text-xs md:text-xs text-green-600">Total</div>
+                          <div className="text-[11px] text-green-700">Total</div>
                         </div>
                         
                         {/* Remove Button */}
                         <button
                           onClick={() => removeItem(item.sku)}
-                          className="w-full px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs sm:text-sm md:text-sm font-medium transition-colors flex items-center justify-center"
+                          className="w-full px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs font-medium transition-colors flex items-center justify-center"
                         >
                           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -661,9 +676,9 @@ function CartPageContent() {
           </div>
 
           {/* Order Summary & Checkout */}
-          <div className="space-y-6">
+          <div className="space-y-3">
             {/* Order Summary */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="bg-white rounded-xl shadow-lg p-4">
               <h3 className="text-sm sm:text-base md:text-base font-semibold text-gray-800 mb-2 lg:mb-3">Order Summary</h3>
               
               <div className={`grid gap-2 sm:gap-3 md:gap-4 mb-2 lg:mb-3 ${paymentOption === 'Loan' ? 'grid-cols-2' : 'grid-cols-3'}`}>

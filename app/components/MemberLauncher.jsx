@@ -584,7 +584,7 @@ export default function MemberLauncher() {
                 : 'bg-gray-400 cursor-not-allowed'
             }`}
           >
-            {shoppingOpen ? 'Food Distribution' : 'Food Distribution (Closed)'}
+            {shoppingOpen ? 'Food Distribution (Opened)' : 'Food Distribution (Closed)'}
           </button>
 
           <button

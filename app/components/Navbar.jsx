@@ -16,6 +16,8 @@ export default function Navbar() {
   // Shopping availability state (controls visibility of Shop link when portal is closed)
   const [shoppingOpen, setShoppingOpen] = useState(false)
   const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
+  const [ordersCount, setOrdersCount] = useState(0)
 
   const userType = user?.type
   const hideOnAdmin = !!pathname?.startsWith('/admin')
@@ -29,7 +31,77 @@ export default function Navbar() {
     return pathname.startsWith(path)
   }
 
+  const hideShopLink = isActive('/shop') || isActive('/cart') || isActive('/orders') || isActive('/ram')
+
   const closeMobileMenu = () => setMobileMenuOpen(false)
+
+  const memberId = userType === 'member' ? String(user?.id || '') : ''
+  const memberIdKey = memberId ? memberId.trim().toUpperCase() : ''
+  const isRamRoute = userType === 'member' && isActive('/ram')
+
+  const readCartCount = (mid) => {
+    try {
+      if (!mid) return 0
+      const raw = localStorage.getItem(`cart_${mid}`)
+      if (!raw) return 0
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.reduce((sum, it) => sum + Math.max(0, Number(it?.qty || 0)), 0)
+      }
+      if (parsed && typeof parsed === 'object') {
+        return Object.values(parsed).reduce((sum, v) => sum + Math.max(0, Number(v || 0)), 0)
+      }
+      return 0
+    } catch {
+      return 0
+    }
+  }
+
+  const readOrdersCount = (mid) => {
+    try {
+      if (!mid) return 0
+      const raw = localStorage.getItem(`ordersCount_${mid}`)
+      const n = Number(raw)
+      return Number.isFinite(n) ? n : 0
+    } catch {
+      return 0
+    }
+  }
+
+  useEffect(() => {
+    if (hideNavbar) return
+    if (userType !== 'member') return
+    if (!memberIdKey) return
+    setCartCount(readCartCount(memberIdKey))
+    setOrdersCount(readOrdersCount(memberIdKey))
+  }, [hideNavbar, memberIdKey, pathname, userType])
+
+  useEffect(() => {
+    if (hideNavbar) return
+    if (userType !== 'member') return
+    if (!memberIdKey) return
+    let t = null
+    const readRamCartCount = (mid) => {
+      try {
+        if (!mid) return 0
+        const raw = localStorage.getItem(`ramCart_${mid}`)
+        if (!raw) return 0
+        const parsed = JSON.parse(raw)
+        const n = Number(parsed?.qty || 0)
+        return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+      } catch {
+        return 0
+      }
+    }
+
+    const tick = () => {
+      setCartCount(isRamRoute ? readRamCartCount(memberIdKey) : readCartCount(memberIdKey))
+      setOrdersCount(readOrdersCount(memberIdKey))
+    }
+    tick()
+    t = setInterval(tick, 1500)
+    return () => t && clearInterval(t)
+  }, [hideNavbar, isRamRoute, memberIdKey, userType])
 
   // Check demand tracking mode - only for admin
   useEffect(() => {
@@ -95,6 +167,13 @@ export default function Navbar() {
 
   if (hideNavbar) return null
 
+  const isOrdersNav = userType === 'member' && isActive('/orders')
+  const isFoodSuccessNav = userType === 'member' && isActive('/shop/success')
+  const isRamSuccessNav = userType === 'member' && isActive('/ram/success')
+  const isSuccessNav = isFoodSuccessNav || isRamSuccessNav
+  const isFoodMemberNav = userType === 'member' && (isActive('/shop') || isActive('/cart') || isFoodSuccessNav)
+  const isRamMemberNav = userType === 'member' && (isActive('/ram') || isRamSuccessNav)
+
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg">
       <div className="max-w-7xl mx-auto px-3 lg:px-4 xl:px-6 h-12 lg:h-14 flex items-center gap-2 lg:gap-4">
@@ -104,8 +183,35 @@ export default function Navbar() {
             <img src="/logo.png" alt="CBN Coop" className="w-7 h-7 object-contain" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">CBN Coop</span>
-            <span className="text-xs sm:text-sm text-gray-500 -mt-1">Food Distribution</span>
+            {isOrdersNav ? (
+              <>
+                <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">
+                  CBN Coop
+                </span>
+                <span className="text-xs sm:text-sm text-gray-500 -mt-1">Member Shopping Portal</span>
+              </>
+            ) : isRamMemberNav ? (
+              <>
+                <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">
+                  Coop Ram Distribution
+                </span>
+                <span className="text-xs sm:text-sm text-gray-500 -mt-1">Members Distribution Portal</span>
+              </>
+            ) : isFoodMemberNav ? (
+              <>
+                <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">
+                  Coop Food Distribution
+                </span>
+                <span className="text-xs sm:text-sm text-gray-500 -mt-1">Member Shopping Portal</span>
+              </>
+            ) : (
+              <>
+                <span className="font-bold text-base sm:text-lg md:text-xl lg:text-2xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-green-700 transition-all duration-200 leading-tight">
+                  CBN Coop
+                </span>
+                <span className="text-xs sm:text-sm text-gray-500 -mt-1">Food Distribution</span>
+              </>
+            )}
           </div>
         </Link>
 
@@ -114,20 +220,66 @@ export default function Navbar() {
           {/* Member Navigation */}
           {userType === 'member' && (
             <>
-              {shoppingOpen && (
-                <Link
-                  href="/shop"
-                  className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                    isActive('/shop') 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
-                      : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
-                  }`}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
-                  </svg>
-                  Shop
-                </Link>
+              {!isSuccessNav && (
+                <>
+                  {shoppingOpen && !hideShopLink && (
+                    <Link
+                      href="/shop"
+                      className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                        isActive('/shop') 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
+                          : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                      </svg>
+                      Shop
+                    </Link>
+                  )}
+                  <Link
+                    href={isRamRoute ? '/orders?tab=ram' : '/orders'}
+                    className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                      isActive('/orders')
+                        ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-lg'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Orders ({Number.isFinite(Number(ordersCount)) ? Number(ordersCount) : 0})
+                  </Link>
+                  {isRamRoute ? (
+                    <span className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                      </svg>
+                      Cart ({Number.isFinite(Number(cartCount)) ? Number(cartCount) : 0})
+                    </span>
+                  ) : shoppingOpen ? (
+                    <Link
+                      href="/cart"
+                      className={`inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                        isActive('/cart')
+                          ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-lg'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                      </svg>
+                      Cart ({Number.isFinite(Number(cartCount)) ? Number(cartCount) : 0})
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-400 cursor-not-allowed">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m0 0h8.5" />
+                      </svg>
+                      Cart (0)
+                    </span>
+                  )}
+                </>
               )}
               <button
                 onClick={logout}
@@ -372,18 +524,54 @@ export default function Navbar() {
             {/* Member Mobile Navigation */}
             {userType === 'member' && (
               <>
-                {shoppingOpen && (
-                  <Link
-                    href="/shop"
-                    onClick={closeMobileMenu}
-                    className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                      isActive('/shop') 
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
-                        : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
-                    }`}
-                  >
-                    Shop
-                  </Link>
+                {!isSuccessNav && (
+                  <>
+                    {shoppingOpen && !hideShopLink && (
+                      <Link
+                        href="/shop"
+                        onClick={closeMobileMenu}
+                        className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                          isActive('/shop') 
+                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
+                            : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                        }`}
+                      >
+                        Shop
+                      </Link>
+                    )}
+                    <Link
+                      href={isRamRoute ? '/orders?tab=ram' : '/orders'}
+                      onClick={closeMobileMenu}
+                      className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                        isActive('/orders')
+                          ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Orders ({Number.isFinite(Number(ordersCount)) ? Number(ordersCount) : 0})
+                    </Link>
+                    {isRamRoute ? (
+                      <div className="block px-3 py-2 rounded-md text-base font-medium bg-gray-100 text-gray-700">
+                        Cart ({Number.isFinite(Number(cartCount)) ? Number(cartCount) : 0})
+                      </div>
+                    ) : shoppingOpen ? (
+                      <Link
+                        href="/cart"
+                        onClick={closeMobileMenu}
+                        className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                          isActive('/cart')
+                            ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        Cart ({Number.isFinite(Number(cartCount)) ? Number(cartCount) : 0})
+                      </Link>
+                    ) : (
+                      <div className="block px-3 py-2 rounded-md text-base font-medium bg-gray-100 text-gray-400 cursor-not-allowed">
+                        Cart (0)
+                      </div>
+                    )}
+                  </>
                 )}
                 <button
                   onClick={() => { logout(); closeMobileMenu(); }}
