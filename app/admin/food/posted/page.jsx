@@ -1,17 +1,15 @@
 // app/admin/posted/page.jsx
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import DraggableModal from '../../../components/DraggableModal'
 
 function PostedAdminPageContent() {
   const [orders, setOrders] = useState([])
   const [msg, setMsg] = useState(null)
   const [term, setTerm] = useState('')
-  const [branch, setBranch] = useState('')
   const [payment, setPayment] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(false)
   const [pageSize, setPageSize] = useState(50)
@@ -21,28 +19,10 @@ function PostedAdminPageContent() {
   const [summary, setSummary] = useState(null)
   const [deliveringOrder, setDeliveringOrder] = useState(null) // Track which order is being delivered
   const [deliveringBulk, setDeliveringBulk] = useState(false) // Track bulk delivery
+  const [rollingBack, setRollingBack] = useState(false)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
-  // Modal drag state
-  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
-  const dragStartRef = useRef(null)
-  const handleModalDragStart = (e) => {
-    e.preventDefault()
-    dragStartRef.current = { x: e.clientX, y: e.clientY, ox: modalOffset.x, oy: modalOffset.y }
-    window.addEventListener('mousemove', handleModalDragMove)
-    window.addEventListener('mouseup', handleModalDragEnd)
-  }
-  const handleModalDragMove = (e) => {
-    const s = dragStartRef.current
-    if (!s) return
-    setModalOffset({ x: s.ox + (e.clientX - s.x), y: s.oy + (e.clientY - s.y) })
-  }
-  const handleModalDragEnd = () => {
-    dragStartRef.current = null
-    window.removeEventListener('mousemove', handleModalDragMove)
-    window.removeEventListener('mouseup', handleModalDragEnd)
-  }
-  useEffect(() => { if (showModal) setModalOffset({ x: 0, y: 0 }) }, [showModal])
+  const [viewing, setViewing] = useState(null)
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -58,10 +38,9 @@ function PostedAdminPageContent() {
       const qs = new URLSearchParams({ status:'Posted', limit: String(pageSize) })
       if (term) qs.set('term', term)
       if (payment) qs.set('payment', payment)
-      if (branch) qs.set('branch', branch)
       if (cursor) qs.set('cursor', String(cursor))
-      const res = await fetch(`/api/admin/orders/list?${qs.toString()}`, { cache:'no-store' })
-      const json = await safeJson(res, '/api/admin/orders/list')
+      const res = await fetch(`/api/admin/food/orders/list?${qs.toString()}`, { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/food/orders/list')
       if (!json.ok) throw new Error(json.error || 'Failed')
       setOrders(json.orders || [])
       setNextCursor(json.nextCursor || null)
@@ -115,6 +94,9 @@ function PostedAdminPageContent() {
     setSelected(new Set())
   }
 
+  const money = (n) => `₦${Number(n || 0).toLocaleString()}`
+  const orderQty = (o) => (o?.order_lines || []).reduce((s, l) => s + Number(l?.qty || 0), 0)
+
   const deliverOne = async (order_id) => {
     setShowModal({ 
       type: 'deliver', 
@@ -124,6 +106,68 @@ function PostedAdminPageContent() {
       placeholder: 'Delivered by (name or rep)'
     })
     setModalInput('rep')
+  }
+
+  const rollbackOne = async (order_id) => {
+    setShowModal({
+      type: 'rollback',
+      orderId: order_id,
+      title: 'Rollback Order',
+      message: `Rollback order ${order_id} back to Pending?`,
+      placeholder: 'Optional reason for rollback',
+      toStatus: 'Pending',
+    })
+    setModalInput('')
+  }
+
+  const rollbackSelected = async () => {
+    if (selected.size === 0) return
+    setShowModal({
+      type: 'rollbackMultiple',
+      selectedIds: Array.from(selected),
+      title: 'Rollback Selected Orders',
+      message: `Rollback ${selected.size} selected order(s) back to Pending?`,
+      placeholder: 'Optional reason for rollback',
+      toStatus: 'Pending',
+    })
+    setModalInput('')
+  }
+
+  const handleRollbackSubmit = async () => {
+    const ids = showModal?.type === 'rollbackMultiple' ? showModal?.selectedIds : [showModal?.orderId]
+    const orderIds = (ids || []).map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+    if (!orderIds.length) return
+    setRollingBack(true)
+    try {
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), 8000)
+      const res = await fetch('/api/admin/food/orders/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ orderIds, toStatus: 'Pending', adminId: 'admin@coop', note: modalInput || '' }),
+        signal: ctl.signal,
+      })
+      const json = await safeJson(res, '/api/admin/food/orders/rollback')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
+      const okCount = Number(json?.rolledBack?.length || 0)
+      const failCount = Number(json?.failed?.length || 0)
+      setMsg({
+        type: 'success',
+        text: failCount ? `Rolled back ${okCount} order(s), ${failCount} failed` : `Rolled back ${okCount} order(s)`,
+      })
+      fetchOrders()
+      clearSelected()
+      setModalInput('')
+      setShowModal(null)
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        setMsg({ type: 'error', text: 'Rollback timed out after 8s. Please check network and try again.' })
+      } else {
+        setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
+      }
+    } finally {
+      setRollingBack(false)
+    }
   }
 
   const handleDeliverSubmit = async () => {
@@ -137,13 +181,13 @@ function PostedAdminPageContent() {
         for (const id of selectedIds) {
           const ctl = new AbortController()
           const timer = setTimeout(() => ctl.abort(), 8000)
-          const res = await fetch('/api/admin/orders/deliver', {
+          const res = await fetch('/api/admin/food/orders/deliver', {
             method:'POST',
             headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
             body: JSON.stringify({ orderId:id, adminId:'admin@coop', deliveredBy }),
             signal: ctl.signal
           })
-          const json = await safeJson(res, '/api/admin/orders/deliver')
+          const json = await safeJson(res, '/api/admin/food/orders/deliver')
           if (!json.ok) throw new Error(json.error || 'Deliver failed')
           try { clearTimeout(timer) } catch {}
         }
@@ -156,13 +200,13 @@ function PostedAdminPageContent() {
         const { orderId } = showModal
         const ctl = new AbortController()
         const timer = setTimeout(() => ctl.abort(), 8000)
-        const res = await fetch('/api/admin/orders/deliver', {
+        const res = await fetch('/api/admin/food/orders/deliver', {
           method:'POST',
           headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
           body: JSON.stringify({ orderId, adminId:'admin@coop', deliveredBy }),
           signal: ctl.signal
         })
-        const json = await safeJson(res, '/api/admin/orders/deliver')
+        const json = await safeJson(res, '/api/admin/food/orders/deliver')
         if (!json.ok) throw new Error(json.error || 'Deliver failed')
         setMsg({ type:'success', text:`Order ${orderId} marked Delivered` })
         setOrders(orders.filter(o => o.order_id !== orderId))
@@ -196,279 +240,473 @@ function PostedAdminPageContent() {
     setModalInput('rep')
   }
 
-  const exportCSV = () => {
-    const rows = orders.flatMap(o => (o.order_lines || []).map(l => ({
-      order_id:o.order_id, posted_at:o.posted_at, member:o.member_name_snapshot,
-      member_branch:o.member_branch?.name||'', delivery:o.delivery?.name||'',
-      department:o.departments?.name||'', payment:o.payment_option,
-      sku:l.items?.sku, item:l.items?.name, qty:l.qty, unit_price:l.unit_price, amount:l.amount
+  const fetchAllForExport = async () => {
+    const all = []
+    let cursor = null
+    let guard = 0
+    while (guard < 200) {
+      guard += 1
+      const qs = new URLSearchParams({ status: 'Posted', limit: '1000' })
+      if (term) qs.set('term', term)
+      if (payment) qs.set('payment', payment)
+      if (cursor) qs.set('cursor', String(cursor))
+      const res = await fetch(`/api/admin/food/orders/list?${qs.toString()}`, { cache: 'no-store' })
+      const json = await safeJson(res, '/api/admin/food/orders/list (export)')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load orders for export')
+      const chunk = json.orders || []
+      all.push(...chunk)
+      if (!json.nextCursor) break
+      cursor = json.nextCursor
+    }
+    return all
+  }
+
+  const exportExcel = async () => {
+    const srcOrders = await fetchAllForExport().catch(() => [])
+    const rows = srcOrders.flatMap((o) => (o.order_lines || []).map((l) => ({
+      order_id: o.order_id,
+      posted_at: o.posted_at,
+      member_id: o.member_id,
+      member_name: o.member_name_snapshot,
+      member_branch: o.member_branch?.name || '',
+      delivery_branch: o.delivery?.name || '',
+      department: o.departments?.name || '',
+      payment: o.payment_option,
+      sku: l.items?.sku,
+      item: l.items?.name,
+      qty: l.qty,
+      unit_price: l.unit_price,
+      amount: l.amount,
     })))
-    const headers = Object.keys(rows[0] || { order_id:'', posted_at:'', member:'', member_branch:'', delivery:'', department:'', payment:'', sku:'', item:'', qty:'', unit_price:'', amount:'' })
-    const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))].join('\n')
-    const blob = new Blob([csv], { type:'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob); const a = document.createElement('a')
-    a.href = url; a.download = 'posted_orders.csv'; a.click(); URL.revokeObjectURL(url)
+    if (!rows.length) { alert('No rows to export') ; return }
+
+    const ExcelJSMod = await import('exceljs')
+    const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Posted')
+
+    const headers = Object.keys(rows[0])
+    ws.addRow(['Food Distribution — Posted Orders (Admin)'])
+    ws.addRow([`Search: ${term || 'All'} | Payment: ${payment || 'All'}`])
+    ws.addRow(headers)
+    for (const r of rows) ws.addRow(headers.map((h) => r[h]))
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `admin_food_posted_${new Date().toISOString().split('T')[0]}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportPDF = async () => {
+    const all = await fetchAllForExport().catch(() => [])
+    if (!all.length) {
+      alert('No rows to export')
+      return
+    }
+    const { jsPDF } = await import('jspdf')
+    const { default: autoTable } = await import('jspdf-autotable')
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+    const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
+
+    doc.setFontSize(14)
+    doc.text('Posted Orders Manifest (Admin)', 12, 12)
+    doc.setFontSize(9)
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
+    doc.text(`Search: ${term || 'All'}  |  Payment: ${payment || 'All'}`, 12, 24)
+
+    const headers = ['Order', 'Member', 'Dept', 'Pay', 'SKU', 'Item', 'Qty', 'Unit Price', 'Amount']
+    const rows = all.flatMap((o) =>
+      (o.order_lines || []).map((l) => [
+        sanitize(o.order_id),
+        sanitize(o.member_name_snapshot || ''),
+        sanitize(o.departments?.name || ''),
+        sanitize(o.payment_option || ''),
+        sanitize(l.items?.sku || ''),
+        sanitize(l.items?.name || ''),
+        String(l.qty || 0),
+        `NGN ${Number(l.unit_price || 0).toLocaleString()}`,
+        `NGN ${Number(l.amount || 0).toLocaleString()}`,
+      ])
+    )
+
+    autoTable(doc, {
+      head: [headers],
+      body: rows,
+      startY: 30,
+      margin: { top: 28, left: 10, right: 10 },
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+      headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255], fontSize: 9 },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: {
+        0: { cellWidth: 14 }, // Order
+        1: { cellWidth: 40 }, // Member
+        2: { cellWidth: 28 }, // Dept
+        3: { cellWidth: 16 }, // Pay
+        4: { cellWidth: 20 }, // SKU
+        5: { cellWidth: 58 }, // Item
+        6: { cellWidth: 12, halign: 'right' }, // Qty
+        7: { cellWidth: 24, halign: 'right' }, // Unit Price
+        8: { cellWidth: 26, halign: 'right' }, // Amount
+      },
+    })
+
+    doc.save(`admin_posted_manifest_${new Date().toISOString().split('T')[0]}.pdf`)
+  }
+
+  const downloadReceipt = (orderId, memberId) => {
+    window.open(`/shop/success/${orderId}?mid=${memberId}`, '_blank', 'noopener,noreferrer')
   }
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Posted Orders</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Admin — Food Distribution — Posted</h1>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
-        <div className="flex gap-2">
-          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Search (ID or name)" value={term} onChange={e=>setTerm(e.target.value)} onKeyPress={handleKeyPress} />
-          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={handleSearch}>Search</button>
-        </div>
-        <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={payment} onChange={e=>setPayment(e.target.value)}>
-          <option value="">All payments</option>
-          <option value="Savings">Savings</option>
-          <option value="Loan">Loan</option>
-          <option value="Cash">Cash</option>
-        </select>
-        <div className="flex gap-2">
-          <input className="border rounded px-3 py-2 text-xs sm:text-sm flex-1" placeholder="Branch code (e.g. DUTSE)" value={branch} onChange={e=>setBranch(e.target.value)} onKeyPress={handleKeyPress} />
-          <button className="px-3 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700 transition-colors" onClick={handleSearch}>Filter</button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2">
-            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">From</label>
-            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={from} onChange={e=>setFrom(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">To</label>
-            <input type="date" className="border rounded px-2 py-1 text-xs sm:text-sm flex-1" value={to} onChange={e=>setTo(e.target.value)} />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm" onClick={() => fetchOrders()}>
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
-        <button className="px-4 py-2 bg-gray-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-700 transition-colors shadow-sm" onClick={selectAll}>
-          {selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}
-        </button>
-        <button 
-          className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 shadow-sm ${
-            deliveringBulk || selected.size === 0
-              ? 'bg-gray-400 text-white cursor-not-allowed opacity-50' 
-              : 'bg-emerald-600 text-white hover:bg-emerald-700'
+      {!!msg && (
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm ${
+            msg.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'
           }`}
-          disabled={deliveringBulk || selected.size === 0} 
-          onClick={deliverSelected}
         >
-          {deliveringBulk ? (
-            <div className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Delivering...
-            </div>
-          ) : (
-            `Deliver Selected (${selected.size})`
-          )}
-        </button>
-        <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm" onClick={exportCSV}>
-          Download CSV
-        </button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-        <div className="text-xs sm:text-sm text-gray-700">
-          {summary?.count != null ? (
-            <>
-              Showing {summary.count ? pageIndex * pageSize + 1 : 0}–{Math.min(pageIndex * pageSize + (orders?.length || 0), summary.count)} of {summary.count}
-            </>
-          ) : (
-            <>
-              Showing {orders.length} order(s)
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
-            value={pageSize}
-            onChange={(e) => {
-              const next = Number(e.target.value) || 50
-              setPageSize(next)
-              resetPagination()
-              fetchOrders(null)
-            }}
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => {
-              if (pageIndex <= 0) return
-              const nextIndex = pageIndex - 1
-              const prevCursor = cursorStack[nextIndex] || null
-              setPageIndex(nextIndex)
-              setSelected(new Set())
-              fetchOrders(prevCursor)
-            }}
-            disabled={pageIndex <= 0 || loading}
-          >
-            Prev
-          </button>
-          <div className="text-xs sm:text-sm text-gray-700">Page {pageIndex + 1}</div>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => {
-              if (!nextCursor) return
-              const nextIndex = pageIndex + 1
-              const nextStack = cursorStack.slice(0, pageIndex + 1).concat([nextCursor])
-              setCursorStack(nextStack)
-              setPageIndex(nextIndex)
-              setSelected(new Set())
-              fetchOrders(nextCursor)
-            }}
-            disabled={!nextCursor || loading}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {msg && <div className={`mb-3 text-xs sm:text-sm ${msg.type==='success'?'text-green-700':'text-red-700'}`}>{msg.text}</div>}
-
-      <div className="divide-y border rounded-lg">
-        {orders.length === 0 && <div className="p-4 text-xs sm:text-sm text-gray-600">No Posted orders.</div>}
-        {orders.map(o => (
-          <div key={o.order_id} className="p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <input type="checkbox" checked={selected.has(o.order_id)} onChange={()=>toggleSelect(o.order_id)} className="w-4 h-4" />
-                <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
-                <div className="text-xs text-gray-600">{new Date(o.posted_at || o.created_at).toLocaleString()}</div>
-              </div>
-              <div className="flex justify-end sm:ml-auto">
-                <button 
-                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 shadow-sm whitespace-nowrap ${
-                    deliveringOrder === o.order_id
-                      ? 'bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  }`}
-                  onClick={() => deliverOne(o.order_id)}
-                  disabled={deliveringOrder === o.order_id}
-                >
-                  {deliveringOrder === o.order_id ? (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Delivering...
-                    </div>
-                  ) : (
-                    'Deliver'
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
-              <div className="text-xs break-words">{o.member_id} — {o.member_name_snapshot}</div>
-              <div className="text-xs">Member: {o.member_branch?.name || '-'}</div>
-              <div className="text-xs">Delivery: {o.delivery?.name || '-'}</div>
-              <div className="text-xs">{o.departments?.name || '-'}</div>
-              <div className="text-xs">Payment: <b>{o.payment_option}</b></div>
-              <div className="text-xs font-medium">
-                {o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'} ₦{Number(o.total_amount || 0).toLocaleString()}
-              </div>
-            </div>
-
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm border">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left p-1 sm:p-2 border">SKU</th>
-                    <th className="text-left p-1 sm:p-2 border">Item</th>
-                    <th className="text-right p-1 sm:p-2 border">Qty</th>
-                    <th className="text-right p-1 sm:p-2 border">Unit Price</th>
-                    <th className="text-right p-1 sm:p-2 border">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(o.order_lines || []).map(l => (
-                    <tr key={l.id}>
-                      <td className="p-1 sm:p-2 border text-xs">{l.items?.sku}</td>
-                      <td className="p-1 sm:p-2 border text-xs break-words">{l.items?.name}</td>
-                      <td className="p-1 sm:p-2 border text-right text-xs">{l.qty}</td>
-                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.unit_price).toLocaleString()}</td>
-                      <td className="p-1 sm:p-2 border text-right text-xs">₦{Number(l.amount).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-white/10 backdrop-blur-sm flex items-center justify-center z-50">
-          <div
-            className="bg-gradient-to-b from-white to-gray-50 p-6 rounded-xl shadow-xl ring-1 ring-black/5 max-w-md w-full mx-4 relative select-none"
-            style={{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }}
-          >
-            <h3 className="text-lg font-semibold mb-4 cursor-move" onMouseDown={handleModalDragStart}>{showModal.title}</h3>
-            <p className="text-gray-600 mb-4">{showModal.message}</p>
-            <input
-              type="text"
-              value={modalInput}
-              onChange={(e) => setModalInput(e.target.value)}
-              placeholder={showModal.placeholder}
-              className="w-full p-2 border rounded mb-4"
-              autoFocus
-            />
-            <div className="flex gap-2 justify-end">
-              <button
-                className="px-4 py-2 border rounded hover:bg-gray-50"
-                onClick={() => { setShowModal(null); setModalInput('') }}
-              >
-                Cancel
-              </button>
-              <button
-                className={`px-4 py-2 rounded text-white bg-emerald-600 hover:bg-emerald-700`}
-                onClick={handleDeliverSubmit}
-                disabled={showModal.type === 'deliverMultiple' ? deliveringBulk : deliveringOrder === showModal.orderId}
-              >
-                {showModal.type === 'deliverMultiple' ? (
-                  deliveringBulk ? (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Delivering...
-                    </div>
-                  ) : 'Deliver Orders'
-                ) : (
-                  deliveringOrder === showModal.orderId ? (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Delivering...
-                    </div>
-                  ) : 'Deliver'
-                )}
-              </button>
-            </div>
-          </div>
+          {msg.text}
         </div>
       )}
+
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+          <div className="flex gap-2 flex-1 min-w-[220px]">
+            <input
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm flex-1 bg-white"
+              placeholder="Search (Order / Member / Branch)"
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              onKeyDown={handleKeyPress}
+            />
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+              onClick={handleSearch}
+            >
+              Search
+            </button>
+          </div>
+
+          <select className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white" value={payment} onChange={(e) => setPayment(e.target.value)}>
+            <option value="">All payments</option>
+            <option value="Savings">Savings</option>
+            <option value="Loan">Loan</option>
+            <option value="Cash">Cash</option>
+          </select>
+
+          <button
+            className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            onClick={() => exportExcel().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
+            disabled={loading}
+          >
+            Download Excel
+          </button>
+
+          <button
+            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            onClick={() => exportPDF().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
+            disabled={loading}
+          >
+            Download PDF
+          </button>
+        </div>
+
+        <div className="mt-3 text-xs sm:text-sm text-gray-600">
+          Orders: {summary?.count ?? orders.length} · Selected: {selected.size}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold">Posted Orders</div>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+              onClick={() => fetchOrders(null)}
+              disabled={loading}
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={selectAll}
+              disabled={loading || !orders.length}
+            >
+              {selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold shadow-sm disabled:opacity-50 ${
+                selected.size === 0 || deliveringBulk ? 'bg-gray-400 text-white' : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+              disabled={selected.size === 0 || deliveringBulk}
+              onClick={deliverSelected}
+            >
+              {deliveringBulk ? 'Delivering…' : `Deliver Selected (${selected.size})`}
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold shadow-sm disabled:opacity-50 ${
+                selected.size === 0 || rollingBack ? 'bg-gray-400 text-white' : 'bg-amber-600 text-white hover:bg-amber-700'
+              }`}
+              disabled={selected.size === 0 || rollingBack}
+              onClick={rollbackSelected}
+            >
+              {rollingBack ? 'Rolling back…' : `Rollback Selected (${selected.size})`}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              className="border rounded px-2 py-1 text-xs sm:text-sm bg-white"
+              value={pageSize}
+              onChange={(e) => {
+                const next = Number(e.target.value) || 50
+                setPageSize(next)
+                resetPagination()
+                fetchOrders(null)
+              }}
+              disabled={loading}
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => {
+                if (pageIndex <= 0) return
+                const nextIndex = pageIndex - 1
+                const prevCursor = cursorStack[nextIndex] || null
+                setPageIndex(nextIndex)
+                setSelected(new Set())
+                fetchOrders(prevCursor)
+              }}
+              disabled={pageIndex <= 0 || loading}
+            >
+              Prev
+            </button>
+            <div className="text-xs sm:text-sm text-gray-700">Page {pageIndex + 1}</div>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => {
+                if (!nextCursor) return
+                const nextIndex = pageIndex + 1
+                const nextStack = cursorStack.slice(0, pageIndex + 1).concat([nextCursor])
+                setCursorStack(nextStack)
+                setPageIndex(nextIndex)
+                setSelected(new Set())
+                fetchOrders(nextCursor)
+              }}
+              disabled={!nextCursor || loading}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs sm:text-sm">
+            <thead className="bg-white sticky top-0 z-10">
+              <tr className="text-left border-b">
+                <th className="p-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={orders.length > 0 && selected.size === orders.length}
+                    onChange={selectAll}
+                    disabled={loading || !orders.length}
+                    className="h-4 w-4"
+                  />
+                </th>
+                <th className="p-3">Order</th>
+                <th className="p-3">Member</th>
+                <th className="p-3">Delivery</th>
+                <th className="p-3">Payment</th>
+                <th className="p-3 text-right">Qty</th>
+                <th className="p-3 text-right">Total + Int</th>
+                <th className="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="p-3">
+                      <div className="h-4 w-4 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3">
+                      <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                      <div className="mt-2 h-3 w-32 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3">
+                      <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3">
+                      <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3">
+                      <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="ml-auto h-4 w-10 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="ml-auto h-4 w-20 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="ml-auto h-8 w-24 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                  </tr>
+                ))
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-gray-600">
+                    No Posted orders.
+                  </td>
+                </tr>
+              ) : (
+                orders.map((o) => (
+                  <tr key={o.order_id} className="border-b hover:bg-gray-50/40">
+                    <td className="p-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(o.order_id)}
+                        onChange={() => toggleSelect(o.order_id)}
+                        className="h-4 w-4"
+                      />
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium">#{o.order_id}</div>
+                      <div className="text-gray-500 text-xs">{new Date(o.posted_at || o.created_at).toLocaleString()}</div>
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium">{o.member_id}</div>
+                      <div className="text-gray-600">{o.member_name_snapshot}</div>
+                    </td>
+                    <td className="p-3">
+                      <div className="text-gray-900">{o.delivery?.name || '-'}</div>
+                      <div className="text-gray-500 text-xs">{o.departments?.name || '-'}</div>
+                    </td>
+                    <td className="p-3">{o.payment_option}</td>
+                    <td className="p-3 text-right">{orderQty(o)}</td>
+                    <td className="p-3 text-right font-medium">{money(o.total_amount)}</td>
+                    <td className="p-3 text-right">
+                      <select
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const v = e.target.value
+                          e.target.value = ''
+                          if (v === 'view') setViewing(o)
+                          if (v === 'deliver') deliverOne(o.order_id)
+                          if (v === 'rollback') rollbackOne(o.order_id)
+                          if (v === 'receipt') downloadReceipt(o.order_id, o.member_id)
+                        }}
+                        disabled={deliveringOrder === o.order_id || loading}
+                      >
+                        <option value="" disabled>
+                          Actions
+                        </option>
+                        <option value="view">View items</option>
+                        <option value="deliver">Deliver</option>
+                        <option value="rollback">Rollback</option>
+                        <option value="receipt">Receipt</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <DraggableModal
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing ? `Order #${viewing.order_id} items` : 'Order items'}
+        widthClass="max-w-4xl w-full mx-4"
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm border">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-2 border">SKU</th>
+                <th className="text-left p-2 border">Item</th>
+                <th className="text-right p-2 border">Qty</th>
+                <th className="text-right p-2 border">Unit Price</th>
+                <th className="text-right p-2 border">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(viewing?.order_lines || []).map((l) => (
+                <tr key={l.id}>
+                  <td className="p-2 border">{l.items?.sku}</td>
+                  <td className="p-2 border break-words">{l.items?.name}</td>
+                  <td className="p-2 border text-right">{l.qty}</td>
+                  <td className="p-2 border text-right">{money(l.unit_price)}</td>
+                  <td className="p-2 border text-right">{money(l.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DraggableModal>
+
+      <DraggableModal
+        open={!!showModal}
+        onClose={() => {
+          setShowModal(null)
+          setModalInput('')
+        }}
+        title={showModal?.title || 'Confirm'}
+        overlayClassName="bg-white/10 backdrop-blur-sm"
+        widthClass="max-w-md w-full mx-4"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button
+              className="px-4 py-2 border rounded hover:bg-gray-50"
+              onClick={() => {
+                setShowModal(null)
+                setModalInput('')
+              }}
+              disabled={deliveringBulk || deliveringOrder != null || rollingBack}
+            >
+              Cancel
+            </button>
+            <button
+              className={`px-4 py-2 rounded text-white ${
+                showModal?.type?.startsWith('rollback') ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
+              } disabled:opacity-50`}
+              onClick={showModal?.type?.startsWith('rollback') ? handleRollbackSubmit : handleDeliverSubmit}
+              disabled={deliveringBulk || deliveringOrder != null || rollingBack}
+            >
+              {showModal?.type?.startsWith('rollback') ? (rollingBack ? 'Rolling back…' : 'Rollback') : deliveringBulk || deliveringOrder != null ? 'Delivering…' : 'Deliver'}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-gray-600 mb-4">{showModal?.message}</p>
+        <input
+          type="text"
+          value={modalInput}
+          onChange={(e) => setModalInput(e.target.value)}
+          placeholder={showModal?.placeholder || ''}
+          className="w-full p-2 border rounded"
+          autoFocus
+        />
+      </DraggableModal>
     </div>
   )
 }

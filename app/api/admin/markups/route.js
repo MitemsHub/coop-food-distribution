@@ -47,6 +47,7 @@ async function installRepricer() {
       has_cycle BOOLEAN := false;
       orders_has_cycle BOOLEAN := false;
       markups_has_cycle BOOLEAN := false;
+      cycles_has_loan_rate BOOLEAN := false;
     BEGIN
       SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -109,27 +110,59 @@ async function installRepricer() {
 
       GET DIAGNOSTICS updated_lines_count = ROW_COUNT;
 
-      WITH s AS (
-        SELECT ol.order_id, SUM(ol.amount) AS principal
-        FROM public.order_lines AS ol
-        GROUP BY ol.order_id
-      )
-      UPDATE public.orders AS o
-      SET
-        total_amount = COALESCE(s.principal, 0)
-                     + CASE WHEN o.payment_option = 'Loan'
-                            THEN ROUND(COALESCE(s.principal, 0) * 0.13)
-                            ELSE 0
-                       END,
-        updated_at = NOW()
-      FROM s
-      WHERE o.delivery_branch_id = p_branch_id
-        AND o.status::text IN ('Pending','Posted','Delivered')
-        AND s.order_id = o.order_id
-        AND EXISTS (
-          SELECT 1 FROM public.order_lines AS ol2
-          WHERE ol2.order_id = o.order_id AND ol2.item_id = p_item_id
-        );
+      IF orders_has_cycle THEN
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'cycles' AND column_name = 'food_loan_interest_rate_pct'
+        ) INTO cycles_has_loan_rate;
+      END IF;
+
+      IF orders_has_cycle AND cycles_has_loan_rate THEN
+        WITH s AS (
+          SELECT ol.order_id, SUM(ol.amount) AS principal
+          FROM public.order_lines AS ol
+          GROUP BY ol.order_id
+        )
+        UPDATE public.orders AS o
+        SET
+          total_amount = COALESCE(s.principal, 0)
+                       + CASE WHEN o.payment_option = 'Loan'
+                              THEN ROUND(COALESCE(s.principal, 0) * (COALESCE(c.food_loan_interest_rate_pct, 0) / 100.0))
+                              ELSE 0
+                         END,
+          updated_at = NOW()
+        FROM s
+        LEFT JOIN public.cycles AS c ON c.id = o.cycle_id
+        WHERE o.delivery_branch_id = p_branch_id
+          AND o.status::text IN ('Pending','Posted','Delivered')
+          AND s.order_id = o.order_id
+          AND EXISTS (
+            SELECT 1 FROM public.order_lines AS ol2
+            WHERE ol2.order_id = o.order_id AND ol2.item_id = p_item_id
+          );
+      ELSE
+        WITH s AS (
+          SELECT ol.order_id, SUM(ol.amount) AS principal
+          FROM public.order_lines AS ol
+          GROUP BY ol.order_id
+        )
+        UPDATE public.orders AS o
+        SET
+          total_amount = COALESCE(s.principal, 0)
+                       + CASE WHEN o.payment_option = 'Loan'
+                              THEN ROUND(COALESCE(s.principal, 0) * 0.13)
+                              ELSE 0
+                         END,
+          updated_at = NOW()
+        FROM s
+        WHERE o.delivery_branch_id = p_branch_id
+          AND o.status::text IN ('Pending','Posted','Delivered')
+          AND s.order_id = o.order_id
+          AND EXISTS (
+            SELECT 1 FROM public.order_lines AS ol2
+            WHERE ol2.order_id = o.order_id AND ol2.item_id = p_item_id
+          );
+      END IF;
 
       RETURN json_build_object('success', true, 'updated_lines', updated_lines_count);
     EXCEPTION WHEN OTHERS THEN

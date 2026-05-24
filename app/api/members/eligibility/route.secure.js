@@ -51,6 +51,19 @@ function safeNumber(value, defaultValue = 0, min = 0, max = Number.MAX_SAFE_INTE
 // Calculate member eligibility with proper error handling
 async function calculateEligibility(memberId) {
   try {
+    let interestRatePct = 13
+    try {
+      const { data: cRow, error: cErr } = await supabase
+        .from('cycles')
+        .select('id,food_loan_interest_rate_pct')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!cErr && cRow && cRow.food_loan_interest_rate_pct != null) {
+        interestRatePct = Math.max(0, Number(cRow.food_loan_interest_rate_pct || 0))
+      }
+    } catch {}
+    const interestRate = Math.max(0, Number(interestRatePct || 0)) / 100
+
     // 1) Fetch member data with timeout
     const { data: member, error: memberError } = await supabase
       .from('members')
@@ -99,7 +112,6 @@ async function calculateEligibility(memberId) {
     }
 
     // 4) Safe calculation of exposures
-    const INTEREST_RATE = 0.13 // 13% interest rate
     const sumAmt = (rows) => {
       if (!Array.isArray(rows)) return 0
       return rows.reduce((sum, row) => {
@@ -108,7 +120,7 @@ async function calculateEligibility(memberId) {
       }, 0)
     }
 
-    // Loan orders' total_amount already includes 13% interest
+    // Loan orders' total_amount already includes interest
     const loanExposureWithInterest = sumAmt(loanResult.data)
     const loanInterest = 0
     const loanExposurePrincipal = loanExposureWithInterest
@@ -160,7 +172,8 @@ async function calculateEligibility(memberId) {
         loan_interest: loanInterest,
         savings_exposure: savingsExposure,
         outstanding_loans_total: outstandingLoansTotal,
-        interest_rate: INTEREST_RATE
+        interest_rate: interestRate,
+        interest_rate_pct: interestRatePct
       },
       eligibility: {
         savings_eligible: finalSavingsEligible,

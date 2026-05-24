@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import ProtectedRoute from '../../../components/ProtectedRoute'
 
 export default function AdminMarkupsPage() {
   const [branches, setBranches] = useState([])
@@ -35,6 +36,19 @@ export default function AdminMarkupsPage() {
   const [uploadFile, setUploadFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadLog, setUploadLog] = useState('')
+  const [exportingExcel, setExportingExcel] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
+
+  const Spinner = ({ className = 'h-4 w-4 text-white' }) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  )
 
   const [editingRowKey, setEditingRowKey] = useState(null)
   const [editAmount, setEditAmount] = useState('')
@@ -253,37 +267,48 @@ export default function AdminMarkupsPage() {
     setCurrentPage(1)
   }, [searchTerm, activeFilter, markupBranchCode])
 
-  // Export CSV for filtered markups
-  const exportMarkupsCSV = () => {
-    const headers = ['Branch', 'SKU', 'Item', 'Category', 'Unit', 'Markup', 'Active']
-    const csvContent = [
-      headers.join(','),
-      ...filteredMarkups.map(m => {
-        const row = [
-          markupBranchCode,
-          m.items?.sku || '',
-          m.items?.name || '',
-          m.items?.category || '',
-          m.items?.unit || '',
-          Number(m.amount || 0),
-          m.active ? 'TRUE' : 'FALSE',
-        ]
-        return row.map(v => String(v).replace(/"/g, '""')).map(v => `"${v}"`).join(',')
-      })
-    ].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `markups_${markupBranchCode || 'branch'}_${selectedCycleId || 'cycle'}_${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+  const exportMarkupsExcel = async () => {
+    if (!filteredMarkups.length) return
+    setExportingExcel(true)
+    try {
+      const headers = ['Branch', 'SKU', 'Item', 'Category', 'Unit', 'Markup', 'Active']
+      const rows = filteredMarkups.map((m) => [
+        markupBranchCode,
+        m.items?.sku || '',
+        m.items?.name || '',
+        m.items?.category || '',
+        m.items?.unit || '',
+        Number(m.amount || 0),
+        m.active ? 'TRUE' : 'FALSE',
+      ])
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Markups')
+      ws.addRow(['Food Distribution — Markups'])
+      ws.addRow([`Branch: ${markupBranchCode || 'N/A'} | Cycle: ${selectedCycleId || 'N/A'}`])
+      ws.addRow(headers)
+      for (const r of rows) ws.addRow(r)
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `markups_${markupBranchCode || 'branch'}_${selectedCycleId || 'cycle'}_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setExportingExcel(false)
+    }
   }
 
   // Export PDF for filtered markups (uses jspdf + autotable)
   const exportMarkupsPDF = async () => {
+    setExportingPDF(true)
     try {
       if (!filteredMarkups.length) {
         alert('No data available for the selected filters.')
@@ -314,12 +339,18 @@ export default function AdminMarkupsPage() {
         head: [headers],
         body,
         startY: 30,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] },
-        margin: { left: 14, right: 14 },
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 40 },
+          0: { cellWidth: 28 }, // SKU
+          1: { cellWidth: 110 }, // Item
+          2: { cellWidth: 55 }, // Category
+          3: { cellWidth: 22 }, // Unit
+          4: { cellWidth: 26, halign: 'right' }, // Markup
+          5: { cellWidth: 18 }, // Active
         }
       })
 
@@ -327,25 +358,46 @@ export default function AdminMarkupsPage() {
     } catch (error) {
       console.error('PDF export error:', error)
       alert('PDF export failed. Please try again.')
+    } finally {
+      setExportingPDF(false)
     }
   }
 
-  const dlCSV = (name, rows) => {
-    const headers = Object.keys(rows[0])
-    const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))].join('\n')
-    const blob = new Blob([csv], { type:'text/csv;charset=utf-8' })
+  const dlExcel = async (fileName, rows, sheetName) => {
+    if (!rows?.length) return
+    const ExcelJSMod = await import('exceljs')
+    const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet(sheetName || 'Template')
+
+    const headers = Object.keys(rows[0] || {})
+    ws.addRow(headers)
+    for (const r of rows) ws.addRow(headers.map((h) => r[h]))
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const downloadMarkupsTemplate = () => {
-    dlCSV('Markups_Template.csv', [{
-      branch_code: 'DUTSE',
-      cycle_id: selectedCycleId || '',
-      sku: 'RICE50KG',
-      amount: 500,
-      active: 'TRUE'
-    }])
+    dlExcel(
+      'Markups_Template.xlsx',
+      [
+        {
+          branch_code: 'DUTSE',
+          cycle_id: selectedCycleId || '',
+          sku: 'RICE50KG',
+          amount: 500,
+          active: 'TRUE',
+        },
+      ],
+      'Markups'
+    ).catch(() => null)
   }
 
   const uploadMarkups = async () => {
@@ -377,15 +429,18 @@ export default function AdminMarkupsPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Admin: Branch Prices Update</h1>
-      <p className="text-sm text-gray-600 mb-6">Set fixed markups (e.g., ₦500) per item per branch. Prices in the Shop and Checkout will include these markups.</p>
+    <ProtectedRoute allowedRoles={['admin']}>
+      <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold mb-2">Admin — Food Distribution — Markups</h1>
+        <p className="text-sm text-gray-600 mb-6">
+          Set fixed markups (e.g., ₦500) per item per branch. Prices in the Shop and Checkout will include these markups.
+        </p>
 
       {message && (
         <div className="mb-4 p-3 rounded border border-gray-300 bg-gray-50">{message}</div>
       )}
 
-      <div className="mb-8 border rounded-lg p-4">
+      <div className="mb-4 bg-white rounded-xl shadow-lg border border-gray-100 p-4">
         <h2 className="text-lg font-semibold mb-2">Update Base Price (Per Cycle)</h2>
         <p className="text-sm text-gray-600 mb-3">Updates branch base price for a specific cycle. Existing orders for that branch/item will reprice automatically.</p>
         <form onSubmit={updateBasePrice} className="flex gap-4 items-end flex-wrap">
@@ -448,16 +503,18 @@ export default function AdminMarkupsPage() {
           </div>
           <button
             type="submit"
-            className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
             disabled={savingPrice || !priceBranchCode}
           >
-            {savingPrice ? 'Updating…' : 'Update Price'}
+            {savingPrice && <Spinner />}
+            <span>{savingPrice ? 'Updating…' : 'Update Price'}</span>
           </button>
         </form>
       </div>
 
-      <h2 className="text-2xl font-semibold mb-4">Admin: Branch Items Markups (Per Cycle)</h2>
-      <div className="mb-6 flex gap-4 items-end flex-wrap">
+      <div className="mb-4 bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+        <h2 className="text-lg font-semibold mb-2">Markups (Per Cycle)</h2>
+        <div className="flex gap-4 items-end flex-wrap">
         <div>
           <label className="block text-sm font-medium mb-1">Branch (for Markups)</label>
           <select
@@ -491,69 +548,71 @@ export default function AdminMarkupsPage() {
             )}
           </select>
         </div>
+        </div>
+        <form onSubmit={upsertMarkup} className="mt-4">
+          <div className="flex gap-4 items-end flex-wrap">
+            <div>
+              <label className="block text-sm font-medium mb-1">SKU</label>
+              <input
+                type="text"
+                value={sku}
+                onChange={e => setSku(e.target.value)}
+                placeholder="e.g., RICE-25KG"
+                className="border rounded px-3 py-2 w-64"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Markup Amount (₦)</label>
+              <input
+                type="number"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                min={0}
+                step={1}
+                className="border rounded px-3 py-2 w-40"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+              disabled={saving}
+            >
+              {saving && <Spinner />}
+              <span>{saving ? 'Saving…' : 'Save Markup'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
-      <form onSubmit={upsertMarkup} className="mb-8">
-        <div className="flex gap-4 items-end flex-wrap">
-          <div>
-            <label className="block text-sm font-medium mb-1">SKU</label>
-            <input
-              type="text"
-              value={sku}
-              onChange={e => setSku(e.target.value)}
-              placeholder="e.g., RICE-25KG"
-              className="border rounded px-3 py-2 w-64"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Markup Amount (₦)</label>
-            <input
-              type="number"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              min={0}
-              step={1}
-              className="border rounded px-3 py-2 w-40"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-60"
-            disabled={saving}
-          >
-            {saving ? 'Saving…' : 'Save Markup'}
-          </button>
-        </div>
-      </form>
-
       {/* Bulk Upload Section */}
-      <div className="mb-8 border rounded-lg p-4">
-        <h2 className="text-lg font-semibold mb-2">Bulk Upload Markups (.xlsx/.csv)</h2>
+      <div className="mb-4 bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+        <h2 className="text-lg font-semibold mb-2">Bulk Upload Markups (.xlsx)</h2>
         <p className="text-sm text-gray-600 mb-3">Expected columns: branch_code, cycle_id, sku, amount, active</p>
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <input
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls"
             onChange={e => setUploadFile(e.target.files?.[0] || null)}
-            className="border rounded px-3 py-2 w-full sm:w-auto"
+            className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full sm:w-auto text-sm bg-white"
           />
           <div className="flex gap-2">
             <button
               onClick={downloadMarkupsTemplate}
               type="button"
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded"
+              className="px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700"
             >
-              Download Template
+              Download Excel Template
             </button>
             <button
               onClick={uploadMarkups}
               type="button"
-              className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded disabled:opacity-60"
+              className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
               disabled={uploading}
             >
-              {uploading ? 'Uploading…' : 'Upload Markups'}
+              {uploading && <Spinner />}
+              <span>{uploading ? 'Uploading…' : 'Upload Markups'}</span>
             </button>
           </div>
         </div>
@@ -562,154 +621,180 @@ export default function AdminMarkupsPage() {
         )}
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Current Markups</h2>
-        {/* Filters and Actions */}
-        <div className="mb-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="text-sm font-semibold">Current Markups</div>
           <input
             type="text"
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by SKU, item, category"
-            className="border rounded px-3 py-2 w-full sm:w-64"
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white w-full sm:w-72"
           />
           <select
             value={activeFilter}
-            onChange={e => setActiveFilter(e.target.value)}
-            className="border rounded px-3 py-2 w-full sm:w-44"
+            onChange={(e) => setActiveFilter(e.target.value)}
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white w-full sm:w-44"
           >
             <option value="all">All statuses</option>
             <option value="active">Active only</option>
             <option value="inactive">Inactive only</option>
           </select>
-          <div className="flex gap-2 ml-auto">
+          <div className="flex gap-2 lg:ml-auto">
             <button
               type="button"
-              onClick={exportMarkupsCSV}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded"
-            >Download CSV</button>
+              onClick={() => exportMarkupsExcel().catch(() => null)}
+              className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+              disabled={!filteredMarkups.length || exportingExcel}
+            >
+              {exportingExcel && <Spinner />}
+              <span>{exportingExcel ? 'Exporting…' : 'Download Excel'}</span>
+            </button>
             <button
               type="button"
               onClick={exportMarkupsPDF}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded"
-            >Download PDF</button>
+              className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+              disabled={!filteredMarkups.length || exportingPDF}
+            >
+              {exportingPDF && <Spinner />}
+              <span>{exportingPDF ? 'Exporting…' : 'Download PDF'}</span>
+            </button>
           </div>
         </div>
-        {loadingMarkups ? (
-          <div>Loading markups…</div>
-        ) : filteredMarkups.length === 0 ? (
-          <div className="text-gray-600">No markups configured for this branch.</div>
-        ) : (
-          <table className="w-full border border-gray-200">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="text-left p-2 border-b">SKU</th>
-                <th className="text-left p-2 border-b">Item</th>
-                <th className="text-left p-2 border-b">Category</th>
-                <th className="text-left p-2 border-b">Unit</th>
-                <th className="text-left p-2 border-b">Markup (₦)</th>
-                <th className="text-left p-2 border-b">Active</th>
-                <th className="text-left p-2 border-b">Actions</th>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs sm:text-sm">
+            <thead className="bg-white sticky top-0 z-10">
+              <tr className="text-left border-b">
+                <th className="p-3">SKU</th>
+                <th className="p-3">Item</th>
+                <th className="p-3">Category</th>
+                <th className="p-3">Unit</th>
+                <th className="p-3">Markup (₦)</th>
+                <th className="p-3">Active</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {paginatedMarkups.map(m => (
-                <tr key={`${m.item_id}:${m.cycle_id || ''}`} className="odd:bg-white even:bg-gray-50">
-                  <td className="p-2 border-b">{m.items?.sku || '—'}</td>
-                  <td className="p-2 border-b">{m.items?.name || '—'}</td>
-                  <td className="p-2 border-b">{m.items?.category || '—'}</td>
-                  <td className="p-2 border-b">{m.items?.unit || '—'}</td>
-                  <td className="p-2 border-b">
-                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
-                      <input
-                        type="number"
-                        className="border rounded px-2 py-1 w-28"
-                        min={0}
-                        step={1}
-                        value={editAmount}
-                        onChange={(e) => setEditAmount(e.target.value)}
-                      />
-                    ) : (
-                      Number(m.amount || 0)
-                    )}
-                  </td>
-                  <td className="p-2 border-b">
-                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
-                      <label className="inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={!!editActive} onChange={(e) => setEditActive(e.target.checked)} />
-                        Active
-                      </label>
-                    ) : (
-                      m.active ? 'Yes' : 'No'
-                    )}
-                  </td>
-                  <td className="p-2 border-b">
-                    {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
-                      <div className="flex gap-3">
-                        <button
-                          className="text-blue-600 hover:underline disabled:opacity-60"
-                          onClick={() => saveEditRow(m)}
-                          disabled={saving}
-                          type="button"
-                        >
-                          Save
-                        </button>
-                        <button className="text-gray-600 hover:underline" onClick={cancelEditRow} type="button">
-                          Cancel
-                        </button>
-                        <button
-                          className="text-red-600 hover:underline disabled:opacity-60"
-                          onClick={() => removeMarkup(m.items?.sku || '')}
-                          disabled={removing}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-3">
-                        <button className="text-blue-600 hover:underline" onClick={() => startEditRow(m)} type="button">
-                          Edit
-                        </button>
-                        <button
-                          className="text-red-600 hover:underline disabled:opacity-60"
-                          onClick={() => removeMarkup(m.items?.sku || '')}
-                          disabled={removing}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
+            <tbody className="divide-y">
+              {loadingMarkups ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <td key={j} className="p-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : filteredMarkups.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-gray-600">
+                    No markups configured for this branch.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedMarkups.map((m) => (
+                  <tr key={`${m.item_id}:${m.cycle_id || ''}`} className="hover:bg-gray-50/40">
+                    <td className="p-3">{m.items?.sku || '—'}</td>
+                    <td className="p-3">{m.items?.name || '—'}</td>
+                    <td className="p-3">{m.items?.category || '—'}</td>
+                    <td className="p-3">{m.items?.unit || '—'}</td>
+                    <td className="p-3">
+                      {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                        <input
+                          type="number"
+                          className="border border-gray-300 rounded-lg px-2 py-1 w-28 text-xs sm:text-sm"
+                          min={0}
+                          step={1}
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                        />
+                      ) : (
+                        Number(m.amount || 0)
+                      )}
+                    </td>
+                    <td className="p-3">
+                      {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                        <label className="inline-flex items-center gap-2 text-xs sm:text-sm">
+                          <input type="checkbox" checked={!!editActive} onChange={(e) => setEditActive(e.target.checked)} />
+                          Active
+                        </label>
+                      ) : (
+                        m.active ? 'Yes' : 'No'
+                      )}
+                    </td>
+                    <td className="p-3 text-right">
+                      {editingRowKey === `${m.item_id}:${m.cycle_id || ''}` ? (
+                        <div className="inline-flex gap-3">
+                          <button
+                            className="text-blue-600 hover:underline disabled:opacity-60"
+                            onClick={() => saveEditRow(m)}
+                            disabled={saving}
+                            type="button"
+                          >
+                            Save
+                          </button>
+                          <button className="text-gray-600 hover:underline" onClick={cancelEditRow} type="button">
+                            Cancel
+                          </button>
+                          <button
+                            className="text-red-600 hover:underline disabled:opacity-60"
+                            onClick={() => removeMarkup(m.items?.sku || '')}
+                            disabled={removing}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex gap-3">
+                          <button className="text-blue-600 hover:underline" onClick={() => startEditRow(m)} type="button">
+                            Edit
+                          </button>
+                          <button
+                            className="text-red-600 hover:underline disabled:opacity-60"
+                            onClick={() => removeMarkup(m.items?.sku || '')}
+                            disabled={removing}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-        )}
+        </div>
 
-        {/* Pagination Controls */}
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+        <div className="p-4 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
+          <div className="text-xs sm:text-sm text-gray-600">
             Showing {filteredMarkups.length === 0 ? 0 : startIdx + 1}–{Math.min(startIdx + itemsPerPage, filteredMarkups.length)} of {filteredMarkups.length}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="px-3 py-1 border rounded disabled:opacity-50"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-            >Prev</button>
-            <span className="px-2 py-1 text-sm">Page {currentPage} of {totalPages}</span>
+            >
+              Prev
+            </button>
+            <span className="text-xs sm:text-sm text-gray-700">Page {currentPage} of {totalPages}</span>
             <button
               type="button"
-              className="px-3 py-1 border rounded disabled:opacity-50"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded border text-xs sm:text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-            >Next</button>
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   )
 }

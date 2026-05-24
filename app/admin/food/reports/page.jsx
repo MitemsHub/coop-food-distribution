@@ -4,10 +4,59 @@
 import { useEffect, useState, useMemo } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 
+function ReportsSkeleton() {
+  return (
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
+        <div className="h-7 w-40 bg-gray-100 rounded animate-pulse" />
+        <div className="flex gap-2">
+          <div className="h-10 w-28 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-10 w-36 bg-gray-100 rounded-lg animate-pulse" />
+        </div>
+      </div>
+
+      <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={`c1_${i}`} className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+            <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
+            <div className="mt-2 h-6 w-20 bg-gray-100 rounded animate-pulse" />
+          </div>
+        ))}
+      </section>
+
+      <section className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={`c2_${i}`} className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+            <div className="h-3 w-28 bg-gray-100 rounded animate-pulse" />
+            <div className="mt-2 h-6 w-24 bg-gray-100 rounded animate-pulse" />
+          </div>
+        ))}
+      </section>
+
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={`b_${i}`} className="mb-4 sm:mb-6 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+            <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+            <div className="h-8 w-44 bg-gray-100 rounded-lg animate-pulse" />
+          </div>
+          <div className="p-4">
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((__, r) => (
+                <div key={`r_${i}_${r}`} className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ReportsPageContent() {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [reportBusy, setReportBusy] = useState(false)
 
   // Branch pack controls
   const [branches, setBranches] = useState([])
@@ -52,6 +101,157 @@ function ReportsPageContent() {
       setData(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const downloadReport = async () => {
+    if (!data) return
+    if (reportBusy) return
+    setReportBusy(true)
+    try {
+      const { jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const sanitize = (s) => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/[\u2013\u2014]/g, '-')
+      const asInt = (v) => Number(v || 0)
+      const asMoney = (v) => `NGN ${asInt(v).toLocaleString()}`
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const marginX = 12
+
+      const totals = data?.totals || {}
+      const amounts = data?.amounts || {}
+
+      doc.setFontSize(14)
+      doc.text('Food Distribution — Report', 12, 12)
+      doc.setFontSize(9)
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 12, 18)
+
+      const metricColW = { metric: 58, value: 40, note: 70 }
+      const metricTableW = metricColW.metric + metricColW.value + metricColW.note
+
+      autoTable(doc, {
+        head: [['Metric', 'Value', 'Note']],
+        body: [
+          ['Pending Orders', String(asInt(totals.totalPending || 0)), ''],
+          ['Posted Orders', String(asInt(totals.totalPosted || 0)), ''],
+          ['Delivered Orders', String(asInt(totals.totalDelivered || 0)), ''],
+          ['All Orders', String(asInt(totals.totalAll || 0)), ''],
+          ['Loan Principal', asMoney(amounts.loansPrincipal || 0), ''],
+          ['Loan Interest', asMoney(amounts.loansInterest || 0), ''],
+          ['Loan Total', asMoney(amounts.loans || amounts.loansTotal || 0), ''],
+          ['Savings', asMoney(amounts.savings || 0), ''],
+          ['Cash', asMoney(amounts.cash || 0), ''],
+          ['Total Amount', asMoney(amounts.totalAll || 0), ''],
+        ].map((r) => r.map(sanitize)),
+        startY: 22,
+        tableWidth: metricTableW,
+        styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
+        headStyles: { fillColor: [75, 85, 99] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: {
+          0: { cellWidth: metricColW.metric },
+          1: { cellWidth: metricColW.value },
+          2: { cellWidth: metricColW.note, overflow: 'linebreak' },
+        },
+        didParseCell: (d) => {
+          if (d.section !== 'head' && d.section !== 'body') return
+          if (d.column.index === 0) d.cell.styles.halign = 'left'
+          if (d.column.index === 1) d.cell.styles.halign = 'right'
+          if (d.column.index === 2) d.cell.styles.halign = 'left'
+        },
+        margin: { left: marginX, right: Math.max(marginX, pageWidth - metricTableW - marginX) },
+      })
+
+      const addCountSection = ({ title, head, body, colW }) => {
+        const tableW = colW.reduce((s, w) => s + w, 0)
+        let startY = (doc.lastAutoTable?.finalY || 22) + 10
+        if (startY > 180) {
+          doc.addPage()
+          startY = 22
+        }
+        doc.setFontSize(12)
+        doc.text(title, 12, startY - 2)
+        autoTable(doc, {
+          head: [head],
+          body,
+          startY,
+          tableWidth: tableW,
+          styles: { fontSize: 9, cellPadding: 2, valign: 'middle' },
+          headStyles: { fillColor: [75, 85, 99] },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          columnStyles: colW.reduce((acc, w, i) => {
+            acc[i] = { cellWidth: w }
+            return acc
+          }, {}),
+          didParseCell: (d) => {
+            if (d.section !== 'head' && d.section !== 'body') return
+            if (d.column.index === 0 || d.column.index === 1) d.cell.styles.halign = 'left'
+            if (d.column.index > 1) d.cell.styles.halign = 'right'
+          },
+          margin: { left: marginX, right: Math.max(marginX, pageWidth - tableW - marginX) },
+        })
+      }
+
+      addCountSection({
+        title: 'By Branch',
+        head: ['Branch', 'Pending', 'Posted', 'Delivered', 'Total'],
+        colW: [70, 22, 22, 22, 22],
+        body: (data.byBranch || []).map((r) => [
+          sanitize(r.branch_name || ''),
+          String(asInt(r.pending || 0)),
+          String(asInt(r.posted || 0)),
+          String(asInt(r.delivered || 0)),
+          String(asInt(r.total || 0)),
+        ]),
+      })
+
+      addCountSection({
+        title: 'By Branch & Department',
+        head: ['Branch', 'Department', 'Pending', 'Posted', 'Delivered', 'Total'],
+        colW: [55, 55, 20, 20, 20, 20],
+        body: (data.byBranchDept || []).map((r) => [
+          sanitize(r.branch_name || ''),
+          sanitize(r.department_name || ''),
+          String(asInt(r.pending || 0)),
+          String(asInt(r.posted || 0)),
+          String(asInt(r.delivered || 0)),
+          String(asInt(r.total || 0)),
+        ]),
+      })
+
+      addCountSection({
+        title: 'Delivery Branch vs Member Branch',
+        head: ['Delivery Branch', 'Member Branch', 'Pending', 'Posted', 'Delivered', 'Total'],
+        colW: [60, 60, 20, 20, 20, 20],
+        body: (data.byDeliveryMember || []).map((r) => [
+          sanitize(r.delivery_branch_name || ''),
+          sanitize(r.branch_name || ''),
+          String(asInt(r.pending || 0)),
+          String(asInt(r.posted || 0)),
+          String(asInt(r.delivered || 0)),
+          String(asInt(r.total || 0)),
+        ]),
+      })
+
+      addCountSection({
+        title: 'By Category',
+        head: ['Category', 'Pending', 'Posted', 'Delivered', 'Total'],
+        colW: [70, 22, 22, 22, 22],
+        body: (data.byCategory || []).map((r) => [
+          sanitize(r.member_category || r.category || ''),
+          String(asInt(r.pending || 0)),
+          String(asInt(r.posted || 0)),
+          String(asInt(r.delivered || 0)),
+          String(asInt(r.total || 0)),
+        ]),
+      })
+
+      doc.save(`food_report_${new Date().toISOString().split('T')[0]}.pdf`)
+    } catch (e) {
+      alert(`Download failed: ${e?.message || 'Unknown error'}`)
+    } finally {
+      setReportBusy(false)
     }
   }
 
@@ -176,7 +376,7 @@ function ReportsPageContent() {
     })()
   }, [summarySelectedDeliveryCode, summarySelectedDepartmentId])
 
-  const exportSummaryCSV = () => {
+  const exportSummaryExcel = () => {
     const selectedSet = new Set(summarySelectedItems)
     const filtered = summaryRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
     const branchName = summarySelectedDeliveryCode === 'all'
@@ -209,8 +409,8 @@ function ReportsPageContent() {
     }))
 
     const heading = `Summary of Items - ${branchName} - ${departmentName}`
-    const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.csv`
-    exportCSV(rows, filename, {
+    const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.xlsx`
+    exportExcel(rows, filename, {
       heading,
       totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['qty', 'amount'], rawRows, currencyPrefix: '' },
       footer: true,
@@ -254,107 +454,6 @@ function ReportsPageContent() {
       footer: true,
       footerColumnIndex: 2
     })
-  }
-
-  const exportSummaryExcel = async () => {
-    const selectedSet = new Set(summarySelectedItems)
-    const filtered = summaryRows.filter(r => selectedSet.size === 0 ? true : selectedSet.has(r.items))
-    const branchName = summarySelectedDeliveryCode === 'all'
-      ? 'All Delivery Locations'
-      : (branches.find(b => b.code === summarySelectedDeliveryCode)?.name || summarySelectedDeliveryCode)
-    const departmentName = summarySelectedDepartmentId === 'all'
-      ? 'All Departments'
-      : (departments.find(d => String(d.id) === String(summarySelectedDepartmentId))?.name || summarySelectedDepartmentId)
-
-    const rows = filtered.map((r, idx) => {
-      const original = Number(r?.original_price || 0)
-      const qty = Number(r?.quantity || 0)
-      const amount = original * qty
-      return { sn: idx + 1, location: branchName, item: r.items || '', qty, price: original, amount }
-    })
-
-    const totalQty = rows.reduce((acc, r) => acc + Number(r.qty || 0), 0)
-    const totalAmount = rows.reduce((acc, r) => acc + Number(r.amount || 0), 0)
-
-    try {
-      const ExcelJSMod = await import('exceljs')
-      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
-      const wb = new ExcelJS.Workbook()
-      const ws = wb.addWorksheet('Summary of Items')
-
-      const heading = `Summary of Items - ${branchName} - ${departmentName}`
-      ws.addRow([heading])
-      ws.mergeCells('A1','F1')
-      ws.getRow(1).font = { bold: true, size: 14 }
-      ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
-
-      const headerRow = ws.addRow(['SN','Delivery Location','Items','Qty','Price','Amount'])
-      headerRow.font = { bold: true }
-      headerRow.eachCell(cell => {
-        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
-        cell.alignment = { vertical: 'middle', horizontal: 'center' }
-      })
-
-      rows.forEach(r => {
-        const row = ws.addRow([r.sn, r.location, r.item, r.qty, r.price, r.amount])
-        row.eachCell(cell => {
-          cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-        })
-      })
-
-      const totalsRow = ws.addRow(['', '','TOTAL', totalQty, '', totalAmount])
-      totalsRow.eachCell(cell => {
-        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-        cell.font = { bold: true }
-      })
-
-      // Record totals row index to limit numeric formatting to data rows
-      const totalsRowNumber = ws.rowCount
-
-      // Footer write as per provided screenshot
-      const sigRow = ws.addRow(['', '', '', '', 'SIGNATURE', 'DATE'])
-      sigRow.eachCell(cell => {
-        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-      })
-      const issuedRow = ws.addRow(['', '', 'ITEMS ISSUED BY', '', '', ''])
-      issuedRow.eachCell(cell => {
-        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-      })
-      const receivedRow = ws.addRow(['', '', 'ITEMS RECEIVED BY', '', '', ''])
-      receivedRow.eachCell(cell => {
-        cell.border = { top: {style: 'thin'}, left: {style: 'thin'}, bottom: {style: 'thin'}, right: {style: 'thin'} }
-      })
-
-      ws.columns = [
-        { width: 6 },
-        { width: 24 },
-        { width: 28 },
-        { width: 10 },
-        { width: 12 },
-        { width: 14 }
-      ]
-
-      const lastRow = ws.rowCount
-      for (let r = 3; r <= totalsRowNumber; r++) {
-        ws.getCell(`D${r}`).numFmt = '#,##0'
-        ws.getCell(`E${r}`).numFmt = '#,##0'
-        ws.getCell(`F${r}`).numFmt = '#,##0'
-      }
-
-      const filename = `summary_of_items_${branchName.replace(/\s+/g, '_').toLowerCase()}_${departmentName.replace(/\s+/g, '_').toLowerCase()}.xlsx`
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Error exporting Excel:', error)
-      alert('Error exporting Excel. Please try again.')
-    }
   }
 
   // Summary of Items — Items Pack (multi-sheet Excel per delivery location)
@@ -699,22 +798,19 @@ function ReportsPageContent() {
   const branchDeptTotalPages = Math.ceil(filteredBranchDeptData.length / itemsPerPage)
   const deliveryMemberTotalPages = Math.ceil(filteredDeliveryMemberData.length / itemsPerPage)
 
-  const exportCSV = (rows, name, options = {}) => {
+  const exportExcel = async (rows, name, options = {}) => {
     if (!rows?.length) return
     let exportRows = rows
-    // Optional totals row
     if (options.totals && Array.isArray(options.totals.sumKeys)) {
       const headers = Object.keys(rows[0])
       const totalsRow = {}
       const rawRows = Array.isArray(options.totals.rawRows) ? options.totals.rawRows : rows
-      headers.forEach(h => {
+      headers.forEach((h) => {
         if (options.totals.sumKeys.includes(h)) {
           const sum = rawRows.reduce((acc, r) => acc + Number(r[h] || 0), 0)
           const sumStr = Number(sum).toLocaleString()
           if (h.toLowerCase() === 'amount' || h.toLowerCase() === 'price') {
-            const prefix = options.totals && Object.prototype.hasOwnProperty.call(options.totals, 'currencyPrefix')
-              ? options.totals.currencyPrefix
-              : 'NGN '
+            const prefix = options.totals && Object.prototype.hasOwnProperty.call(options.totals, 'currencyPrefix') ? options.totals.currencyPrefix : 'NGN '
             totalsRow[h] = `${prefix ?? ''}${sumStr}`
           } else {
             totalsRow[h] = sumStr
@@ -731,41 +827,36 @@ function ReportsPageContent() {
     }
 
     const headers = Object.keys(exportRows[0])
-    const lines = []
-    if (options.heading) {
-      lines.push(options.heading)
-    }
-    lines.push(headers.join(','))
-    const bodyLines = exportRows.map(r => headers
-      .map(h => {
-        const raw = String(r[h] ?? '')
-        const sanitized = raw.replace(/\u20A6|₦/g, 'NGN ')
-        return `"${sanitized.replace(/"/g, '""')}"`
-      })
-      .join(',')
-    )
+    const ExcelJSMod = await import('exceljs')
+    const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Report')
 
-    // Optional footer rows: Signature/Date, Issued/Received labels
-    let footerLines = []
+    if (options.heading) {
+      ws.addRow([String(options.heading)])
+      ws.addRow([])
+    }
+
+    ws.addRow(headers)
+    exportRows.forEach((r) => {
+      ws.addRow(
+        headers.map((h) => {
+          const raw = String(r[h] ?? '')
+          return raw.replace(/\u20A6|₦/g, 'NGN ')
+        })
+      )
+    })
+
     if (options.footer) {
       const footerCol = Number(options.footerColumnIndex ?? 0)
-      const empty = headers.map(()=> '""').join(',')
-      const sigDate = headers.map((_, i) => {
-        if (i === headers.length - 2) return '"SIGNATURE"'
-        if (i === headers.length - 1) return '"DATE"'
-        return '""'
-      }).join(',')
-      const issued = headers.map((_, i) => i === footerCol ? '"ITEMS ISSUED BY"' : '""').join(',')
-      const received = headers.map((_, i) => i === footerCol ? '"ITEMS RECEIVED BY"' : '""').join(',')
-      footerLines = [empty, sigDate, issued, received]
+      ws.addRow([])
+      ws.addRow(headers.map((_, i) => (i === headers.length - 2 ? 'SIGNATURE' : i === headers.length - 1 ? 'DATE' : '')))
+      ws.addRow(headers.map((_, i) => (i === footerCol ? 'ITEMS ISSUED BY' : '')))
+      ws.addRow(headers.map((_, i) => (i === footerCol ? 'ITEMS RECEIVED BY' : '')))
     }
 
-    const csv = [
-      ...lines,
-      ...bodyLines,
-      ...footerLines
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -782,7 +873,9 @@ function ReportsPageContent() {
       const { jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
       
-      const doc = new jsPDF()
+      const headers = Object.keys(rows[0])
+      const wide = headers.length > 6
+      const doc = new jsPDF({ orientation: wide ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' })
       
       // Add title
       doc.setFontSize(16)
@@ -803,7 +896,6 @@ function ReportsPageContent() {
       }
       
       // Prepare table data
-      const headers = Object.keys(rows[0])
       let tableData = rows.map(row => headers.map(header => {
         const raw = String(row[header] ?? '')
         // Sanitize currency symbols (e.g., ₦) for PDF standard fonts
@@ -829,15 +921,42 @@ function ReportsPageContent() {
         tableData = [...tableData, totalsRow]
       }
       
+      const margin = { left: 10, right: 10 }
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const available = Math.max(120, pageWidth - margin.left - margin.right)
+      const weights = headers.map((h) => {
+        const k = String(h || '').toLowerCase()
+        if (/^(sn|id)$/.test(k) || /sku/.test(k)) return 0.8
+        if (/item|items|member|name|department|branch|delivery|location|notes|remark/.test(k)) return 2.2
+        if (/amount|price|total|qty|quantity|pending|posted|delivered|orders|count|interest|principal|markup/.test(k)) return 1.1
+        return 1
+      })
+      const totalW = weights.reduce((a, b) => a + b, 0) || 1
+      const colWidths = weights.map((w) => Math.max(14, Math.floor((available * w) / totalW)))
+      const numeric = (h) => /amount|price|total|qty|quantity|pending|posted|delivered|orders|count|interest|principal|markup/.test(String(h || '').toLowerCase())
+      const columnStyles = headers.reduce((acc, h, idx) => {
+        acc[idx] = { cellWidth: colWidths[idx], halign: numeric(h) ? 'right' : 'left' }
+        return acc
+      }, {})
+
       // Add table
       autoTable(doc, {
         head: [headers],
         body: tableData,
         startY: options.filters ? 44 : 40,
-        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
-        headStyles: { fillColor: [75, 85, 99] },
+        margin,
+        styles: { fontSize: wide ? 8 : 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [249, 250, 251] },
-        theme: 'grid'
+        theme: 'grid',
+        columnStyles,
+        didParseCell: (data) => {
+          if (options.totals && data.section === 'body' && data.row.index === tableData.length - 1) {
+            data.cell.styles.fillColor = [75, 85, 99]
+            data.cell.styles.textColor = [255, 255, 255]
+            data.cell.styles.fontStyle = 'bold'
+          }
+        },
       })
 
       // Optional footer section appended after the table
@@ -1233,7 +1352,7 @@ function ReportsPageContent() {
     }
   }
 
-  if (loading) return <div className="p-6">Loading…</div>
+  if (loading && !data) return <ReportsSkeleton />
   if (err) return (
     <div className="p-6">
       <div className="text-red-700 mb-3">Error: {err}</div>
@@ -1249,7 +1368,29 @@ function ReportsPageContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <h1 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-0">Admin — Reports</h1>
         <div className="flex gap-2">
-          <button className="px-3 py-2 bg-gray-600 text-white text-sm sm:text-base rounded hover:bg-gray-700" onClick={loadSummary}>Refresh</button>
+          <button
+            className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+            onClick={loadSummary}
+            disabled={loading}
+          >
+            {loading && (
+              <span
+                className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+            onClick={downloadReport}
+            disabled={!data || reportBusy}
+          >
+            {reportBusy && (
+              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+            )}
+            <span>{reportBusy ? 'Preparing…' : 'Download Report'}</span>
+          </button>
         </div>
       </div>
 
@@ -1364,8 +1505,9 @@ function ReportsPageContent() {
         setCurrentPage={setBranchCurrentPage}
         totalPages={branchTotalPages}
         itemsPerPage={itemsPerPage}
-        onExportCSV={() => exportCSV(filteredBranchData, 'applications_by_branch.csv')}
+        onExportExcel={() => exportExcel(filteredBranchData, 'applications_by_branch.xlsx')}
         onExportPDF={() => exportPDF(filteredBranchData, 'Applications by Branch')}
+        loading={loading}
         filter={
           <BranchFilter
             value={selectedBranchForBranchTable}
@@ -1395,8 +1537,9 @@ function ReportsPageContent() {
         setCurrentPage={setBranchDeptCurrentPage}
         totalPages={branchDeptTotalPages}
         itemsPerPage={itemsPerPage}
-        onExportCSV={() => exportCSV(filteredBranchDeptData, 'applications_by_branch_department.csv')}
+        onExportExcel={() => exportExcel(filteredBranchDeptData, 'applications_by_branch_department.xlsx')}
         onExportPDF={() => exportPDF(filteredBranchDeptData, 'Applications by Branch & Department')}
+        loading={loading}
         filter={
           <BranchFilter
             value={selectedBranchForDepartmentTable}
@@ -1426,8 +1569,9 @@ function ReportsPageContent() {
         setCurrentPage={setDeliveryMemberCurrentPage}
         totalPages={deliveryMemberTotalPages}
         itemsPerPage={itemsPerPage}
-        onExportCSV={() => exportCSV(filteredDeliveryMemberData, 'applications_by_delivery_branch_and_branch.csv')}
+        onExportExcel={() => exportExcel(filteredDeliveryMemberData, 'applications_by_delivery_branch_and_branch.xlsx')}
         onExportPDF={() => exportPDF(filteredDeliveryMemberData, 'Applications by Delivery Branch & Branch')}
+        loading={loading}
         filter={
           <BranchFilter
             value={selectedDeliveryBranchForDMTable}
@@ -1442,17 +1586,18 @@ function ReportsPageContent() {
       />
 
       {/* Applications by Category (No Pagination) */}
-      <Section 
-        title="Applications by Category (A/R/P/E)" 
-        onExportCSV={() => exportCSV(byCategory, 'applications_by_category.csv')}
+      <Section
+        title="Applications by Category"
+        onExportExcel={() => exportExcel(byCategory, 'applications_by_category.xlsx')}
         onExportPDF={() => exportPDF(byCategory, 'Applications by Category')}
+        loading={loading}
       >
         <Table rows={byCategory} cols={[
           ['category', 'Category'], 
           ['pending', 'Pending'],
           ['posted', 'Posted'],
           ['delivered', 'Delivered']
-        ]} />
+        ]} loading={loading} />
       </Section>
 
       {/* Items Demand by Delivery Location & Department */}
@@ -1476,9 +1621,9 @@ function ReportsPageContent() {
         onExportItemsPack={exportItemsPack}
         itemsPackLoading={itemsPackLoading}
         itemsPackProgress={itemsPackProgress}
-        onExportCSV={() => exportCSV(
+        onExportExcel={() => exportExcel(
           formattedDemandRows,
-          'items_demand_by_delivery_and_department.csv',
+          'items_demand_by_delivery_and_department.xlsx',
           { totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRawForTotals } }
         )}
         onExportPDF={() => {
@@ -1494,6 +1639,7 @@ function ReportsPageContent() {
             { filters: { 'Delivery Location': branchName, 'Department': departmentName }, totals: { labelKey: 'items', label: 'TOTAL', sumKeys: ['quantity', 'amount'], rawRows: demandRawForTotals } }
           )
         }}
+        loading={demandLoading}
         filter={(
           <div className="flex gap-6 mb-2">
             <div>
@@ -1565,12 +1711,12 @@ function ReportsPageContent() {
             setCurrentPage={setSummaryCurrentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}
-            onExportCSV={exportSummaryCSV}
             onExportPDF={exportSummaryPDF}
             onExportExcel={exportSummaryExcel}
             onExportItemsPack={exportSummaryItemsPack}
             itemsPackLoading={summaryItemsPackLoading}
             itemsPackProgress={summaryItemsPackProgress}
+            loading={summaryLoading}
             filter={(
               <div className="flex gap-6 mb-3">
                 <div>
@@ -1661,9 +1807,9 @@ function ReportsPageContent() {
 function Card({ title, value, currency = false }) {
   const display = currency ? `₦${Number(value || 0).toLocaleString()}` : Number(value || 0).toLocaleString()
   return (
-    <div className="border rounded p-2 sm:p-3 bg-white shadow-sm">
-      <div className="text-xs text-gray-500 truncate">{title}</div>
-      <div className="text-lg sm:text-xl font-semibold">{display}</div>
+    <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+      <div className="text-xs text-gray-500">{title}</div>
+      <div className="text-lg font-semibold">{display}</div>
     </div>
   )
 }
@@ -1689,17 +1835,20 @@ function BranchFilter({ value, onChange, label, branches }) {
   )
 }
 
-function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportCSV, onExportPDF, onExportItemsPack, onExportExcel, filter, itemsPackLoading = false, itemsPackProgress = { current: 0, total: 0 } }) {
+function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentPage, totalPages, itemsPerPage, onExportPDF, onExportItemsPack, onExportExcel, filter, loading = false, itemsPackLoading = false, itemsPackProgress = { current: 0, total: 0 } }) {
   const showPagination = allData?.length > itemsPerPage
 
   return (
     <section className="mb-4 sm:mb-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3">
-        <h2 className="text-lg sm:text-xl font-medium">{title}</h2>
-        <div className="flex gap-2">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h2 className="text-sm sm:text-base font-semibold">{title}</h2>
+          <div className="flex gap-2">
           {onExportItemsPack && (
             <button
-              className={`px-3 py-1 text-white text-sm rounded flex items-center gap-2 ${itemsPackLoading ? 'bg-purple-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-white flex items-center gap-2 ${
+                itemsPackLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-800 hover:bg-gray-900'
+              }`}
               onClick={onExportItemsPack}
               disabled={itemsPackLoading}
               aria-busy={itemsPackLoading}
@@ -1718,32 +1867,27 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
           )}
           {onExportExcel && (
             <button 
-              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700" 
+              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-xs sm:text-sm font-semibold" 
               onClick={onExportExcel}
             >
               Download Excel
             </button>
           )}
-          <button 
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700" 
-            onClick={onExportPDF}
-          >
-            Download PDF
-          </button>
-          <button 
-            className="px-3 py-1 bg-gray-700 text-white text-sm rounded hover:bg-gray-800" 
-            onClick={onExportCSV}
-          >
-            Download CSV
-          </button>
+          {onExportPDF && (
+            <button 
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold" 
+              onClick={onExportPDF}
+            >
+              Download PDF
+            </button>
+          )}
+          </div>
         </div>
-      </div>
       
       {/* Render filter if provided */}
-      {filter}
+        {filter}
       
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        <Table rows={data} cols={cols} />
+        <Table rows={data} cols={cols} loading={loading} />
         
         {/* Pagination */}
         {showPagination && (
@@ -1777,34 +1921,76 @@ function PaginatedSection({ title, data, allData, cols, currentPage, setCurrentP
   )
 }
 
-function Section({ title, onExportCSV, onExportPDF, children }) {
+function Section({ title, onExportExcel, onExportPDF, loading = false, children }) {
   return (
     <section className="mb-4 sm:mb-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3">
-        <h2 className="text-lg sm:text-xl font-medium">{title}</h2>
-        <div className="flex gap-2">
-          <button 
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700" 
-            onClick={onExportPDF}
-          >
-            Download PDF
-          </button>
-          <button 
-            className="px-3 py-1 bg-gray-700 text-white text-sm rounded hover:bg-gray-800" 
-            onClick={onExportCSV}
-          >
-            Download CSV
-          </button>
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h2 className="text-sm sm:text-base font-semibold">{title}</h2>
+          <div className="flex gap-2">
+            {onExportExcel && (
+              <button
+                className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-xs sm:text-sm font-semibold"
+                onClick={onExportExcel}
+              >
+                Download Excel
+              </button>
+            )}
+            {onExportPDF && (
+              <button
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold"
+                onClick={onExportPDF}
+              >
+                Download PDF
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        {children}
+        <div>{typeof children === 'function' ? children({ loading }) : children}</div>
       </div>
     </section>
   )
 }
 
-function Table({ rows, cols, stickyFirst = false, stickyIndices = [] }) {
+function Table({ rows, cols, loading = false, stickyFirst = false, stickyIndices = [] }) {
+  if (loading) {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs sm:text-sm min-w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              {cols.map(([key, label], idx) => (
+                <th
+                  key={key}
+                  className={`px-4 py-3 text-left text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wider ${
+                    (stickyIndices.includes(idx) || (stickyFirst && idx === 0)) ? `sticky z-10 bg-gray-50 ${idx === 0 ? 'left-0' : 'left-[8rem]'}` : ''
+                  }`}
+                >
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <tr key={i}>
+                {cols.map(([key], idx) => (
+                  <td
+                    key={`${key}-${idx}`}
+                    className={`px-4 py-3 ${
+                      (stickyIndices.includes(idx) || (stickyFirst && idx === 0)) ? `sticky z-10 ${idx === 0 ? 'left-0 bg-white' : 'left-[8rem] bg-white'}` : ''
+                    }`}
+                  >
+                    <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
   if (!rows?.length) return <div className="p-4 text-gray-600 text-sm text-center">No data available</div>
   return (
     <div className="overflow-x-auto">

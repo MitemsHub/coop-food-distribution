@@ -232,9 +232,9 @@ function CartPageContent() {
 
     if (paymentOption === 'Loan') {
       const limit = Number(eligibility.loanEligible || 0)
-      const withInterest = nextCartTotal + Math.round(nextCartTotal * LOAN_INTEREST_RATE)
+      const withInterest = nextCartTotal + Math.round(nextCartTotal * loanInterestRate)
       if (limit > 0 && withInterest > limit) {
-        setMessage({ type: 'error', text: 'This change would exceed your Loan limit (including 13% interest). Reduce quantities or switch payment method.' })
+        setMessage({ type: 'error', text: `This change would exceed your Loan limit (including ${loanInterestRatePct}% interest). Reduce quantities or switch payment method.` })
         emitToast('error', 'This change would exceed your Loan limit (including interest).')
         return
       }
@@ -298,10 +298,13 @@ function CartPageContent() {
   const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.qty), 0)
   const savingsEligible = Number(eligibility.savingsEligible || 0)
   const loanEligible = Number(eligibility.loanEligible || 0)
+  const loanInterestRate = Number.isFinite(Number(eligibility.interest_rate)) ? Number(eligibility.interest_rate) : 0
+  const loanInterestRatePct = Number.isFinite(Number(eligibility.interest_rate_pct))
+    ? Number(eligibility.interest_rate_pct)
+    : Math.round(loanInterestRate * 10000) / 100
   
-  // Loan interest calculation (13% applied to cart total when payment=Loan)
-  const LOAN_INTEREST_RATE = 0.13
-  const loanInterest = paymentOption === 'Loan' ? Math.round(cartTotal * LOAN_INTEREST_RATE) : 0
+  // Loan interest calculation (rate applied to cart total when payment=Loan)
+  const loanInterest = paymentOption === 'Loan' ? Math.round(cartTotal * loanInterestRate) : 0
   const totalWithInterest = paymentOption === 'Loan' ? cartTotal + loanInterest : cartTotal
   
   const currentLimit = paymentOption === 'Savings' ? savingsEligible : 
@@ -632,7 +635,7 @@ function CartPageContent() {
                 {paymentOption === 'Loan' && (
                   <div className="text-center bg-orange-50 rounded-lg p-2 sm:p-3">
                     <div className="text-xs sm:text-sm md:text-sm font-bold text-orange-800">₦{loanInterest.toLocaleString()}</div>
-                    <div className="text-xs text-orange-600">Interest (13%)</div>
+                    <div className="text-xs text-orange-600">Interest ({loanInterestRatePct}%)</div>
                   </div>
                 )}
                 <div className="text-center bg-purple-50 rounded-lg p-2 sm:p-3">
@@ -650,7 +653,7 @@ function CartPageContent() {
                     <div>
                       <h4 className="text-sm font-semibold text-orange-800 mb-1">Loan Payment Information</h4>
                       <p className="text-xs text-orange-700">
-                        <strong>Total with Interest:</strong> ₦{totalWithInterest.toLocaleString()} (13% interest applied)
+                        <strong>Total with Interest:</strong> ₦{totalWithInterest.toLocaleString()} ({loanInterestRatePct}% interest applied)
                       </p>
                       <p className="text-xs text-orange-700 mt-1">
                         Your loan limit applies to the total amount including interest.

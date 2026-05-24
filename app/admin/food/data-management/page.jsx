@@ -30,6 +30,19 @@ function DataManagementPageContent() {
   const [creatingCycle, setCreatingCycle] = useState(false)
   const [activatingCycle, setActivatingCycle] = useState(false)
 
+  const [policyLoading, setPolicyLoading] = useState(false)
+  const [policySaving, setPolicySaving] = useState(false)
+  const [policyMsg, setPolicyMsg] = useState('')
+  const [eligibleLoanMaxPensioner, setEligibleLoanMaxPensioner] = useState('')
+  const [eligibleLoanMaxRetiree, setEligibleLoanMaxRetiree] = useState('')
+  const [eligibleLoanMaxActive, setEligibleLoanMaxActive] = useState('')
+  const [graceLoanMaxPensioner, setGraceLoanMaxPensioner] = useState('')
+  const [graceLoanMaxRetiree, setGraceLoanMaxRetiree] = useState('')
+  const [graceLoanMaxActive, setGraceLoanMaxActive] = useState('')
+  const [includeInterestInCap, setIncludeInterestInCap] = useState(true)
+  const [loanInterestRatePct, setLoanInterestRatePct] = useState('0')
+  const [loanRateSaving, setLoanRateSaving] = useState(false)
+
   const loadCycles = async () => {
     try {
       setLoadingCycles(true)
@@ -54,6 +67,135 @@ function DataManagementPageContent() {
   useEffect(() => {
     loadCycles()
   }, [])
+
+  const loadFoodCyclePolicy = async (cycleId) => {
+    if (cycleId == null) return
+    setPolicyLoading(true)
+    setPolicyMsg('')
+    try {
+      const qs = new URLSearchParams({ cycle_id: String(cycleId) })
+      const res = await fetch(`/api/admin/food/cycle-policy?${qs.toString()}`, { cache: 'no-store', credentials: 'same-origin' })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load policy')
+      const p = json.policy || {}
+      setEligibleLoanMaxPensioner(String(Number(p?.eligible?.pensioner || 0)))
+      setEligibleLoanMaxRetiree(String(Number(p?.eligible?.retiree || 0)))
+      setEligibleLoanMaxActive(String(Number(p?.eligible?.active || 0)))
+      setGraceLoanMaxPensioner(String(Number(p?.grace?.pensioner || 0)))
+      setGraceLoanMaxRetiree(String(Number(p?.grace?.retiree || 0)))
+      setGraceLoanMaxActive(String(Number(p?.grace?.active || 0)))
+      setIncludeInterestInCap(p?.include_interest_in_cap !== false)
+      setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+    } catch (e) {
+      setPolicyMsg(`Error: ${e.message}`)
+      setEligibleLoanMaxPensioner('0')
+      setEligibleLoanMaxRetiree('0')
+      setEligibleLoanMaxActive('0')
+      setGraceLoanMaxPensioner('0')
+      setGraceLoanMaxRetiree('0')
+      setGraceLoanMaxActive('0')
+      setIncludeInterestInCap(true)
+      setLoanInterestRatePct('0')
+    } finally {
+      setPolicyLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedCycleId == null) return
+    loadFoodCyclePolicy(selectedCycleId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCycleId])
+
+  const saveFoodCyclePolicy = async () => {
+    if (selectedCycleId == null) return
+    if (policySaving) return
+    setPolicySaving(true)
+    setPolicyMsg('')
+    try {
+      const eP = eligibleLoanMaxPensioner === '' ? 0 : Number(eligibleLoanMaxPensioner)
+      const eR = eligibleLoanMaxRetiree === '' ? 0 : Number(eligibleLoanMaxRetiree)
+      const eA = eligibleLoanMaxActive === '' ? 0 : Number(eligibleLoanMaxActive)
+      const gP = graceLoanMaxPensioner === '' ? 0 : Number(graceLoanMaxPensioner)
+      const gR = graceLoanMaxRetiree === '' ? 0 : Number(graceLoanMaxRetiree)
+      const gA = graceLoanMaxActive === '' ? 0 : Number(graceLoanMaxActive)
+      const nums = [eP, eR, eA, gP, gR, gA]
+      if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw new Error('All limits must be non-negative numbers')
+      const rPct = loanInterestRatePct === '' ? 0 : Number(loanInterestRatePct)
+      if (!Number.isFinite(rPct) || rPct < 0) throw new Error('Loan rate must be a non-negative number')
+
+      const res = await fetch('/api/admin/food/cycle-policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          cycle_id: selectedCycleId,
+          eligible: { pensioner: Math.trunc(eP), retiree: Math.trunc(eR), active: Math.trunc(eA) },
+          grace: { pensioner: Math.trunc(gP), retiree: Math.trunc(gR), active: Math.trunc(gA) },
+          include_interest_in_cap: !!includeInterestInCap,
+          loan_interest_rate_pct: rPct,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to save policy')
+      setPolicyMsg('Food cycle policy saved successfully')
+      const p = json.policy || {}
+      setEligibleLoanMaxPensioner(String(Number(p?.eligible?.pensioner || 0)))
+      setEligibleLoanMaxRetiree(String(Number(p?.eligible?.retiree || 0)))
+      setEligibleLoanMaxActive(String(Number(p?.eligible?.active || 0)))
+      setGraceLoanMaxPensioner(String(Number(p?.grace?.pensioner || 0)))
+      setGraceLoanMaxRetiree(String(Number(p?.grace?.retiree || 0)))
+      setGraceLoanMaxActive(String(Number(p?.grace?.active || 0)))
+      setIncludeInterestInCap(p?.include_interest_in_cap !== false)
+      setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+    } catch (e) {
+      setPolicyMsg(`Error: ${e.message}`)
+    } finally {
+      setPolicySaving(false)
+    }
+  }
+
+  const saveFoodLoanRate = async () => {
+    if (selectedCycleId == null) return
+    if (loanRateSaving || policySaving) return
+    setLoanRateSaving(true)
+    setPolicyMsg('')
+    try {
+      const eP = eligibleLoanMaxPensioner === '' ? 0 : Number(eligibleLoanMaxPensioner)
+      const eR = eligibleLoanMaxRetiree === '' ? 0 : Number(eligibleLoanMaxRetiree)
+      const eA = eligibleLoanMaxActive === '' ? 0 : Number(eligibleLoanMaxActive)
+      const gP = graceLoanMaxPensioner === '' ? 0 : Number(graceLoanMaxPensioner)
+      const gR = graceLoanMaxRetiree === '' ? 0 : Number(graceLoanMaxRetiree)
+      const gA = graceLoanMaxActive === '' ? 0 : Number(graceLoanMaxActive)
+      const nums = [eP, eR, eA, gP, gR, gA]
+      if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw new Error('All limits must be non-negative numbers')
+
+      const rPct = loanInterestRatePct === '' ? 0 : Number(loanInterestRatePct)
+      if (!Number.isFinite(rPct) || rPct < 0) throw new Error('Loan rate must be a non-negative number')
+
+      const res = await fetch('/api/admin/food/cycle-policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          cycle_id: selectedCycleId,
+          eligible: { pensioner: Math.trunc(eP), retiree: Math.trunc(eR), active: Math.trunc(eA) },
+          grace: { pensioner: Math.trunc(gP), retiree: Math.trunc(gR), active: Math.trunc(gA) },
+          include_interest_in_cap: !!includeInterestInCap,
+          loan_interest_rate_pct: rPct,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to save loan rate')
+      setPolicyMsg('Food loan interest rate saved successfully')
+      const p = json.policy || {}
+      setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+    } catch (e) {
+      setPolicyMsg(`Error: ${e.message}`)
+    } finally {
+      setLoanRateSaving(false)
+    }
+  }
 
   const createCycle = async (e) => {
     e.preventDefault()
@@ -85,6 +227,7 @@ function DataManagementPageContent() {
       setNewCycleEndsAt('')
       await loadCycles()
       if (json.active_cycle_id != null) setSelectedCycleId(json.active_cycle_id)
+      if (json.active_cycle_id != null) loadFoodCyclePolicy(json.active_cycle_id)
     } catch (e2) {
       setMessage(`Error: ${e2.message}`)
     } finally {
@@ -108,6 +251,7 @@ function DataManagementPageContent() {
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to set active cycle')
       setMessage('Active cycle updated successfully')
       await loadCycles()
+      if (selectedCycleId != null) loadFoodCyclePolicy(selectedCycleId)
     } catch (e) {
       setMessage(`Error: ${e.message}`)
     } finally {
@@ -643,6 +787,176 @@ function DataManagementPageContent() {
           </div>
         </div>
 
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 lg:p-3 xl:p-4">
+          <h2 className="text-base sm:text-lg font-medium text-indigo-900 mb-2 sm:mb-3">💳 Food Loan Limits (Selected Cycle)</h2>
+          <p className="text-sm sm:text-base text-indigo-700 mb-3 sm:mb-4">
+            Set maximum Loan amounts per cycle for Eligible members and Non-Eligible (Grace) members.
+          </p>
+
+          <div className="bg-white/60 border border-indigo-200 rounded p-3">
+            <div className="text-sm font-medium text-indigo-900 mb-3">Eligible (Loan)</div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Pensioner</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={eligibleLoanMaxPensioner}
+                  onChange={(e) => setEligibleLoanMaxPensioner(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Retiree</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={eligibleLoanMaxRetiree}
+                  onChange={(e) => setEligibleLoanMaxRetiree(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Active (Other)</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={eligibleLoanMaxActive}
+                  onChange={(e) => setEligibleLoanMaxActive(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-indigo-800">Applies to Loan orders that pass eligibility.</div>
+          </div>
+
+          <div className="mt-3 bg-white/60 border border-indigo-200 rounded p-3">
+            <div className="text-sm font-medium text-indigo-900 mb-3">Non-Eligible (Grace Loan)</div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Pensioner</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={graceLoanMaxPensioner}
+                  onChange={(e) => setGraceLoanMaxPensioner(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Retiree</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={graceLoanMaxRetiree}
+                  onChange={(e) => setGraceLoanMaxRetiree(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-indigo-800 mb-1">Active (Other)</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={graceLoanMaxActive}
+                  onChange={(e) => setGraceLoanMaxActive(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded"
+                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-indigo-800">If eligibility fails, allowed once per cycle up to this max.</div>
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="flex items-center justify-between gap-3 bg-white/60 border border-indigo-200 rounded p-3">
+              <div>
+                <div className="text-sm font-medium text-indigo-900">Include Interest In Limit</div>
+                <div className="text-xs text-indigo-800">
+                  When ON, interest is counted inside the max. When OFF, max applies to principal only.
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIncludeInterestInCap((v) => !v)}>
+                <div className={`w-12 h-6 rounded-full px-1 flex items-center ${includeInterestInCap ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                  <div className="w-4 h-4 bg-white rounded-full shadow" />
+                </div>
+                <span className={`text-sm font-medium ${includeInterestInCap ? 'text-green-700' : 'text-gray-600'}`}>
+                  {includeInterestInCap ? 'On' : 'Off'}
+                </span>
+              </label>
+            </div>
+
+            <div className="bg-white/60 border border-indigo-200 rounded p-3">
+              <div className="text-sm font-medium text-indigo-900 mb-2">Loan Interest Rate (Selected Cycle)</div>
+              <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                <div className="flex-1">
+                  <div className="text-xs text-indigo-800 mb-1">Rate (%)</div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={loanInterestRatePct}
+                    onChange={(e) => setLoanInterestRatePct(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded"
+                    disabled={policyLoading || policySaving || loanRateSaving || selectedCycleId == null}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveFoodLoanRate}
+                  disabled={policySaving || policyLoading || loanRateSaving || selectedCycleId == null}
+                  className="px-3 py-2 rounded text-white text-sm bg-gray-900 hover:bg-gray-950 disabled:opacity-50"
+                >
+                  {loanRateSaving ? 'Saving…' : 'Save Rate'}
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-indigo-800">
+                Applies to Loan orders for this cycle.
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={saveFoodCyclePolicy}
+              disabled={policySaving || policyLoading || selectedCycleId == null}
+              className="px-3 py-2 rounded text-white text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {policySaving ? 'Saving…' : 'Save Limits'}
+            </button>
+            <button
+              type="button"
+              onClick={() => loadFoodCyclePolicy(selectedCycleId)}
+              disabled={policySaving || policyLoading || selectedCycleId == null}
+              className="px-3 py-2 rounded text-sm bg-white border border-indigo-200 hover:bg-indigo-50 disabled:opacity-50"
+            >
+              {policyLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {policyMsg && (
+            <div
+              className={`mt-3 p-2 rounded text-sm ${
+                policyMsg.startsWith('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+              }`}
+            >
+              {policyMsg}
+            </div>
+          )}
+        </div>
+
         {/* Backup Data */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
           <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>
@@ -657,82 +971,6 @@ function DataManagementPageContent() {
             >
             {processingAction === 'exportBackup' ? 'Downloading...' : 'Download Backup'}
           </button>
-        </div>
-
-        {/* Clear Delivered Orders */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-yellow-900 mb-2 sm:mb-3">🗑️ Clear Delivered Orders</h2>
-          <p className="text-sm sm:text-base text-yellow-700 mb-3 sm:mb-4">
-            Remove delivered orders for the selected cycle only.
-          </p>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder='Type "CLEAR DELIVERED" to confirm'
-              value={confirmClearDelivered}
-              onChange={(e) => setConfirmClearDelivered(e.target.value)}
-              className="w-full px-3 py-2 text-sm sm:text-base border rounded"
-            />
-            <button
-              type="button"
-              onClick={clearDeliveredOrders}
-              disabled={processingAction !== null || confirmClearDelivered !== 'CLEAR DELIVERED'}
-              className="w-full sm:w-auto px-4 py-2 bg-yellow-600 text-white text-sm sm:text-base rounded hover:bg-yellow-700 disabled:opacity-50"
-            >
-              {processingAction === 'clearDelivered' ? 'Clearing...' : 'Clear Delivered Orders'}
-            </button>
-          </div>
-        </div>
-
-        {/* Reset Inventory */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-orange-900 mb-2 sm:mb-3">🔄 Reset Inventory</h2>
-          <p className="text-sm sm:text-base text-orange-700 mb-3 sm:mb-4">
-            Reset inventory movements for the selected cycle only.
-          </p>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder='Type "RESET INVENTORY" to confirm'
-              value={confirmResetInventory}
-              onChange={(e) => setConfirmResetInventory(e.target.value)}
-              className="w-full px-3 py-2 text-sm sm:text-base border rounded"
-            />
-            <button
-              type="button"
-              onClick={resetInventory}
-              disabled={processingAction !== null || confirmResetInventory !== 'RESET INVENTORY'}
-              className="w-full sm:w-auto px-4 py-2 bg-orange-600 text-white text-sm sm:text-base rounded hover:bg-orange-700 disabled:opacity-50"
-            >
-              {processingAction === 'resetInventory' ? 'Resetting...' : 'Reset Inventory'}
-            </button>
-          </div>
-        </div>
-
-        {/* Clear All Orders */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-red-900 mb-2 sm:mb-3">⚠️ Clear Orders (Selected Cycle)</h2>
-          <p className="text-sm sm:text-base text-red-700 mb-3 sm:mb-4">
-            <strong>DANGER:</strong> This will permanently delete orders in the selected cycle (pending, posted, and delivered).
-            Use this only after exporting a backup for that cycle.
-          </p>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder='Type "CLEAR CYCLE ORDERS" to confirm'
-              value={confirmClearAll}
-              onChange={(e) => setConfirmClearAll(e.target.value)}
-              className="w-full px-3 py-2 text-sm sm:text-base border rounded"
-            />
-            <button
-              type="button"
-              onClick={clearAllOrders}
-              disabled={processingAction !== null || confirmClearAll !== 'CLEAR CYCLE ORDERS'}
-              className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white text-sm sm:text-base rounded hover:bg-red-700 disabled:opacity-50"
-            >
-              {processingAction === 'clearAll' ? 'Clearing...' : 'Clear Cycle Orders'}
-            </button>
-          </div>
         </div>
       </div>
 

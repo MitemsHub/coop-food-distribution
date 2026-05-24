@@ -90,7 +90,54 @@ export async function GET(request) {
       return NextResponse.json({ ok: false, error: 'Failed to fetch orders' }, { status: 500 })
     }
 
-    const response = NextResponse.json({ ok: true, orders: orders || [] })
+    const rows = Array.isArray(orders) ? orders : []
+
+    let hasLoanRate = false
+    try {
+      const probe = await supabase.from('cycles').select('food_loan_interest_rate_pct').limit(1)
+      hasLoanRate = !probe.error
+    } catch {
+      hasLoanRate = false
+    }
+
+    const cycleIds = Array.from(
+      new Set(
+        rows
+          .map((o) => o?.cycle_id)
+          .filter((id) => id != null && Number.isFinite(Number(id)) && Number(id) > 0)
+          .map((id) => Number(id))
+      )
+    )
+
+    const rateByCycleId = new Map()
+    if (hasLoanRate && cycleIds.length > 0) {
+      const { data: cycles, error: cErr } = await supabase
+        .from('cycles')
+        .select('id, food_loan_interest_rate_pct')
+        .in('id', cycleIds)
+
+      if (!cErr && Array.isArray(cycles)) {
+        for (const c of cycles) {
+          rateByCycleId.set(Number(c.id), Math.max(0, Number(c.food_loan_interest_rate_pct || 0)))
+        }
+      }
+    }
+
+    const enriched = rows.map((o) => {
+      const lines = Array.isArray(o.order_lines) ? o.order_lines : []
+      const principal = lines.reduce((sum, l) => sum + Number(l?.amount || 0), 0)
+      const total = Number(o?.total_amount || 0)
+      const interest = o?.payment_option === 'Loan' ? Math.max(0, total - principal) : 0
+      const ratePct = hasLoanRate ? (rateByCycleId.get(Number(o?.cycle_id)) ?? 0) : 13
+      return {
+        ...o,
+        principal_amount: principal,
+        loan_interest_amount: interest,
+        loan_interest_rate_pct: Math.max(0, Number(ratePct || 0)),
+      }
+    })
+
+    const response = NextResponse.json({ ok: true, orders: enriched })
     
     // Add headers for better Chrome compatibility
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')

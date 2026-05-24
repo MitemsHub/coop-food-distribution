@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
+import DraggableModal from '../components/DraggableModal'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,12 @@ export default function RepLayout({ children }) {
   const isLoginPage = pathname.startsWith('/rep/login') || pathname.startsWith('/rep/access')
   const portalModule = user?.module || null
 
+  const [repPhoneLoading, setRepPhoneLoading] = useState(false)
+  const [repPhoneSaving, setRepPhoneSaving] = useState(false)
+  const [repPhone, setRepPhone] = useState('')
+  const [repPhoneModalOpen, setRepPhoneModalOpen] = useState(false)
+  const [repPhoneInput, setRepPhoneInput] = useState('')
+
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     if (typeof window === 'undefined') return true
     const v = window.localStorage.getItem('rep_sidebar_visible')
@@ -39,9 +46,9 @@ export default function RepLayout({ children }) {
   }, [sidebarVisible])
 
   const activeKey = useMemo(() => {
-    if (pathname.startsWith('/rep/pending')) return 'food_pending'
     if (pathname.startsWith('/rep/posted')) return 'food_posted'
     if (pathname.startsWith('/rep/delivered')) return 'food_delivered'
+    if (pathname.startsWith('/rep/banks')) return 'food_banks'
     if (pathname.startsWith('/rep/ram/approved')) return 'ram_approved'
     if (pathname.startsWith('/rep/ram/delivered')) return 'ram_delivered'
     if (pathname.startsWith('/rep/ram/banks')) return 'ram_banks'
@@ -70,6 +77,45 @@ export default function RepLayout({ children }) {
       logout()
     }
   }
+
+  const loadRepPhone = async () => {
+    if (portalModule && portalModule !== 'food') return
+    setRepPhoneLoading(true)
+    try {
+      const res = await fetch('/api/rep/profile/phone', { cache: 'no-store', credentials: 'include' })
+      const ct = res.headers.get('content-type') || ''
+      const json = ct.includes('application/json') ? await res.json() : null
+      if (!res.ok || !json?.ok) return
+      setRepPhone(String(json.rep_phone || ''))
+    } catch {} finally {
+      setRepPhoneLoading(false)
+    }
+  }
+
+  const saveRepPhone = async () => {
+    if (repPhoneSaving) return
+    setRepPhoneSaving(true)
+    try {
+      const res = await fetch('/api/rep/profile/phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ rep_phone: repPhoneInput }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to save')
+      setRepPhone(String(json.rep_phone || ''))
+      setRepPhoneModalOpen(false)
+    } catch {} finally {
+      setRepPhoneSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isLoginPage) return
+    loadRepPhone()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portalModule, isLoginPage])
 
   if (isLoginPage) return children
 
@@ -105,14 +151,14 @@ export default function RepLayout({ children }) {
                 </button>
                 {foodOpen && (
                   <div className="mt-2 space-y-1">
-                    <Link href="/rep/pending" className={navItemClass(activeKey === 'food_pending')}>
-                      Pending
-                    </Link>
                     <Link href="/rep/posted" className={navItemClass(activeKey === 'food_posted')}>
                       Posted
                     </Link>
                     <Link href="/rep/delivered" className={navItemClass(activeKey === 'food_delivered')}>
                       Delivered
+                    </Link>
+                    <Link href="/rep/banks" className={navItemClass(activeKey === 'food_banks')}>
+                      Banks
                     </Link>
                   </div>
                 )}
@@ -173,7 +219,25 @@ export default function RepLayout({ children }) {
                   </svg>
                 </button>
               )}
-              <div className="text-sm font-semibold text-gray-900 truncate">{title}</div>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="text-sm font-semibold text-gray-900 truncate">{title}</div>
+                {(portalModule === null || portalModule === 'food') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRepPhoneInput(repPhone)
+                      setRepPhoneModalOpen(true)
+                    }}
+                    className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    disabled={repPhoneLoading}
+                    title="Set your phone number"
+                  >
+                    <span className="text-gray-500">Phone:</span>
+                    <span className="font-medium">{repPhone ? repPhone : 'Not set'}</span>
+                    <span className="text-gray-400">Edit</span>
+                  </button>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -186,6 +250,36 @@ export default function RepLayout({ children }) {
         </div>
         <div className="flex-1 overflow-y-auto">{children}</div>
       </main>
+
+      <DraggableModal open={repPhoneModalOpen} onClose={() => setRepPhoneModalOpen(false)} title="Update Phone Number">
+        <div className="space-y-3">
+          <input
+            value={repPhoneInput}
+            onChange={(e) => setRepPhoneInput(e.target.value)}
+            placeholder="e.g. 0803 123 4567"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            disabled={repPhoneSaving}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={saveRepPhone}
+              disabled={repPhoneSaving}
+              className="px-3 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {repPhoneSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRepPhoneModalOpen(false)}
+              disabled={repPhoneSaving}
+              className="px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </DraggableModal>
     </div>
   )
 }

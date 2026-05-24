@@ -42,6 +42,8 @@ function RamApprovedContent() {
   const [deliverConfirmIds, setDeliverConfirmIds] = useState([])
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false)
   const [rollbackConfirmOrder, setRollbackConfirmOrder] = useState(null)
+  const [rollbackBulkConfirmOpen, setRollbackBulkConfirmOpen] = useState(false)
+  const [rollbackBulkBusy, setRollbackBulkBusy] = useState(false)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
@@ -126,6 +128,37 @@ function RamApprovedContent() {
       setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
     } finally {
       setRollbackBusyId(null)
+    }
+  }
+
+  const requestRollbackSelected = () => {
+    if (!selectedIds.size || delivering || rollbackBusyId || rollbackBulkBusy) return
+    setRollbackBulkConfirmOpen(true)
+  }
+
+  const confirmRollbackSelected = async () => {
+    const ids = Array.from(selectedIds)
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    setRollbackBulkConfirmOpen(false)
+    if (!ids.length) return
+    setRollbackBulkBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/ram/orders/update-status-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ids, status: 'Pending' }),
+      })
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status-bulk')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
+      setOrders((prev) => (prev || []).filter((o) => !ids.includes(Number(o.id))))
+      setSelectedIds(new Set())
+      setMsg({ type: 'success', text: `Rolled back ${ids.length} order(s) to Pending` })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
+    } finally {
+      setRollbackBulkBusy(false)
     }
   }
 
@@ -659,6 +692,14 @@ function RamApprovedContent() {
             >
               {delivering && selectedCount ? 'Delivering…' : `Deliver Selected (${selectedCount})`}
             </button>
+            <button
+              type="button"
+              onClick={requestRollbackSelected}
+              disabled={!selectedCount || delivering || rollbackBulkBusy}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              {rollbackBulkBusy && selectedCount ? 'Rolling back…' : `Rollback Selected (${selectedCount})`}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -918,6 +959,44 @@ function RamApprovedContent() {
             </div>
           </div>
           <div className="mt-3 text-xs text-gray-600">After rollback, you’ll find it under Admin → Ram Sales → Pending.</div>
+        </div>
+      </DraggableModal>
+
+      <DraggableModal
+        open={rollbackBulkConfirmOpen}
+        onClose={() => {
+          if (rollbackBulkBusy) return
+          setRollbackBulkConfirmOpen(false)
+        }}
+        title="Confirm Bulk Rollback"
+        overlayClassName="bg-black/40"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setRollbackBulkConfirmOpen(false)}
+              disabled={rollbackBulkBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold disabled:opacity-50"
+              onClick={confirmRollbackSelected}
+              disabled={rollbackBulkBusy}
+            >
+              {rollbackBulkBusy ? 'Rolling back…' : 'Yes, Rollback'}
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-800">
+          <div className="font-semibold text-gray-900">Rollback selected orders to Pending?</div>
+          <div className="mt-1 text-gray-700">
+            This will move {selectedCount.toLocaleString()} order(s) from <span className="font-semibold">Approved</span> to{' '}
+            <span className="font-semibold">Pending</span>.
+          </div>
         </div>
       </DraggableModal>
     </div>

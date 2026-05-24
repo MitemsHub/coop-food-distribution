@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function RepLoginPage() {
   const [code, setCode] = useState('')
+  const [phone, setPhone] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -46,8 +47,17 @@ export default function RepLoginPage() {
         branchName: json.branch?.name ?? '',
         branchId: json.branch?.id ?? null,
       })
+
+      const phoneClean = phone.trim()
+      if (phoneClean) {
+        await fetch('/api/rep/profile/phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ rep_phone: phoneClean }),
+        }).catch(() => null)
+      }
       
-      router.push('/rep/pending')
+      router.push('/rep/posted')
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -69,6 +79,14 @@ export default function RepLoginPage() {
         onChange={e=>setCode(e.target.value)}
         placeholder="Enter your passcode"
       />
+      {portalModule === 'food' && (
+        <input
+          className="border rounded px-3 py-2 w-full mb-3 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Rep phone number (optional)"
+        />
+      )}
       <button className="px-4 py-2 bg-blue-600 text-white rounded w-full sm:w-auto hover:bg-blue-700 transition-colors duration-200 text-sm sm:text-base font-medium" onClick={submit} disabled={loading || !code.trim()}>
         {loading ? (
           <span className="inline-flex items-center gap-2">

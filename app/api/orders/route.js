@@ -41,6 +41,11 @@ export async function POST(req) {
       hasColumn('branch_item_markups', 'cycle_id'),
     ])
 
+    const cyclesHasFoodPolicy = await hasColumn('cycles', 'food_loan_eligible_amount_cap').catch(() => false)
+    const cyclesHasFoodPolicyV2 = await hasColumn('cycles', 'food_loan_eligible_amount_cap_pensioner').catch(() => false)
+    const cyclesHasFoodInterestRate = await hasColumn('cycles', 'food_loan_interest_rate_pct').catch(() => false)
+    const ordersHasFoodGraceFlag = await hasColumn('orders', 'food_loan_grace_used').catch(() => false)
+
     // Member (home branch + balances)
     const { data: member, error: mErr } = await supabase
       .from('members')
@@ -148,9 +153,62 @@ export async function POST(req) {
       pricedLines.push({ item_id: item.item_id, branch_item_price_id: bip.id, unit_price, qty, amount })
     }
 
-    // Calculate interest for Loan option
-    const INTEREST_RATE = 0.13
-    const loanInterest = paymentOption === 'Loan' ? Math.round(total * INTEREST_RATE) : 0
+    let eligibleLoanMaxCap = 0
+    let graceLoanMaxCap = 0
+    let includeInterestInCap = true
+    let loanRatePct = cyclesHasFoodInterestRate ? 0 : 13
+    if (cyclesHasFoodPolicy) {
+      const { data: policyRow, error: pErr } = await supabase
+        .from('cycles')
+        .select(
+          cyclesHasFoodPolicyV2
+            ? `food_loan_eligible_amount_cap,food_loan_grace_amount_cap,food_loan_eligible_amount_cap_pensioner,food_loan_eligible_amount_cap_retiree,food_loan_eligible_amount_cap_active,food_loan_grace_amount_cap_pensioner,food_loan_grace_amount_cap_retiree,food_loan_grace_amount_cap_active,food_loan_cap_include_interest${cyclesHasFoodInterestRate ? ',food_loan_interest_rate_pct' : ''}`
+            : `food_loan_eligible_amount_cap,food_loan_grace_amount_cap${cyclesHasFoodInterestRate ? ',food_loan_interest_rate_pct' : ''}`
+        )
+        .eq('id', activeCycle.id)
+        .maybeSingle()
+      if (!pErr && policyRow) {
+        if (cyclesHasFoodInterestRate) loanRatePct = Math.max(0, Number(policyRow.food_loan_interest_rate_pct || 0))
+        const memberCategory = String(member?.category || '').toLowerCase()
+        const group =
+          memberCategory.includes('pension') ? 'pensioner' : memberCategory.includes('retire') ? 'retiree' : 'active'
+
+        includeInterestInCap = cyclesHasFoodPolicyV2 ? policyRow.food_loan_cap_include_interest !== false : true
+
+        const eligibleFallback = Math.max(0, Math.trunc(Number(policyRow.food_loan_eligible_amount_cap || 0)))
+        const graceFallback = Math.max(0, Math.trunc(Number(policyRow.food_loan_grace_amount_cap || 0)))
+
+        if (cyclesHasFoodPolicyV2) {
+          const eligibleByGroup = {
+            pensioner: Math.max(0, Math.trunc(Number(policyRow.food_loan_eligible_amount_cap_pensioner || 0))),
+            retiree: Math.max(0, Math.trunc(Number(policyRow.food_loan_eligible_amount_cap_retiree || 0))),
+            active: Math.max(0, Math.trunc(Number(policyRow.food_loan_eligible_amount_cap_active || 0))),
+          }
+          const graceByGroup = {
+            pensioner: Math.max(0, Math.trunc(Number(policyRow.food_loan_grace_amount_cap_pensioner || 0))),
+            retiree: Math.max(0, Math.trunc(Number(policyRow.food_loan_grace_amount_cap_retiree || 0))),
+            active: Math.max(0, Math.trunc(Number(policyRow.food_loan_grace_amount_cap_active || 0))),
+          }
+          eligibleLoanMaxCap = (eligibleByGroup[group] || 0) > 0 ? eligibleByGroup[group] : eligibleFallback
+          graceLoanMaxCap = (graceByGroup[group] || 0) > 0 ? graceByGroup[group] : graceFallback
+        } else {
+          eligibleLoanMaxCap = eligibleFallback
+          graceLoanMaxCap = graceFallback
+        }
+      }
+    }
+
+    if (cyclesHasFoodInterestRate && !cyclesHasFoodPolicy) {
+      const { data: rRow, error: rErr } = await supabase
+        .from('cycles')
+        .select('food_loan_interest_rate_pct')
+        .eq('id', activeCycle.id)
+        .maybeSingle()
+      if (!rErr && rRow) loanRatePct = Math.max(0, Number(rRow.food_loan_interest_rate_pct || 0))
+    }
+
+    const loanRate = Math.max(0, Number(loanRatePct || 0)) / 100
+    const loanInterest = paymentOption === 'Loan' ? Math.round(total * loanRate) : 0
     const totalWithInterest = total + loanInterest
 
     // Enforce limits
@@ -158,7 +216,58 @@ export async function POST(req) {
       if (outstandingLoansTotal > 0) return NextResponse.json({ ok:false, error:'Savings not allowed while loans outstanding (incl. pending/posted loan apps)' }, { status:400 })
       if (total > savingsEligible)   return NextResponse.json({ ok:false, error:`Total ₦${total.toLocaleString()} exceeds Savings available ₦${savingsEligible.toLocaleString()}` }, { status:400 })
     } else if (paymentOption === 'Loan') {
-      if (totalWithInterest > loanEligible)      return NextResponse.json({ ok:false, error:`Total (incl. 13% interest) ₦${totalWithInterest.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}` }, { status:400 })
+      const capAmount = includeInterestInCap ? totalWithInterest : total
+      if (eligibleLoanMaxCap > 0 && capAmount > eligibleLoanMaxCap) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: includeInterestInCap
+              ? `Eligible max for this cycle is ₦${eligibleLoanMaxCap.toLocaleString()}. Your total (incl. ${loanRatePct}% interest) is ₦${totalWithInterest.toLocaleString()}.`
+              : `Eligible max for this cycle is ₦${eligibleLoanMaxCap.toLocaleString()}. Your principal total is ₦${total.toLocaleString()} (interest is excluded from the cap).`,
+          },
+          { status: 400 }
+        )
+      }
+
+      if (totalWithInterest > loanEligible) {
+        if (graceLoanMaxCap <= 0) {
+          return NextResponse.json(
+            { ok: false, error: `Total (incl. ${loanRatePct}% interest) ₦${totalWithInterest.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}` },
+            { status: 400 }
+          )
+        }
+        if (capAmount > graceLoanMaxCap) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: includeInterestInCap
+                ? `You are currently not eligible for Loan. Grace max for this cycle is ₦${graceLoanMaxCap.toLocaleString()} but your total (incl. ${loanRatePct}% interest) is ₦${totalWithInterest.toLocaleString()}.`
+                : `You are currently not eligible for Loan. Grace max for this cycle is ₦${graceLoanMaxCap.toLocaleString()} but your principal total is ₦${total.toLocaleString()} (interest is excluded from the cap).`,
+            },
+            { status: 400 }
+          )
+        }
+
+        if (ordersHasFoodGraceFlag) {
+          let gq = supabase
+            .from('orders')
+            .select('order_id')
+            .eq('member_id', memberId)
+            .eq('payment_option', 'Loan')
+            .eq('food_loan_grace_used', true)
+            .in('status', statuses)
+            .order('order_id', { ascending: false })
+            .limit(1)
+          if (ordersHasCycle) gq = gq.eq('cycle_id', activeCycle.id)
+          const { data: usedRows, error: gErr } = await gq
+          if (!gErr && (usedRows || []).length > 0) {
+            return NextResponse.json(
+              { ok: false, error: 'Grace has already been used for this member in the current cycle.' },
+              { status: 400 }
+            )
+          }
+        }
+      }
     } else if (paymentOption !== 'Cash') {
       return NextResponse.json({ ok:false, error:'Invalid payment option' }, { status:400 })
     }
@@ -176,6 +285,10 @@ export async function POST(req) {
       status: 'Pending'
     }
     if (ordersHasCycle) orderInsert.cycle_id = activeCycle.id
+    const capAmountForGraceFlag = includeInterestInCap ? totalWithInterest : total
+    if (ordersHasFoodGraceFlag && paymentOption === 'Loan' && totalWithInterest > loanEligible && graceLoanMaxCap > 0 && capAmountForGraceFlag <= graceLoanMaxCap) {
+      orderInsert.food_loan_grace_used = true
+    }
 
     const { data: order, error: oErr } = await supabase
       .from('orders')

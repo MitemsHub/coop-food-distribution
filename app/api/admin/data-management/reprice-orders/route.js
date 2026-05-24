@@ -45,7 +45,20 @@ export async function POST(request) {
     const cycleJoin = ordersHasCycle && pricesHasCycle ? 'AND bip.cycle_id = o.cycle_id' : ''
     const markupCycleJoin = ordersHasCycle && markupsHasCycle ? 'AND bim.cycle_id = o.cycle_id' : ''
     const cycleFilter = ordersHasCycle && cycleId ? 'AND o.cycle_id = $1' : ''
-    const params = ordersHasCycle && cycleId ? [cycleId] : []
+    let ratePct = 13
+    try {
+      const { data: rRow, error: rErr } = await supabase
+        .from('cycles')
+        .select('food_loan_interest_rate_pct')
+        .eq('id', cycleId)
+        .maybeSingle()
+      if (!rErr && rRow && rRow.food_loan_interest_rate_pct != null) {
+        ratePct = Math.max(0, Number(rRow.food_loan_interest_rate_pct || 0))
+      }
+    } catch {}
+    const rateDecimal = Math.max(0, Number(ratePct || 0)) / 100
+    const rateParam = ordersHasCycle && cycleId ? '$2' : '$1'
+    const params = ordersHasCycle && cycleId ? [cycleId, rateDecimal] : [rateDecimal]
  
     const sql = `
       WITH updated_lines AS (
@@ -81,7 +94,7 @@ export async function POST(request) {
         UPDATE public.orders o
         SET
           total_amount = CASE
-            WHEN o.payment_option = 'Loan' THEN (t.base_total + ROUND(t.base_total * 0.13))
+            WHEN o.payment_option = 'Loan' THEN (t.base_total + ROUND(t.base_total * ${rateParam}))
             ELSE t.base_total
           END,
           updated_at = NOW()

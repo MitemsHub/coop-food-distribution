@@ -475,6 +475,10 @@ function ShopPageContent() {
   // Eligibility helpers
   const savingsEligible = Number(eligibility.savingsEligible || 0)
   const loanEligible = Number(eligibility.loanEligible || 0)
+  const loanInterestRate = Number.isFinite(Number(eligibility.interest_rate)) ? Number(eligibility.interest_rate) : 0
+  const loanInterestRatePct = Number.isFinite(Number(eligibility.interest_rate_pct))
+    ? Number(eligibility.interest_rate_pct)
+    : Math.round(loanInterestRate * 10000) / 100
 
   // Cart computations
   const cartLines = useMemo(() => {
@@ -488,11 +492,10 @@ function ShopPageContent() {
 
   const cartTotal = useMemo(() => cartLines.reduce((s, l) => s + l.amount, 0), [cartLines])
 
-  // Loan interest computation (13% applied to cart total when payment=Loan)
-  const LOAN_INTEREST_RATE = 0.13
+  // Loan interest computation (rate applied to cart total when payment=Loan)
   const loanInterest = useMemo(() => (
-    paymentOption === 'Loan' ? Math.round(cartTotal * LOAN_INTEREST_RATE) : 0
-  ), [paymentOption, cartTotal])
+    paymentOption === 'Loan' ? Math.round(cartTotal * loanInterestRate) : 0
+  ), [paymentOption, cartTotal, loanInterestRate])
   const totalWithInterest = useMemo(() => (
     paymentOption === 'Loan' ? cartTotal + loanInterest : cartTotal
   ), [paymentOption, cartTotal, loanInterest])
@@ -504,7 +507,7 @@ function ShopPageContent() {
     : Number.POSITIVE_INFINITY
 
   // Remaining limit should respect selected payment option.
-  // For Loan, factor 13% interest into the remaining limit calculation;
+  // For Loan, factor interest into the remaining limit calculation;
   // For Savings, use principal cart total;
   // For Cash, there is no limit.
   const remainingLimit = useMemo(() => {
@@ -546,10 +549,10 @@ function ShopPageContent() {
         return
       }
       if (paymentOption === 'Loan') {
-        const nextInterest = Math.round(nextCartTotal * LOAN_INTEREST_RATE)
+        const nextInterest = Math.round(nextCartTotal * loanInterestRate)
         const nextTotal = nextCartTotal + nextInterest
         if (nextTotal > loanEligible) {
-          setMessage({ type: 'error', text: 'This quantity exceeds your Loan eligibility.' })
+          setMessage({ type: 'error', text: `This quantity exceeds your Loan eligibility (including ${loanInterestRatePct}% interest).` })
           return
         }
       }
@@ -620,7 +623,7 @@ function ShopPageContent() {
         return newSet
       })
     }
-  }, [items, loanEligible, member, deliveryBranchCode, paymentOption, qty, savingsEligible])
+  }, [items, loanEligible, loanInterestRate, loanInterestRatePct, member, deliveryBranchCode, paymentOption, qty, savingsEligible])
 
   // Debounced input handler for better performance
   const handleInputChange = useCallback((sku, value) => {
@@ -1005,7 +1008,7 @@ function ShopPageContent() {
                      <div>
                        <h3 className="text-sm font-semibold text-orange-800 mb-2">Loan Payment Information</h3>
                        <p className="text-sm text-orange-700">
-                         Interest Rate: A 13% interest will be charged on all items purchased using the loan payment option.
+                        Interest Rate: A {loanInterestRatePct}% interest will be charged on all items purchased using the loan payment option.
                        </p>
                        <p className="text-sm text-orange-700 mt-2">
                          Kindly note that all members have access to an additional N300,000 shopping loan facility. The total shopping loan amount available to eligible member when using the loan option is capped at N1,000,000.
@@ -1165,7 +1168,7 @@ function ShopPageContent() {
                  </div>
                  {paymentOption === 'Loan' && (
                    <div className="bg-orange-50 rounded-lg p-1.5 sm:p-2 md:p-3 text-center">
-                     <div className="text-xs text-orange-600 mb-0.5 lg:mb-1">Interest (13%)</div>
+                    <div className="text-xs text-orange-600 mb-0.5 lg:mb-1">Interest ({loanInterestRatePct}%)</div>
                      <div className="text-xs sm:text-xs md:text-sm font-bold text-orange-700">₦{loanInterest.toLocaleString()}</div>
                    </div>
                  )}

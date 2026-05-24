@@ -4,12 +4,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 
+const Spinner = ({ className = 'h-4 w-4 text-white' }) => (
+  <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+)
+
 // Department Inventory Section Component
 function DepartmentInventorySection() {
   const [departmentData, setDepartmentData] = useState([])
   const [departments, setDepartments] = useState([])
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState('All Branches')
   const [selectedDepartment, setSelectedDepartment] = useState('All Departments')
   const [currentPage, setCurrentPage] = useState(1)
@@ -21,12 +34,6 @@ function DepartmentInventorySection() {
     if (ct.includes('application/json')) return await res.json()
     const text = await res.text()
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
-  }
-  // CSV escape helper to properly handle quotes and commas
-  const csvEscape = (val) => {
-    const s = String(val ?? '')
-    const escaped = s.replace(/"/g, '""')
-    return `"${escaped}"`
   }
 
   // Load departments and branches
@@ -109,33 +116,51 @@ function DepartmentInventorySection() {
   const totalPages = Math.ceil(departmentData.length / itemsPerPage)
   const showPagination = departmentData.length > itemsPerPage
 
-  // Export functions
-  const exportDepartmentCSV = () => {
-    const headers = ['Branch', 'Department', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
-    const csvContent = [
-      headers.join(','),
-      ...departmentData.map(row => [
+  const exportDepartmentExcel = async () => {
+    if (!departmentData?.length) return
+    setExportingExcel(true)
+    try {
+      const headers = ['Branch', 'Department', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
+      const rows = departmentData.map((row) => [
         row.branch_name,
         row.department_name,
         row.sku,
         row.item_name,
-        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
-        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
-        (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
-      ].map(csvEscape).join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `department_inventory_${selectedBranch}_${selectedDepartment}_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+        row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0,
+        row.confirmed_demand ?? row.pending_delivery_qty ?? 0,
+        row.delivered_qty ?? row.delivered_demand ?? 0,
+        row.total_demand ??
+          (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) +
+            (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) +
+            (row.delivered_qty ?? row.delivered_demand ?? 0),
+      ])
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Department Inventory')
+      ws.addRow(['Food Distribution — Department Inventory'])
+      ws.addRow([`Branch: ${selectedBranch} | Department: ${selectedDepartment}`])
+      ws.addRow(headers)
+      for (const r of rows) ws.addRow(r)
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `department_inventory_${selectedBranch.replace(/\s+/g, '_')}_${selectedDepartment.replace(/\s+/g, '_')}_${new Date()
+        .toISOString()
+        .split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setExportingExcel(false)
+    }
   }
 
   const exportDepartmentPDF = async () => {
+    setExportingPDF(true)
     try {
       // Check if there's data to export
       if (!departmentData || departmentData.length === 0) {
@@ -146,7 +171,7 @@ function DepartmentInventorySection() {
       const { jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
       
-      const doc = new jsPDF()
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       doc.setFontSize(16)
       doc.text('Department Inventory Report', 20, 20)
       doc.setFontSize(10)
@@ -168,19 +193,31 @@ function DepartmentInventorySection() {
         head: [['Branch', 'Department', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']],
         body: tableData,
         startY: 45,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] }
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 40 }, // Branch
+          1: { cellWidth: 40 }, // Department
+          2: { cellWidth: 24 }, // SKU
+          3: { cellWidth: 80 }, // Item
+          4: { cellWidth: 22, halign: 'right' }, // Pending
+          5: { cellWidth: 22, halign: 'right' }, // Posted
+          6: { cellWidth: 22, halign: 'right' }, // Delivered
+          7: { cellWidth: 26, halign: 'right' }, // Total Demand
+        },
       })
       
       const branchName = selectedBranch.replace(/\s+/g, '_')
       const deptName = selectedDepartment.replace(/\s+/g, '_')
       doc.save(`department_inventory_${branchName}_${deptName}_${new Date().toISOString().split('T')[0]}.pdf`)
-      
-      // Show success message
-      alert('PDF exported successfully!')
     } catch (error) {
       console.error('PDF export error:', error)
       alert('PDF export failed. Please try again.')
+    } finally {
+      setExportingPDF(false)
     }
   }
 
@@ -193,9 +230,10 @@ function DepartmentInventorySection() {
         <button
           onClick={loadDepartmentInventory}
           disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading && <Spinner />}
+          <span>{loading ? 'Loading…' : 'Refresh'}</span>
         </button>
         
         <select
@@ -204,7 +242,7 @@ function DepartmentInventorySection() {
             setSelectedBranch(e.target.value)
             setCurrentPage(1)
           }}
-          className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="All Branches">All Branches</option>
           {branches.map(branch => (
@@ -218,7 +256,7 @@ function DepartmentInventorySection() {
             setSelectedDepartment(e.target.value)
             setCurrentPage(1)
           }}
-          className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="All Departments">All Departments</option>
           {departments.map(dept => (
@@ -227,19 +265,21 @@ function DepartmentInventorySection() {
         </select>
         
         <button
-          onClick={exportDepartmentCSV}
+          onClick={() => exportDepartmentExcel().catch(() => null)}
           disabled={departmentData.length === 0}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export CSV
+          {exportingExcel && <Spinner />}
+          <span>{exportingExcel ? 'Exporting…' : 'Download Excel'}</span>
         </button>
         
         <button
           onClick={exportDepartmentPDF}
           disabled={departmentData.length === 0}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export PDF
+          {exportingPDF && <Spinner />}
+          <span>{exportingPDF ? 'Exporting…' : 'Download PDF'}</span>
         </button>
       </div>
       
@@ -268,11 +308,15 @@ function DepartmentInventorySection() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
-                <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                    Loading department inventory data...
-                  </td>
-                </tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <td key={j} className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
@@ -340,6 +384,8 @@ function DepartmentInventorySection() {
 function ItemsInventorySection() {
   const [itemsData, setItemsData] = useState([])
   const [loading, setLoading] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -373,6 +419,7 @@ function ItemsInventorySection() {
     const ac = new AbortController()
     const run = async () => {
       try {
+        setLoading(true)
         const response = await fetch('/api/admin/inventory/items', { cache: 'no-store', signal: ac.signal })
         const result = await response.json()
         if (result.ok) {
@@ -387,6 +434,8 @@ function ItemsInventorySection() {
         }
         console.error('Error loading items inventory:', error)
         setItemsData([])
+      } finally {
+        if (!ac.signal.aborted) setLoading(false)
       }
     }
     run()
@@ -400,31 +449,47 @@ function ItemsInventorySection() {
   const totalPages = Math.ceil(itemsData.length / itemsPerPage)
   const showPagination = itemsData.length > itemsPerPage
 
-  // Export functions
-  const exportItemsCSV = () => {
-    const headers = ['SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
-    const csvContent = [
-      headers.join(','),
-      ...itemsData.map(row => [
+  const exportItemsExcel = async () => {
+    if (!itemsData?.length) return
+    setExportingExcel(true)
+    try {
+      const headers = ['SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
+      const rows = itemsData.map((row) => [
         row.sku,
         row.item_name,
-        (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0),
-        (row.confirmed_demand ?? row.pending_delivery_qty ?? 0),
-        (row.delivered_qty ?? row.delivered_demand ?? 0),
-        (row.total_demand ?? ((row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) + (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) + (row.delivered_qty ?? row.delivered_demand ?? 0)))
-      ].map(field => `"${String(field ?? '').replace(/\"/g,'""')}"`).join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `items_inventory_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+        row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0,
+        row.confirmed_demand ?? row.pending_delivery_qty ?? 0,
+        row.delivered_qty ?? row.delivered_demand ?? 0,
+        row.total_demand ??
+          (row.pending_demand ?? ((row.allocated_qty || 0) - (row.pending_delivery_qty || 0)) ?? 0) +
+            (row.confirmed_demand ?? row.pending_delivery_qty ?? 0) +
+            (row.delivered_qty ?? row.delivered_demand ?? 0),
+      ])
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Items Inventory')
+      ws.addRow(['Food Distribution — Items Inventory'])
+      ws.addRow([`Generated: ${new Date().toLocaleString()}`])
+      ws.addRow(headers)
+      for (const r of rows) ws.addRow(r)
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `items_inventory_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setExportingExcel(false)
+    }
   }
 
   const exportItemsPDF = async () => {
+    setExportingPDF(true)
     try {
       // Check if there's data to export
       if (!itemsData || itemsData.length === 0) {
@@ -435,7 +500,7 @@ function ItemsInventorySection() {
       const { jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
       
-      const doc = new jsPDF()
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       doc.setFontSize(16)
       doc.text('Items Inventory Report', 20, 20)
       doc.setFontSize(10)
@@ -454,17 +519,27 @@ function ItemsInventorySection() {
         head: [['SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']],
         body: tableData,
         startY: 40,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] }
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 30 }, // SKU
+          1: { cellWidth: 140 }, // Item
+          2: { cellWidth: 22, halign: 'right' }, // Pending
+          3: { cellWidth: 22, halign: 'right' }, // Posted
+          4: { cellWidth: 22, halign: 'right' }, // Delivered
+          5: { cellWidth: 26, halign: 'right' }, // Total Demand
+        },
       })
       
       doc.save(`items_inventory_${new Date().toISOString().split('T')[0]}.pdf`)
-      
-      // Show success message
-      alert('PDF exported successfully!')
     } catch (error) {
       console.error('PDF export error:', error)
       alert('PDF export failed. Please try again.')
+    } finally {
+      setExportingPDF(false)
     }
   }
 
@@ -477,25 +552,28 @@ function ItemsInventorySection() {
         <button
           onClick={loadItemsInventory}
           disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading && <Spinner />}
+          <span>{loading ? 'Loading…' : 'Refresh'}</span>
         </button>
         
         <button
-          onClick={exportItemsCSV}
+          onClick={() => exportItemsExcel().catch(() => null)}
           disabled={itemsData.length === 0}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export CSV
+          {exportingExcel && <Spinner />}
+          <span>{exportingExcel ? 'Exporting…' : 'Download Excel'}</span>
         </button>
         
         <button
           onClick={exportItemsPDF}
           disabled={itemsData.length === 0}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export PDF
+          {exportingPDF && <Spinner />}
+          <span>{exportingPDF ? 'Exporting…' : 'Download PDF'}</span>
         </button>
       </div>
       
@@ -522,11 +600,15 @@ function ItemsInventorySection() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
-                <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                    Loading items inventory data...
-                  </td>
-                </tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
@@ -596,6 +678,8 @@ function DeliveryMemberInventorySection() {
   const [deliveryBranch, setDeliveryBranch] = useState('')
   const [memberBranch, setMemberBranch] = useState('')
   const [branches, setBranches] = useState([])
+  const [exportingExcel, setExportingExcel] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -634,6 +718,7 @@ function DeliveryMemberInventorySection() {
     const ac = new AbortController()
     const run = async () => {
       try {
+        setLoading(true)
         const params = new URLSearchParams()
         if (deliveryBranch) params.append('delivery', deliveryBranch)
         if (memberBranch) params.append('member', memberBranch)
@@ -641,6 +726,9 @@ function DeliveryMemberInventorySection() {
         const json = await res.json()
         if (json.ok) setRows(json.data || [])
       } catch (_) {}
+      finally {
+        if (!ac.signal.aborted) setLoading(false)
+      }
     }
     run()
     return () => ac.abort()
@@ -655,33 +743,47 @@ function DeliveryMemberInventorySection() {
     setCurrentPage(1)
   }, [deliveryBranch, memberBranch])
 
-  // Export CSV
-  const exportCSV = () => {
-    const headers = ['Delivery Branch', 'Member Branch', 'Pending', 'Posted', 'Delivered', 'Total']
-    const csv = [
-      headers.join(','),
-      ...rows.map(r => [
+  const exportExcel = async () => {
+    if (!rows?.length) return
+    setExportingExcel(true)
+    try {
+      const headers = ['Delivery Branch', 'Member Branch', 'Pending', 'Posted', 'Delivered', 'Total']
+      const dataRows = rows.map((r) => [
         r.delivery_branch_name,
         r.branch_name,
         r.pending || 0,
         r.posted || 0,
         r.delivered || 0,
-        r.total || 0
-      ].map(v => `"${String(v ?? '').replace(/\"/g,'""')}"`).join(','))
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const d = deliveryBranch ? deliveryBranch.replace(/\s+/g,'_') : 'all_delivery'
-    const m = memberBranch ? memberBranch.replace(/\s+/g,'_') : 'all_member'
-    a.download = `delivery_vs_branch_${d}_${m}_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+        r.total || 0,
+      ])
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Delivery vs Branch')
+      ws.addRow(['Food Distribution — Delivery Branch & Branch'])
+      ws.addRow([`Filters: Delivery=${deliveryBranch || 'All'} | Member=${memberBranch || 'All'}`])
+      ws.addRow(headers)
+      for (const r of dataRows) ws.addRow(r)
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const d = deliveryBranch ? deliveryBranch.replace(/\s+/g, '_') : 'all_delivery'
+      const m = memberBranch ? memberBranch.replace(/\s+/g, '_') : 'all_member'
+      a.download = `delivery_vs_branch_${d}_${m}_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setExportingExcel(false)
+    }
   }
 
   // Export PDF
   const exportPDF = async () => {
+    setExportingPDF(true)
     try {
       if (!rows || rows.length === 0) return
       const { jsPDF } = await import('jspdf')
@@ -702,15 +804,27 @@ function DeliveryMemberInventorySection() {
           r.total || 0
         ]),
         startY: 32,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [66, 139, 202] },
-        margin: { left: 14, right: 14 }
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 85 }, // Delivery Branch
+          1: { cellWidth: 85 }, // Member Branch
+          2: { cellWidth: 22, halign: 'right' }, // Pending
+          3: { cellWidth: 22, halign: 'right' }, // Posted
+          4: { cellWidth: 22, halign: 'right' }, // Delivered
+          5: { cellWidth: 22, halign: 'right' }, // Total
+        },
       })
       const d = deliveryBranch ? deliveryBranch.replace(/\s+/g,'_') : 'all_delivery'
       const m = memberBranch ? memberBranch.replace(/\s+/g,'_') : 'all_member'
       doc.save(`delivery_vs_branch_${d}_${m}_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (e) {
       console.error('PDF export error:', e)
+    } finally {
+      setExportingPDF(false)
     }
   }
 
@@ -719,19 +833,46 @@ function DeliveryMemberInventorySection() {
       <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">Admin — Inventory by Delivery Branch & Branch</h2>
 
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6">
-        <button onClick={load} disabled={loading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">
-          {loading ? 'Loading...' : 'Refresh'}
+        <button
+          onClick={load}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+        >
+          {loading && <Spinner />}
+          <span>{loading ? 'Loading…' : 'Refresh'}</span>
         </button>
-        <select value={deliveryBranch} onChange={e=>setDeliveryBranch(e.target.value)} className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select
+          value={deliveryBranch}
+          onChange={(e) => setDeliveryBranch(e.target.value)}
+          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+        >
           <option value="">All Delivery Branches</option>
           {branches.map(b => (<option key={`del-${b.code}`} value={b.name}>{b.name}</option>))}
         </select>
-        <select value={memberBranch} onChange={e=>setMemberBranch(e.target.value)} className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select
+          value={memberBranch}
+          onChange={(e) => setMemberBranch(e.target.value)}
+          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+        >
           <option value="">All Member Branches</option>
           {branches.map(b => (<option key={`mem-${b.code}`} value={b.name}>{b.name}</option>))}
         </select>
-        <button onClick={exportCSV} disabled={rows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">Export CSV</button>
-        <button onClick={exportPDF} disabled={rows.length === 0} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors">Export PDF</button>
+        <button
+          onClick={() => exportExcel().catch(() => null)}
+          disabled={rows.length === 0}
+          className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+        >
+          {exportingExcel && <Spinner />}
+          <span>{exportingExcel ? 'Exporting…' : 'Download Excel'}</span>
+        </button>
+        <button
+          onClick={exportPDF}
+          disabled={rows.length === 0}
+          className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+        >
+          {exportingPDF && <Spinner />}
+          <span>{exportingPDF ? 'Exporting…' : 'Download PDF'}</span>
+        </button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -749,7 +890,15 @@ function DeliveryMemberInventorySection() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
-                <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">Loading data...</td></tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : paginated.length === 0 ? (
                 <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">No data found.</td></tr>
               ) : (
@@ -788,9 +937,11 @@ function DeliveryMemberInventorySection() {
 }
 
 function InventoryPageContent() {
-  const [rows, setRows] = useState([])
+  const [rows, setRows] = useState(null)
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
   const [branchCode, setBranchCode] = useState('')
   const [sku, setSku] = useState('')
   const [qty, setQty] = useState('')
@@ -813,16 +964,23 @@ function InventoryPageContent() {
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
 
-  const load = async (signal) => {
+  const normalizeSignal = (v) => {
+    if (!v) return undefined
+    if (typeof v !== 'object') return undefined
+    if (typeof v.aborted !== 'boolean') return undefined
+    if (typeof v.addEventListener !== 'function') return undefined
+    return v
+  }
+
+  const load = async (signalLike) => {
     setLoading(true); setMsg(null)
     try {
-      const res = await fetch('/api/admin/inventory/status', { cache: 'no-store', signal })
+      const res = await fetch('/api/admin/inventory/status', { cache: 'no-store', signal: normalizeSignal(signalLike) })
       const json = await safeJson(res, '/api/admin/inventory/status')
       if (!json.ok) throw new Error(json.error)
       setRows(json.rows || [])
     } catch (e) {
       if (e?.name === 'AbortError' || /aborted|Abort|Failed to fetch|NETWORK_ERROR/i.test(e?.message || '')) {
-        setRows([])
         setLoading(false)
         return
       }
@@ -909,43 +1067,57 @@ function InventoryPageContent() {
     }
   }
 
-  // Export functions - simplified for demand tracking only
-  const exportToCSV = () => {
-    const headers = ['Branch', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
-    
-    let dataToExport = rows
-    if (selectedBranch) {
-      dataToExport = dataToExport.filter(r => r.branch_name === selectedBranch)
+  const exportToExcel = async () => {
+    if (!rows?.length) return
+    setExportingExcel(true)
+    try {
+      const headers = ['Branch', 'SKU', 'Item', 'Pending', 'Posted', 'Delivered', 'Total Demand']
+
+      let dataToExport = rows
+      if (selectedBranch) {
+        dataToExport = dataToExport.filter((r) => r.branch_name === selectedBranch)
+      }
+
+      const tableData = dataToExport.map((r) => [
+        r.branch_name || '',
+        r.sku || '',
+        r.item_name || '',
+        r.pending_demand ?? 0,
+        r.confirmed_demand ?? 0,
+        r.delivered_qty ?? r.delivered_demand ?? 0,
+        r.total_demand ??
+          (r.pending_demand || 0) + (r.confirmed_demand || 0) + (r.delivered_qty || r.delivered_demand || 0) ??
+          (r.allocated_qty || 0) + (r.delivered_qty || r.delivered_demand || 0) ??
+          0,
+      ])
+
+      const ExcelJSMod = await import('exceljs')
+      const ExcelJS = ExcelJSMod?.default ?? ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Inventory')
+      ws.addRow(['Food Distribution — Inventory by Branch'])
+      ws.addRow([`Filters: ${selectedBranch ? `Branch: ${selectedBranch}` : 'All branches'}`])
+      ws.addRow(headers)
+      for (const r of tableData) ws.addRow(r)
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const branchFilter = selectedBranch ? selectedBranch.replace(/\s+/g, '_') : 'all_branches'
+      a.download = `inventory_${branchFilter}_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setExportingExcel(false)
     }
-    
-    const csvContent = [
-      headers.join(','),
-      ...dataToExport.map(r => {
-        return [
-          r.branch_name || '',
-          r.sku || '',
-          r.item_name || '',
-          (r.pending_demand ?? 0),
-          (r.confirmed_demand ?? 0),
-          (r.delivered_qty ?? r.delivered_demand ?? 0),
-          (r.total_demand ?? ((r.pending_demand || 0) + (r.confirmed_demand || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? ((r.allocated_qty || 0) + (r.delivered_qty || r.delivered_demand || 0)) ?? 0)
-        ].join(',')
-      })
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const branchFilter = selectedBranch ? selectedBranch.replace(/\s+/g, '_') : 'all_branches'
-    a.download = `inventory_${branchFilter}_${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
   }
 
   const exportToPDF = async () => {
+    setExportingPDF(true)
     try {
       // Check if there's data to export
       if (!rows || rows.length === 0) {
@@ -1000,14 +1172,20 @@ function InventoryPageContent() {
         head: [headers],
         body: tableData,
         startY: 30,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [66, 139, 202] },
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak', lineWidth: 0.1, lineColor: [0, 0, 0] },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
         columnStyles: {
           0: { cellWidth: 25 }, // Branch
           1: { cellWidth: 20 }, // SKU
-          2: { cellWidth: 40 }, // Item
+          2: { cellWidth: 90 }, // Item
+          3: { cellWidth: 22, halign: 'right' }, // Pending
+          4: { cellWidth: 22, halign: 'right' }, // Posted
+          5: { cellWidth: 22, halign: 'right' }, // Delivered
+          6: { cellWidth: 26, halign: 'right' }, // Total Demand
         },
-        margin: { left: 14, right: 14 }
+        margin: { left: 10, right: 10 },
       })
       
       const branchFilter = selectedBranch ? selectedBranch.replace(/\s+/g, '_') : 'all_branches'
@@ -1018,6 +1196,8 @@ function InventoryPageContent() {
     } catch (error) {
       console.error('PDF export error:', error)
       setMsg({ type: 'error', text: 'PDF export failed. Please try again.' })
+    } finally {
+      setExportingPDF(false)
     }
   }
 
@@ -1025,6 +1205,8 @@ function InventoryPageContent() {
   useEffect(() => {
     setCurrentPage(1)
   }, [selectedBranch])
+
+  const busy = loading || rows === null
 
   return (
     <div className="p-2 lg:p-3 xl:p-4 max-w-7xl mx-auto">
@@ -1037,17 +1219,18 @@ function InventoryPageContent() {
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6">
         <button 
-          onClick={load}
-          disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          onClick={() => load()}
+          disabled={busy}
+          className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-950 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {busy && <Spinner />}
+          <span>{busy ? 'Loading…' : 'Refresh'}</span>
         </button>
         
         <select 
           value={selectedBranch}
           onChange={(e) => setSelectedBranch(e.target.value)}
-          className="border border-gray-300 rounded px-2 sm:px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="">All Branches</option>
           {branches.map(branch => (
@@ -1056,35 +1239,45 @@ function InventoryPageContent() {
         </select>
         
         <button 
-          onClick={exportToCSV}
-          disabled={rows.length === 0}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          onClick={() => exportToExcel().catch(() => null)}
+          disabled={!Array.isArray(rows) || rows.length === 0}
+          className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export CSV
+          {exportingExcel && <Spinner />}
+          <span>{exportingExcel ? 'Exporting…' : 'Download Excel'}</span>
         </button>
         
         <button 
           onClick={exportToPDF}
-          disabled={rows.length === 0}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base transition-colors"
+          disabled={!Array.isArray(rows) || rows.length === 0}
+          className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          Export PDF
+          {exportingPDF && <Spinner />}
+          <span>{exportingPDF ? 'Exporting…' : 'Download PDF'}</span>
         </button>
       </div>
       
       {msg && (
-        <div className={`text-sm mb-4 ${msg.type === 'error' ? 'text-red-700' : 'text-green-700'}`}>
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm ${
+            msg.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'
+          }`}
+        >
           {msg.text}
         </div>
       )}
       
       {/* Data Summary */}
-      {filteredAndPaginatedRows.rows.length > 0 && (
+      {busy && (!Array.isArray(rows) || rows.length === 0) ? (
+        <div className="text-xs sm:text-sm text-gray-600 mb-3 p-2 sm:p-0">
+          <div className="h-4 w-64 bg-gray-100 rounded animate-pulse" />
+        </div>
+      ) : filteredAndPaginatedRows.rows.length > 0 ? (
         <div className="text-xs sm:text-sm text-gray-600 mb-3 p-2 sm:p-0">
           Showing {filteredAndPaginatedRows.rows.length} of {filteredAndPaginatedRows.totalItems} items
           {selectedBranch && ` (filtered by ${selectedBranch})`}
         </div>
-      )}
+      ) : null}
 
       {/* Data Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -1102,7 +1295,17 @@ function InventoryPageContent() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAndPaginatedRows.rows.length > 0 ? (
+              {busy ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <td key={j} className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : filteredAndPaginatedRows.rows.length > 0 ? (
                 filteredAndPaginatedRows.rows.map((row, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-900">{row.branch_name}</td>

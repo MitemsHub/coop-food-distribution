@@ -156,6 +156,20 @@ export async function GET(req) {
       }
     }
 
+    let rateByCycleId = new Map()
+    try {
+      const uniqCycleIds = Array.from(new Set((cycleIds || []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)))
+      if (uniqCycleIds.length > 0) {
+        const { data: rRows, error: rErr } = await supabase
+          .from('cycles')
+          .select('id,food_loan_interest_rate_pct')
+          .in('id', uniqCycleIds)
+        if (!rErr && Array.isArray(rRows)) {
+          rateByCycleId = new Map(rRows.map((r) => [Number(r.id), Math.max(0, Number(r.food_loan_interest_rate_pct || 0))]))
+        }
+      }
+    } catch {}
+
     // Enrich rows with OriginalPrice, Markup, Interest
     const rows = baseRows.map((r, idx) => {
       const code = (allData[idx] || {}).branch_code
@@ -167,7 +181,8 @@ export async function GET(req) {
         : null
       const markup = key2 ? (markupByBranchAndName.get(key2) || 0) : 0
       const basePrice = Number(r.Price) - Number(markup)
-      const interest = r.Payment === 'Loan' ? Math.round(r.Amount * 0.13) : 0
+      const ratePct = rateByCycleId.size ? (rateByCycleId.get(Number(cycleId)) ?? 13) : 13
+      const interest = r.Payment === 'Loan' ? Math.round(Number(r.Amount || 0) * (Math.max(0, Number(ratePct || 0)) / 100)) : 0
       return {
         ...r,
         OriginalPrice: Number(basePrice),

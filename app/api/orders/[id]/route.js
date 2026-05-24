@@ -21,12 +21,13 @@ export async function GET(_req, { params }) {
       posted_at,
       payment_option,
       total_amount,
+      cycle_id,
       member_id,
       member_name_snapshot,
       member_category_snapshot,
       branch_id,
       delivery_branch_id,
-      delivery:delivery_branch_id(code,name),
+      delivery:delivery_branch_id(code,name,rep_phone),
       member_branch:branch_id(code,name),
       departments:department_id(name),
       order_lines(qty, unit_price, amount, items:item_id(sku, name))
@@ -46,7 +47,7 @@ export async function GET(_req, { params }) {
     const fixes = []
     if (!data.delivery && data.delivery_branch_id) {
       fixes.push(
-        supabase.from('branches').select('code,name').eq('id', data.delivery_branch_id).single()
+        supabase.from('branches').select('code,name,rep_phone').eq('id', data.delivery_branch_id).single()
           .then(r => ({ key: 'delivery', val: r.data || null }))
       )
     }
@@ -61,7 +62,32 @@ export async function GET(_req, { params }) {
       for (const r of rs) if (r?.key) data[r.key] = r.val
     }
 
-    return NextResponse.json({ ok: true, order: data })
+    const principal = Number((data.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
+    const interest = data.payment_option === 'Loan' ? Math.max(0, Number(data.total_amount || 0) - principal) : 0
+
+    let loanInterestRatePct = 13
+    try {
+      if (data.cycle_id) {
+        const { data: cRow, error: cErr } = await supabase
+          .from('cycles')
+          .select('food_loan_interest_rate_pct')
+          .eq('id', data.cycle_id)
+          .maybeSingle()
+        if (!cErr && cRow && cRow.food_loan_interest_rate_pct != null) {
+          loanInterestRatePct = Math.max(0, Number(cRow.food_loan_interest_rate_pct || 0))
+        }
+      }
+    } catch {}
+
+    return NextResponse.json({
+      ok: true,
+      order: {
+        ...data,
+        principal_amount: principal,
+        loan_interest_amount: interest,
+        loan_interest_rate_pct: loanInterestRatePct,
+      },
+    })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }

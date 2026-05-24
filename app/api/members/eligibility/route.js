@@ -17,6 +17,19 @@ export async function GET(req) {
       return NextResponse.json({ ok: false, error: 'member_id or id required' }, { status: 400 })
     }
 
+    let interestRatePct = 13
+    try {
+      const { data: cRow, error: cErr } = await supabase
+        .from('cycles')
+        .select('id,food_loan_interest_rate_pct')
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!cErr && cRow && cRow.food_loan_interest_rate_pct != null) {
+        interestRatePct = Math.max(0, Number(cRow.food_loan_interest_rate_pct || 0))
+      }
+    } catch {}
+    const interestRate = Math.max(0, Number(interestRatePct || 0)) / 100
+
     // 1) Member snapshot (core balances)
     const { data: m, error: mErr } = await supabase
       .from('members')
@@ -47,7 +60,7 @@ export async function GET(req) {
     if (savExp.error) return NextResponse.json({ ok: false, error: savExp.error.message }, { status: 500 })
 
     const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
-    // Loan orders' total_amount already includes 13% interest; treat this as total exposure
+    // Loan orders' total_amount already includes interest; treat this as total exposure
     const loanExposure = sumAmt(loanExp.data)
     const savingsExposure = sumAmt(savExp.data)
 
@@ -56,7 +69,6 @@ export async function GET(req) {
     const loans = Number(m.loans || 0)
     const globalLimit = Number(m.global_limit || 0)
 
-    const INTEREST_RATE = 0.13
     const outstandingLoansTotal = loans + loanExposure
     
     // Savings follows original rule (50% of savings) and does NOT include facility
@@ -81,7 +93,9 @@ export async function GET(req) {
         loanEligible,
         outstandingLoansTotal,
         savingsExposure,
-        loanExposure
+        loanExposure,
+        interest_rate: interestRate,
+        interest_rate_pct: interestRatePct
       },
       memberSnapshot: {
         savings,

@@ -1,10 +1,21 @@
 // app/rep/posted/page.jsx
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import DraggableModal from '../../components/DraggableModal'
+
+const Spinner = ({ className = 'h-4 w-4 text-white' }) => (
+  <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+)
 
 function RepPostedPageContent() {
   const [orders, setOrders] = useState([])
@@ -15,14 +26,18 @@ function RepPostedPageContent() {
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [deliveringOrder, setDeliveringOrder] = useState(null) // Track which order is being delivered
+  const [pageSize] = useState(50)
+  const [cursorStack, setCursorStack] = useState([null])
+  const [pageIndex, setPageIndex] = useState(0)
   const [nextCursor, setNextCursor] = useState(null)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
   const [itemsPackLoading, setItemsPackLoading] = useState(false)
   const [excelLoading, setExcelLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
+  const [viewOrder, setViewOrder] = useState(null)
   const { user, logout } = useAuth()
-  const router = useRouter()
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
@@ -35,6 +50,20 @@ function RepPostedPageContent() {
     if (confirm('Are you sure you want to change your branch? You will be logged out and redirected to the login page.')) {
       logout()
     }
+  }
+
+  const filteredOrders = useMemo(() => {
+    const s = String(search || '').trim().toLowerCase()
+    if (!s) return orders || []
+    return (orders || []).filter((o) => {
+      const hay = `${o.order_id} ${o.member_id} ${o.member_name_snapshot || ''}`.toLowerCase()
+      return hay.includes(s)
+    })
+  }, [orders, search])
+
+  const openView = (o) => {
+    setViewOrder(o)
+    setViewOpen(true)
   }
 
   useEffect(() => {
@@ -50,21 +79,28 @@ function RepPostedPageContent() {
 
   useEffect(() => { 
     if (user?.type !== 'rep' || !user?.authenticated) return
-    fetchOrders(true) 
+    fetchOrders(null) 
   }, [dept, user])
 
-  const fetchOrders = async (reset = true) => {
+  const resetPagination = () => {
+    setCursorStack([null])
+    setPageIndex(0)
+    setNextCursor(null)
+  }
+
+  const fetchOrders = async (cursorOverride) => {
     setLoading(true); setMsg(null)
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), 5000)
     try {
-      const qs = new URLSearchParams({ status: 'Posted', limit: '50' })
+      const cursor = cursorOverride !== undefined ? cursorOverride : cursorStack[pageIndex] || null
+      const qs = new URLSearchParams({ status: 'Posted', limit: String(pageSize) })
       if (dept) qs.set('dept', dept)
-      if (!reset && nextCursor) { qs.set('cursor', nextCursor); qs.set('dir', 'next') }
+      if (cursor) { qs.set('cursor', String(cursor)); qs.set('dir', 'next') }
       const res = await fetch(`/api/rep/orders/list?${qs.toString()}`, { cache: 'no-store', headers:{ 'Accept':'application/json' }, signal: ctl.signal })
       const json = await safeJson(res, '/api/rep/orders/list')
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
-      setOrders(reset ? (json.orders || []) : [...orders, ...(json.orders || [])])
+      setOrders(json.orders || [])
       setNextCursor(json.nextCursor || null)
     } catch (e) {
       if (e.name !== 'AbortError') setMsg({ type:'error', text:e.message })
@@ -135,63 +171,6 @@ function RepPostedPageContent() {
       // Always close the modal after finishing (success or error)
       setShowModal(null)
     }
-  }
-
-  const exportCSV = () => {
-    const filtered = !search ? orders : orders.filter(o => {
-      const s = search.toLowerCase()
-      return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
-    })
-    const filterLineByDept = (line, orderDeptName, selectedDeptName) => {
-      if (!selectedDeptName) return true
-      const orderMatches = String(orderDeptName || '').trim().toLowerCase() === String(selectedDeptName).trim().toLowerCase()
-      const itemDeptId = line?.items?.department_id
-      // We only have the selected dept name; rows include the order dept name and item dept id.
-      // If order dept name matches, include all lines. Otherwise include when item has a dept id (client-side cannot map id->name reliably).
-      // This heuristic prevents excluding lines from orders missing department_id but items carry department tags.
-      return orderMatches || Boolean(itemDeptId)
-    }
-    const rows = filtered.flatMap(o => (o.order_lines || [])
-      .filter(l => filterLineByDept(l, o.departments?.name, dept))
-      .map(l => ({
-        ID:o.member_id,
-        Order:o.order_id,
-        Member:o.member_name_snapshot,
-        Dept:o.departments?.name||'',
-        Pay:o.payment_option,
-        Item:l.items?.name,
-        Qty:Number(l.qty||0),
-        'Unit Price':Number(l.unit_price||0),
-        Amount:Number(l.amount||0),
-        Remarks:'',
-        Sign:''
-      })))
-    if (!rows.length) return alert('No rows to export')
-    const headers = ['ID','Order','Member','Dept','Pay','Item','Qty','Unit Price','Amount','Remarks','Sign']
-    const bodyLines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))
-
-    // Footer rows: empty spacer, SIGNATURE/DATE at last two columns, Issued/Received under column C
-    const empty = headers.map(()=> '""').join(',')
-    const sigDate = headers.map((_, i) => {
-      // Place DATE in column E (index 4), SIGN in column F (index 5)
-      if (i === 4) return '"DATE"'
-      if (i === 5) return '"SIGN"'
-      return '""'
-    }).join(',')
-    const issued = headers.map((_, i) => i === 2 ? '"ITEMS ISSUED BY"' : '""').join(',')
-    const received = headers.map((_, i) => i === 2 ? '"ITEMS RECEIVED BY"' : '""').join(',')
-
-    const csv = [
-      headers.join(','),
-      ...bodyLines,
-      empty,
-      sigDate,
-      issued,
-      received
-    ].join('\n')
-    const blob = new Blob([csv], { type:'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob); const a = document.createElement('a')
-    a.href = url; a.download = 'rep_posted.csv'; a.click(); URL.revokeObjectURL(url)
   }
 
   const exportPDF = async () => {
@@ -569,94 +548,6 @@ function RepPostedPageContent() {
     }
   }
 
-  const exportItemsPackCSV = async () => {
-    try {
-      const qs = new URLSearchParams()
-      if (dept) qs.set('dept', dept)
-      const res = await fetch(`/api/rep/items-pack?${qs.toString()}`, { cache: 'no-store' })
-      const ct = res.headers.get('content-type') || ''
-      if (!ct.includes('application/json')) throw new Error(`Unexpected response (${res.status})`)
-      const json = await res.json()
-      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load items pack')
-
-      const branchLabel = json.branch?.name || json.branch?.code || (user?.branchCode || 'Branch')
-      const title = `Summary of Items from ${branchLabel}${dept ? ' — ' + dept : ''}`
-      const headers = ['SN','Items','Category','Price','Quantity','Amount']
-
-      const sorted = [...(json.rows || [])].sort((a,b)=>{
-        const ac = String(a.category||'').toLowerCase()
-        const bc = String(b.category||'').toLowerCase()
-        if (ac < bc) return -1
-        if (ac > bc) return 1
-        const ai = String(a.items||'').toLowerCase()
-        const bi = String(b.items||'').toLowerCase()
-        if (ai < bi) return -1
-        if (ai > bi) return 1
-        return 0
-      })
-
-      let sn = 0
-      let totalQty = 0
-      let totalAmount = 0
-      const rows = sorted.map(r => {
-        sn += 1
-        const original = Number(r.original_price || 0)
-        const markup = Number(r.markup || 0)
-        const qty = Number(r.quantity || 0)
-        const price = original + markup
-        const amount = price * qty
-        totalQty += qty
-        totalAmount += amount
-        return {
-          SN: sn,
-          Items: r.items,
-          Category: r.category || '',
-          Price: Number(price).toLocaleString(),
-          Quantity: Number(qty).toLocaleString(),
-          Amount: Number(amount).toLocaleString()
-        }
-      })
-
-      const totalsRow = {
-        SN: '', Items: 'TOTAL', Category: '', Price: '', Quantity: Number(totalQty).toLocaleString(), Amount: Number(totalAmount).toLocaleString()
-      }
-
-      const csvLines = []
-      csvLines.push(title)
-      csvLines.push(headers.join(','))
-      const sanitize = s => String(s ?? '').replace(/\u20A6|₦/g, 'NGN ').replace(/"/g, '""')
-      const headerKeys = headers
-      rows.forEach(r => {
-        csvLines.push(headerKeys.map(h => `"${sanitize(r[h])}"`).join(','))
-      })
-      csvLines.push(headerKeys.map(h => `"${sanitize(totalsRow[h])}"`).join(','))
-      // Footer rows
-      const empty = headerKeys.map(()=> '""').join(',')
-      const sigDate = headerKeys.map((_, i) => {
-        if (i === headerKeys.length - 2) return '"SIGNATURE"'
-        if (i === headerKeys.length - 1) return '"DATE"'
-        return '""'
-      }).join(',')
-      const issued = headerKeys.map((_, i) => i === 2 ? '"ITEMS ISSUED BY"' : '""').join(',')
-      const received = headerKeys.map((_, i) => i === 2 ? '"ITEMS RECEIVED BY"' : '""').join(',')
-      csvLines.push(empty)
-      csvLines.push(sigDate)
-      csvLines.push(issued)
-      csvLines.push(received)
-
-      const blob = new Blob([csvLines.join('\n')], { type:'text/csv;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Items_Pack_${branchLabel}_${dept || 'ALL_DEPTS'}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      console.error('Rep Items Pack CSV export failed:', e)
-      alert(`Items Pack CSV export failed: ${e.message}`)
-    }
-  }
-
   const exportItemsPackPDF = async () => {
     try {
       const qs = new URLSearchParams()
@@ -669,7 +560,7 @@ function RepPostedPageContent() {
 
       const { jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
-      const doc = new jsPDF()
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
       const branchLabel = json.branch?.name || json.branch?.code || (user?.branchCode || 'Branch')
       const title = `Summary of Items from ${branchLabel}${dept ? ' — ' + dept : ''}`
@@ -719,10 +610,25 @@ function RepPostedPageContent() {
         head: [headers],
         body: tableData,
         startY: 36,
-        styles: { fontSize: 8, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2 },
-        headStyles: { fillColor: [75, 85, 99] },
+        styles: { fontSize: 9, lineWidth: 0.1, lineColor: [0,0,0], cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [249, 250, 251] },
-        theme: 'grid'
+        theme: 'grid',
+        columnStyles: {
+          0: { cellWidth: 12, halign: 'right' }, // SN
+          1: { cellWidth: 92 }, // Items
+          2: { cellWidth: 46 }, // Category
+          3: { cellWidth: 26, halign: 'right' }, // Price
+          4: { cellWidth: 26, halign: 'right' }, // Quantity
+          5: { cellWidth: 32, halign: 'right' }, // Amount
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.row.index === tableData.length - 1) {
+            data.cell.styles.fillColor = [75, 85, 99]
+            data.cell.styles.textColor = [255, 255, 255]
+            data.cell.styles.fontStyle = 'bold'
+          }
+        },
       })
 
       // Footer rows
@@ -747,181 +653,265 @@ function RepPostedPageContent() {
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
-      <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mb-4">Rep — Posted Orders</h1>
-      
-      {/* Branch Code Display */}
-      <div className="mb-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-          <div className="flex items-center">
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <div>
-              <div className="text-xs sm:text-sm text-blue-600 font-medium">Current Branch</div>
-              <div className="text-sm sm:text-lg font-bold text-blue-800">{user?.branchCode || 'Unknown'}</div>
-            </div>
-          </div>
-          <div className="flex justify-start sm:justify-end">
-            <button 
-              onClick={changeBranch}
-              className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-xs sm:text-sm whitespace-nowrap"
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Rep — Food Distribution — Posted</h1>
+          <div className="text-xs text-gray-500">Current Branch: {user?.branchCode || '—'}</div>
+        </div>
+        <button
+          type="button"
+          onClick={changeBranch}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+        >
+          Change Branch
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+          <select
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white w-full lg:w-56"
+            value={dept}
+            onChange={(e) => {
+              const v = e.target.value
+              setDept(v)
+              resetPagination()
+              setOrders([])
+            }}
+          >
+            <option value="">All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2 flex-1 min-w-[220px] lg:max-w-[420px]">
+            <input
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm flex-1 bg-white"
+              placeholder="Search (Order / Member)"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setSearch(searchInput.trim())
+              }}
+            />
+            <button
+              type="button"
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap disabled:opacity-50"
+              onClick={() => setSearch(searchInput.trim())}
+              disabled={loading}
             >
-              <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              Change Branch
+              Search
+            </button>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-black text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              disabled={itemsPackLoading}
+              onClick={exportItemsPack}
+              aria-busy={itemsPackLoading}
+            >
+              {itemsPackLoading && <Spinner className="h-4 w-4 text-white" />}
+              <span>{itemsPackLoading ? 'Downloading…' : 'Items Pack'}</span>
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              onClick={() => exportExcel().catch(() => null)}
+              disabled={excelLoading}
+              aria-busy={excelLoading}
+            >
+              {excelLoading && <Spinner className="h-4 w-4 text-white" />}
+              <span>{excelLoading ? 'Downloading…' : 'Download Excel'}</span>
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              onClick={() => exportPDF().catch(() => null)}
+              disabled={pdfLoading}
+              aria-busy={pdfLoading}
+            >
+              {pdfLoading && <Spinner className="h-4 w-4 text-white" />}
+              <span>{pdfLoading ? 'Downloading…' : 'Download PDF'}</span>
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              onClick={() => fetchOrders(undefined).catch(() => null)}
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading && <Spinner className="h-4 w-4 text-white" />}
+              <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-4 items-start">
-        <select className="border rounded px-3 py-2 text-xs sm:text-sm w-full" value={dept} onChange={e=>setDept(e.target.value)}>
-          <option value="">All departments</option>
-          {departments.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <div className="flex gap-2 w-full">
-          <input
-            className="border rounded px-3 py-2 text-xs sm:text-sm w-full"
-            placeholder="Search ID or Order ID"
-            value={searchInput}
-            onChange={e=>setSearchInput(e.target.value)}
-            onKeyDown={(e)=>{ if(e.key==='Enter') setSearch(searchInput.trim()) }}
-          />
-          <button className="px-2 py-2 border rounded text-xs sm:text-sm whitespace-nowrap" onClick={()=>setSearch(searchInput.trim())}>Search</button>
-        </div>
-        <button
-          className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-purple-400 flex items-center justify-center gap-2"
-          disabled={itemsPackLoading}
-          onClick={exportItemsPack}
-          aria-busy={itemsPackLoading}
-        >
-          {itemsPackLoading ? (
-            <>
-              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Downloading…</span>
-            </>
-          ) : (
-            'Items Pack'
-          )}
-        </button>
-        {/* Items Pack CSV/PDF buttons temporarily removed as requested */}
-        <button
-          className="px-2 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-gray-500 flex items-center justify-center gap-2"
-          onClick={exportExcel}
-          disabled={excelLoading}
-          aria-busy={excelLoading}
-        >
-          {excelLoading ? (
-            <>
-              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Downloading…</span>
-            </>
-          ) : (
-            'Download Excel'
-          )}
-        </button>
-        <button
-          className="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full disabled:bg-emerald-400 flex items-center justify-center gap-2"
-          onClick={exportPDF}
-          disabled={pdfLoading}
-          aria-busy={pdfLoading}
-        >
-          {pdfLoading ? (
-            <>
-              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span>Downloading…</span>
-            </>
-          ) : (
-            'Download PDF'
-          )}
-        </button>
-        <button className="px-2 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm whitespace-nowrap w-full" onClick={()=>fetchOrders(true)}>{loading ? 'Loading…' : 'Refresh'}</button>
-      </div>
-
       {msg && <div className={`mb-3 text-sm ${msg.type==='error'?'text-red-700':'text-green-700'}`}>{msg.text}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {orders.length === 0 && <div className="col-span-full p-4 text-gray-600 text-center">No Posted orders.</div>}
-        {(
-          (!search ? orders : orders.filter(o => {
-            const s = search.toLowerCase()
-            return String(o.order_id).toLowerCase().includes(s) || String(o.member_id).toLowerCase().includes(s)
-          }))
-        ).map(o => (
-          <div key={o.order_id} className="border rounded-lg p-4 bg-white shadow-sm">
-            <div className="grid grid-cols-1 gap-2 mb-3">
-              <div className="font-medium text-xs sm:text-sm">#{o.order_id}</div>
-              <div className="text-xs sm:text-sm">{new Date(o.posted_at || o.created_at).toLocaleString()}</div>
-              <div className="text-xs sm:text-sm">{o.member_id} — {o.member_name_snapshot}</div>
-              <div className="text-xs sm:text-sm">Member: {o.member_branch?.name || '-'}</div>
-              <div className="text-xs sm:text-sm">Delivery: {o.delivery?.name || '-'}</div>
-              <div className="text-xs sm:text-sm">{o.departments?.name || '-'}</div>
-              <div className="text-xs sm:text-sm">Payment: <b>{o.payment_option}</b></div>
-            <div className="text-xs sm:text-sm font-medium">
-              {o.payment_option === 'Loan' ? 'Total with Interest:' : 'Total:'} ₦{Number(o.total_amount || 0).toLocaleString()}
-            </div>
-            </div>
-            <div className="flex justify-end mb-3">
-              <button 
-                className={`px-3 py-1 rounded text-xs sm:text-sm whitespace-nowrap transition-all duration-200 ${
-                  deliveringOrder === o.order_id 
-                    ? 'bg-gray-400 text-white cursor-not-allowed' 
-                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                }`}
-                onClick={() => deliverOne(o.order_id)}
-                disabled={deliveringOrder === o.order_id}
-              >
-                {deliveringOrder === o.order_id ? (
-                  <div className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Delivering...
-                  </div>
-                ) : (
-                  'Deliver'
-                )}
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 px-1">SKU</th>
-                    <th className="text-left py-2 px-1">Item</th>
-                    <th className="text-right py-2 px-1">Qty</th>
-                    <th className="text-right py-2 px-1">Unit Price</th>
-                    <th className="text-right py-2 px-1">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(o.order_lines || []).map(l => (
-                    <tr key={l.id} className="border-b border-gray-100">
-                      <td className="py-2 px-1">{l.items?.sku}</td>
-                      <td className="py-2 px-1">{l.items?.name}</td>
-                      <td className="py-2 px-1 text-right">{l.qty}</td>
-                      <td className="py-2 px-1 text-right">₦{Number(l.unit_price).toLocaleString()}</td>
-                      <td className="py-2 px-1 text-right">₦{Number(l.amount).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="text-sm font-semibold">Posted Orders</div>
+          <div className="flex items-center gap-2 text-xs font-normal text-gray-700">
+            <button
+              type="button"
+              className="px-2 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => {
+                if (pageIndex <= 0) return
+                const prevIndex = pageIndex - 1
+                setPageIndex(prevIndex)
+                fetchOrders(cursorStack[prevIndex] || null).catch(() => null)
+              }}
+              disabled={loading || pageIndex <= 0}
+            >
+              Prev
+            </button>
+            <div>Page {pageIndex + 1}</div>
+            <button
+              type="button"
+              className="px-2 py-1 rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => {
+                if (!nextCursor) return
+                const nextIndex = pageIndex + 1
+                setCursorStack((prev) => {
+                  const next = [...(prev || [])]
+                  if (next.length <= nextIndex) next.push(nextCursor)
+                  return next
+                })
+                setPageIndex(nextIndex)
+                fetchOrders(nextCursor).catch(() => null)
+              }}
+              disabled={loading || !nextCursor}
+            >
+              Next
+            </button>
           </div>
-        ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-3 text-left font-semibold text-gray-900">Order</th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-900">Member</th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-900">Department</th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-900">Payment</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-900">Total + Int</th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-900">Date</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-900">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {loading && filteredOrders.length === 0 ? (
+                Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={`sk_${i}`}>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <td key={`sk_${i}_${j}`} className="px-3 py-3">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-gray-600">
+                    No Posted orders.
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((o) => (
+                  <tr key={o.order_id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3 font-medium text-gray-900">#{o.order_id}</td>
+                    <td className="px-3 py-3">
+                      <div className="text-gray-900">{o.member_name_snapshot}</div>
+                      <div className="text-xs text-gray-500">{o.member_id}</div>
+                    </td>
+                    <td className="px-3 py-3">{o.departments?.name || '-'}</td>
+                    <td className="px-3 py-3">{o.payment_option}</td>
+                    <td className="px-3 py-3 text-right font-semibold">₦{Number(o.total_amount || 0).toLocaleString()}</td>
+                    <td className="px-3 py-3">{new Date(o.posted_at || o.created_at).toLocaleString()}</td>
+                    <td className="px-3 py-3 text-right">
+                      <select
+                        defaultValue=""
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
+                        onChange={(e) => {
+                          const v = e.target.value
+                          e.target.value = ''
+                          if (!v) return
+                          if (v === 'view') openView(o)
+                          if (v === 'deliver') deliverOne(o.order_id)
+                        }}
+                        disabled={deliveringOrder === o.order_id}
+                      >
+                        <option value="" disabled>
+                          Actions
+                        </option>
+                        <option value="view">View</option>
+                        <option value="deliver">Deliver</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {nextCursor && (
-        <div className="mt-4">
-          <button className="px-3 py-2 border rounded" onClick={() => fetchOrders(false)}>
-            {loading ? 'Loading…' : 'Load more'}
-          </button>
-        </div>
-      )}
+      <DraggableModal open={viewOpen} onClose={() => setViewOpen(false)} title={viewOrder ? `Order #${viewOrder.order_id}` : 'Order'}>
+        {!viewOrder ? (
+          <div className="text-sm text-gray-600">No order selected.</div>
+        ) : (
+          <div className="space-y-3">
+            <div className="text-sm">
+              <div>
+                <span className="text-gray-500">Member:</span> <span className="font-medium">{viewOrder.member_name_snapshot}</span>{' '}
+                <span className="text-gray-500">({viewOrder.member_id})</span>
+              </div>
+              <div className="text-gray-600">
+                {viewOrder.member_branch?.name ? `Member Branch: ${viewOrder.member_branch.name} • ` : ''}
+                {viewOrder.delivery?.name ? `Delivery: ${viewOrder.delivery.name} • ` : ''}
+                {viewOrder.departments?.name ? `Department: ${viewOrder.departments.name}` : 'Department: -'}
+              </div>
+              <div className="text-gray-600">
+                Payment: <span className="font-medium">{viewOrder.payment_option}</span> • Total:{' '}
+                <span className="font-semibold">₦{Number(viewOrder.total_amount || 0).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs sm:text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">SKU</th>
+                      <th className="px-3 py-2 text-left">Item</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Unit Price</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {(viewOrder.order_lines || []).map((l) => (
+                      <tr key={l.id}>
+                        <td className="px-3 py-2 font-mono text-xs">{l.items?.sku || ''}</td>
+                        <td className="px-3 py-2">{l.items?.name || ''}</td>
+                        <td className="px-3 py-2 text-right">{Number(l.qty || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right">₦{Number(l.unit_price || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right">₦{Number(l.amount || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </DraggableModal>
 
       {/* Modal */}
       {showModal && (

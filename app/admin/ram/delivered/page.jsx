@@ -36,6 +36,9 @@ function RamDeliveredContent() {
   const [rollbackBusyId, setRollbackBusyId] = useState(null)
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false)
   const [rollbackConfirmOrder, setRollbackConfirmOrder] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [rollbackBulkConfirmOpen, setRollbackBulkConfirmOpen] = useState(false)
+  const [rollbackBulkBusy, setRollbackBulkBusy] = useState(false)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
@@ -65,10 +68,12 @@ function RamDeliveredContent() {
       const nextOrders = json.orders || []
       setOrders(nextOrders)
       setTotalCount(Number(json?.meta?.total_count ?? nextOrders.length))
+      setSelectedIds(new Set())
     } catch (e) {
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
       setTotalCount(0)
+      setSelectedIds(new Set())
     } finally {
       setLoading(false)
     }
@@ -325,9 +330,42 @@ function RamDeliveredContent() {
     await rollbackToApproved(orderId)
   }
 
+  const requestRollbackSelected = () => {
+    if (!selectedCount || rollbackBusyId || rollbackBulkBusy) return
+    setRollbackBulkConfirmOpen(true)
+  }
+
+  const confirmRollbackSelected = async () => {
+    const ids = Array.from(selectedIds)
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    setRollbackBulkConfirmOpen(false)
+    if (!ids.length) return
+    setRollbackBulkBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/ram/orders/update-status-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ids, status: 'Approved' }),
+      })
+      const json = await safeJson(res, '/api/admin/ram/orders/update-status-bulk')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Rollback failed')
+      setOrders((prev) => (prev || []).filter((o) => !ids.includes(Number(o.id))))
+      setSelectedIds(new Set())
+      setMsg({ type: 'success', text: `Rolled back ${ids.length} order(s) to Approved` })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Rollback failed' })
+    } finally {
+      setRollbackBulkBusy(false)
+    }
+  }
+
   const pageCount = useMemo(() => Math.max(1, Math.ceil((totalCount || 0) / Math.max(1, pageSize))), [totalCount, pageSize])
   const safePage = Math.min(Math.max(1, page), pageCount)
   const pageRows = orders || []
+  const selectedCount = selectedIds.size
+  const allSelectedOnPage = pageRows.length > 0 && pageRows.every((o) => selectedIds.has(Number(o.id)))
 
   useEffect(() => {
     if (page !== safePage) {
@@ -335,6 +373,23 @@ function RamDeliveredContent() {
       fetchOrders({ page: safePage })
     }
   }, [page, safePage])
+
+  const toggleSelect = (id) => {
+    const orderId = Number(id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(orderId) ? next.delete(orderId) : next.add(orderId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const ids = pageRows.map((o) => Number(o.id)).filter((n) => Number.isFinite(n) && n > 0)
+    if (!ids.length) return
+    const allSelected = ids.every((id) => selectedIds.has(id))
+    setSelectedIds(allSelected ? new Set() : new Set(ids))
+  }
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
@@ -419,7 +474,9 @@ function RamDeliveredContent() {
             </div>
           </div>
 
-          <div className="text-xs text-gray-600">Orders: {Number(totalCount || 0).toLocaleString()}</div>
+          <div className="text-xs text-gray-600">
+            Orders: {Number(totalCount || 0).toLocaleString()} · Selected: {selectedCount.toLocaleString()}
+          </div>
         </div>
       </div>
 
@@ -434,6 +491,22 @@ function RamDeliveredContent() {
               className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              disabled={!pageRows.length}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold text-gray-700 disabled:opacity-50"
+            >
+              {allSelectedOnPage ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              onClick={requestRollbackSelected}
+              disabled={!selectedCount || rollbackBulkBusy}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >
+              {rollbackBulkBusy && selectedCount ? 'Rolling back…' : `Rollback Selected (${selectedCount})`}
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -485,6 +558,15 @@ function RamDeliveredContent() {
           <table className="w-full text-xs sm:text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="p-2 text-left w-10">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={!!pageRows.length && allSelectedOnPage}
+                    onChange={toggleSelectAll}
+                    disabled={loading || !pageRows.length}
+                  />
+                </th>
                 <th className="p-2 text-left">Order</th>
                 <th className="p-2 text-left">Member</th>
                 <th className="p-2 text-left">Delivery</th>
@@ -497,13 +579,22 @@ function RamDeliveredContent() {
             <tbody>
               {!pageRows.length && (
                 <tr>
-                  <td className="p-3 text-gray-600" colSpan={7}>
+                  <td className="p-3 text-gray-600" colSpan={8}>
                     {loading ? 'Loading…' : 'No delivered ram orders found'}
                   </td>
                 </tr>
               )}
               {pageRows.map((o) => (
                 <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                  <td className="p-2 align-top">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={selectedIds.has(Number(o.id))}
+                      onChange={() => toggleSelect(o.id)}
+                      disabled={loading}
+                    />
+                  </td>
                   <td className="p-2 align-top">
                     <div className="font-medium">#{o.id}</div>
                     <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
@@ -602,6 +693,44 @@ function RamDeliveredContent() {
             </div>
           </div>
           <div className="mt-3 text-xs text-gray-600">After rollback, you’ll find it under Admin → Ram Sales → Approved.</div>
+        </div>
+      </DraggableModal>
+
+      <DraggableModal
+        open={rollbackBulkConfirmOpen}
+        onClose={() => {
+          if (rollbackBulkBusy) return
+          setRollbackBulkConfirmOpen(false)
+        }}
+        title="Confirm Bulk Rollback"
+        overlayClassName="bg-black/40"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 disabled:opacity-50"
+              onClick={() => setRollbackBulkConfirmOpen(false)}
+              disabled={rollbackBulkBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold disabled:opacity-50"
+              onClick={confirmRollbackSelected}
+              disabled={rollbackBulkBusy}
+            >
+              {rollbackBulkBusy ? 'Rolling back…' : 'Yes, Rollback'}
+            </button>
+          </div>
+        }
+      >
+        <div className="text-sm text-gray-800">
+          <div className="font-semibold text-gray-900">Rollback selected orders to Approved?</div>
+          <div className="mt-1 text-gray-700">
+            This will move {selectedCount.toLocaleString()} order(s) from <span className="font-semibold">Delivered</span> to{' '}
+            <span className="font-semibold">Approved</span>.
+          </div>
         </div>
       </DraggableModal>
     </div>

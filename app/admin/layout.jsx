@@ -41,6 +41,7 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/food/pending')) return 'food_pending'
     if (pathname.startsWith('/admin/food/posted')) return 'food_posted'
     if (pathname.startsWith('/admin/food/delivered')) return 'food_delivered'
+    if (pathname.startsWith('/admin/food/banks')) return 'food_banks'
     if (pathname.startsWith('/admin/food/import')) return 'food_import'
     if (pathname.startsWith('/admin/food/inventory')) return 'food_inventory'
     if (pathname.startsWith('/admin/food/markups')) return 'food_markups'
@@ -64,6 +65,8 @@ export default function AdminLayout({ children }) {
     const pageLabel =
       group === 'ram' && (rest === 'inventory' || rest === 'banks')
         ? 'Banks'
+        : group === 'food' && rest === 'banks'
+          ? 'Banks'
         : rest === 'data'
           ? 'Data'
           : rest
@@ -75,7 +78,7 @@ export default function AdminLayout({ children }) {
   const title = useMemo(() => {
     if (activeKey.startsWith('food_')) {
       const rest = activeKey.replace('food_', '')
-      const label = rest === 'data' ? 'Data' : rest.charAt(0).toUpperCase() + rest.slice(1)
+      const label = rest === 'data' ? 'Data' : rest === 'banks' ? 'Banks' : rest.charAt(0).toUpperCase() + rest.slice(1)
       return `Food Distribution — ${label}`
     }
     if (activeKey.startsWith('ram_')) {
@@ -134,6 +137,9 @@ export default function AdminLayout({ children }) {
                   </Link>
                   <Link href="/admin/food/delivered" className={navItemClass(activeKey === 'food_delivered')}>
                     Delivered
+                  </Link>
+                  <Link href="/admin/food/banks" className={navItemClass(activeKey === 'food_banks')}>
+                    Banks
                   </Link>
                   <Link href="/admin/food/import" className={navItemClass(activeKey === 'food_import')}>
                     Import

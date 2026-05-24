@@ -445,21 +445,22 @@ export async function GET(request) {
       const sql = `
         WITH loan_orders AS (
           SELECT o.order_id
+               , o.total_amount
           FROM orders o
           WHERE o.payment_option = 'Loan'
             AND o.status IN ('Pending','Posted','Delivered')
             ${ordersHasCycle ? 'AND o.cycle_id = $1' : ''}
         ), per_order AS (
           -- Use recorded line amount to avoid unit_price/qty drift
-          SELECT ol.order_id, SUM(ol.amount)::numeric AS base
+          SELECT lo.order_id, lo.total_amount::numeric AS total, SUM(ol.amount)::numeric AS base
           FROM order_lines ol
           JOIN loan_orders lo ON lo.order_id = ol.order_id
-          GROUP BY ol.order_id
+          GROUP BY lo.order_id, lo.total_amount
         )
         SELECT 
           COALESCE(SUM(base), 0)::numeric AS loans_principal,
-          COALESCE(SUM(ROUND(base * 0.13)), 0)::numeric AS loans_interest,
-          COALESCE(SUM(base) + SUM(ROUND(base * 0.13)), 0)::numeric AS loans_total
+          COALESCE(SUM(GREATEST(total - base, 0)), 0)::numeric AS loans_interest,
+          COALESCE(SUM(total), 0)::numeric AS loans_total
         FROM per_order;
       `
       const result = await queryDirect(sql, ordersHasCycle ? [cycleId] : [])
@@ -469,9 +470,16 @@ export async function GET(request) {
       loansTotal = Number(row?.loans_total || 0)
     } catch (err) {
       console.warn('Reports summary: loan principal/interest calc failed, falling back:', err?.message)
-      // Fallback: derive principal approximately by subtracting a 13% aggregate interest (may differ due to per-order rounding)
+      let ratePct = 13
+      try {
+        const rateRes = await supabase.from('cycles').select('food_loan_interest_rate_pct').eq('id', cycleId).maybeSingle()
+        if (!rateRes.error && rateRes.data?.food_loan_interest_rate_pct != null) {
+          ratePct = Math.max(0, Number(rateRes.data.food_loan_interest_rate_pct || 0))
+        }
+      } catch {}
+      const denom = 1 + Math.max(0, Number(ratePct || 0)) / 100
       const loansAmountTotal = Number(loansOrdersTotal || 0)
-      loansPrincipal = Math.round(loansAmountTotal / 1.13)
+      loansPrincipal = denom > 0 ? Math.round(loansAmountTotal / denom) : loansAmountTotal
       loansInterest = loansAmountTotal - loansPrincipal
       loansTotal = loansAmountTotal
     }

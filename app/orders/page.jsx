@@ -479,20 +479,38 @@ function OrdersPageContent() {
                               <div className="flex justify-between items-center text-sm">
                                 <span className="text-gray-600">Principal Amount:</span>
                                 <span className="font-medium">
-                                  ₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))).toLocaleString()}
+                                  ₦{Number(
+                                    Number.isFinite(Number(order.principal_amount))
+                                      ? Number(order.principal_amount)
+                                      : (order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)
+                                  ).toLocaleString()}
                                 </span>
                               </div>
                               <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Interest (13%):</span>
+                                <span className="text-gray-600">
+                                  {Number.isFinite(Number(order.loan_interest_rate_pct))
+                                    ? `Interest (${Number(order.loan_interest_rate_pct)}%):`
+                                    : 'Interest:'}
+                                </span>
                                 <span className="font-medium text-orange-600">
-                                  ₦{Number(Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}
+                                  ₦{Number(
+                                    Number.isFinite(Number(order.loan_interest_amount))
+                                      ? Number(order.loan_interest_amount)
+                                      : Math.max(
+                                          0,
+                                          Number(order.total_amount || 0) -
+                                            (Number.isFinite(Number(order.principal_amount))
+                                              ? Number(order.principal_amount)
+                                              : (order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0))
+                                        )
+                                  ).toLocaleString()}
                                 </span>
                               </div>
                               <div className="border-t pt-1 mt-1">
                                 <div className="flex justify-between items-center text-sm font-semibold">
                                   <span>Total (incl. Interest):</span>
                                   <span>
-                                    ₦{Number(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((sum, l) => sum + Number(l.amount || 0), 0)) * 0.13)).toLocaleString()}
+                                    ₦{Number(order.total_amount || 0).toLocaleString()}
                                   </span>
                                 </div>
                               </div>

@@ -101,8 +101,9 @@ function SuccessContent() {
       doc.text(`Member: ${order.member_name_snapshot} (${order.member_id})`, 10, 34)
       doc.text(`Member Branch: ${order.member_branch?.name || '-'}`, 10, 40)
       doc.text(`Delivery: ${order.delivery?.name || '-'}`, 10, 46)
-      doc.text(`Department: ${order.departments?.name || '-'}`, 10, 52)
-      doc.text(`Payment: ${order.payment_option}`, 10, 58)
+      doc.text(`Rep Phone: ${order.delivery?.rep_phone || '-'}`, 10, 52)
+      doc.text(`Department: ${order.departments?.name || '-'}`, 10, 58)
+      doc.text(`Payment: ${order.payment_option}`, 10, 64)
 
       let y = 70
       doc.setFontSize(11)
@@ -131,15 +132,16 @@ function SuccessContent() {
       doc.line(120, y, 200, y); y += 6
       doc.setFontSize(12)
       // Payment breakdown for Loan option
-      const principal = Number((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
-      const interest = order.payment_option === 'Loan' ? Math.round(principal * 0.13) : 0
+      const principal = Number(order.principal_amount ?? (order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
+      const interest = order.payment_option === 'Loan' ? Number(order.loan_interest_amount || 0) : 0
+      const ratePct = Number(order.loan_interest_rate_pct ?? 13)
       const totalWithInterest = order.payment_option === 'Loan' ? principal + interest : principal
 
       // Avoid ₦ in PDF footer
       if (order.payment_option === 'Loan') {
         doc.text(`Principal: ${currencyPDF(principal)}`, 165, y, { align: 'right' })
         y += 6
-        doc.text(`Interest (13%): ${currencyPDF(interest)}`, 165, y, { align: 'right' })
+        doc.text(`Interest (${ratePct}%): ${currencyPDF(interest)}`, 165, y, { align: 'right' })
         y += 6
         doc.text(`Total (incl. Interest): ${currencyPDF(totalWithInterest)}`, 165, y, { align: 'right' })
       } else {
@@ -171,6 +173,7 @@ function SuccessContent() {
         MemberName: order.member_name_snapshot,
         MemberBranch: order.member_branch?.name || '',
         Delivery: order.delivery?.name || '',
+        RepPhone: order.delivery?.rep_phone || '',
         Department: order.departments?.name || '',
         Payment: order.payment_option,
         Item: l.items?.name || '',
@@ -178,8 +181,9 @@ function SuccessContent() {
         UnitPrice: Number(l.unit_price || 0),
         Amount: Number(l.amount || 0),
       }))
-      const principal = Number((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
-      const interest = order.payment_option === 'Loan' ? Math.round(principal * 0.13) : 0
+      const principal = Number(order.principal_amount ?? (order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))
+      const interest = order.payment_option === 'Loan' ? Number(order.loan_interest_amount || 0) : 0
+      const ratePct = Number(order.loan_interest_rate_pct ?? 13)
       const totalWithInterest = order.payment_option === 'Loan' ? principal + interest : principal
 
       // Footer rows with breakdown (for Loan payments)
@@ -192,6 +196,7 @@ function SuccessContent() {
         MemberName: '',
         MemberBranch: '',
         Delivery: '',
+        RepPhone: '',
         Department: '',
         Payment: '',
         Item: 'PRINCIPAL',
@@ -209,9 +214,10 @@ function SuccessContent() {
           MemberName: '',
           MemberBranch: '',
           Delivery: '',
+          RepPhone: '',
           Department: '',
           Payment: '',
-          Item: 'INTEREST (13%)',
+          Item: `INTEREST (${ratePct}%)`,
           Qty: '',
           UnitPrice: '',
           Amount: interest,
@@ -225,6 +231,7 @@ function SuccessContent() {
           MemberName: '',
           MemberBranch: '',
           Delivery: '',
+          RepPhone: '',
           Department: '',
           Payment: '',
           Item: 'TOTAL (incl. Interest)',
@@ -242,6 +249,7 @@ function SuccessContent() {
           MemberName: '',
           MemberBranch: '',
           Delivery: '',
+          RepPhone: '',
           Department: '',
           Payment: '',
           Item: 'TOTAL',
@@ -276,6 +284,7 @@ function SuccessContent() {
         <div><b>Member:</b> {order.member_name_snapshot} ({order.member_id})</div>
         <div><b>Member Branch:</b> {order.member_branch?.name || '-'}</div>
         <div><b>Delivery:</b> {order.delivery?.name || '-'}</div>
+        <div><b>Rep Phone:</b> {order.delivery?.rep_phone || '-'}</div>
         <div><b>Department:</b> {order.departments?.name || '-'}</div>
         <div><b>Payment:</b> {order.payment_option}</div>
       </div>
@@ -308,15 +317,15 @@ function SuccessContent() {
           <div className="max-w-md ml-auto bg-blue-50 border border-blue-200 rounded p-3">
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-700">Principal Amount:</span>
-              <span className="font-medium">{currency((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0))}</span>
+              <span className="font-medium">{currency(Number(order.principal_amount ?? (order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)))}</span>
             </div>
             <div className="flex justify-between text-sm mb-1">
-              <span className="text-gray-700">Interest (13%):</span>
-              <span className="font-medium text-orange-700">{currency(Math.round(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) * 0.13))}</span>
+              <span className="text-gray-700">Interest ({Number(order.loan_interest_rate_pct ?? 13)}%):</span>
+              <span className="font-medium text-orange-700">{currency(Number(order.loan_interest_amount || 0))}</span>
             </div>
             <div className="border-t pt-2 mt-2 flex justify-between text-sm font-semibold">
               <span>Total (incl. Interest):</span>
-              <span>{currency(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) + Math.round(((order.order_lines || []).reduce((s, l) => s + Number(l.amount || 0), 0)) * 0.13))}</span>
+              <span>{currency(Number(order.total_amount || 0))}</span>
             </div>
           </div>
         </div>
