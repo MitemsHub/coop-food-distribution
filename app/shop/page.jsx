@@ -479,6 +479,7 @@ function ShopPageContent() {
   const loanInterestRatePct = Number.isFinite(Number(eligibility.interest_rate_pct))
     ? Number(eligibility.interest_rate_pct)
     : Math.round(loanInterestRate * 10000) / 100
+  const includeInterestInLoanLimit = eligibility?.include_interest_in_cap !== false
 
   // Cart computations
   const cartLines = useMemo(() => {
@@ -513,14 +514,17 @@ function ShopPageContent() {
   const remainingLimit = useMemo(() => {
     if (paymentOption === 'Cash') return Number.POSITIVE_INFINITY
     if (paymentOption === 'Loan') {
-      return Math.max(0, loanEligible - totalWithInterest)
+      const used = includeInterestInLoanLimit ? totalWithInterest : cartTotal
+      return Math.max(0, loanEligible - used)
     }
     // Savings
     return Math.max(0, savingsEligible - cartTotal)
-  }, [paymentOption, loanEligible, savingsEligible, cartTotal, totalWithInterest])
+  }, [paymentOption, loanEligible, savingsEligible, cartTotal, totalWithInterest, includeInterestInLoanLimit])
 
   const overLimit = paymentOption !== 'Cash' && (
-    paymentOption === 'Loan' ? totalWithInterest > currentLimit : cartTotal > currentLimit
+    paymentOption === 'Loan'
+      ? (includeInterestInLoanLimit ? totalWithInterest : cartTotal) > currentLimit
+      : cartTotal > currentLimit
   )
   const canSubmit = !!member && !!deliveryBranchCode && !!departmentName && cartLines.length > 0 && !overLimit && !submitting
 
@@ -551,8 +555,14 @@ function ShopPageContent() {
       if (paymentOption === 'Loan') {
         const nextInterest = Math.round(nextCartTotal * loanInterestRate)
         const nextTotal = nextCartTotal + nextInterest
-        if (nextTotal > loanEligible) {
-          setMessage({ type: 'error', text: `This quantity exceeds your Loan eligibility (including ${loanInterestRatePct}% interest).` })
+        const used = includeInterestInLoanLimit ? nextTotal : nextCartTotal
+        if (used > loanEligible) {
+          setMessage({
+            type: 'error',
+            text: includeInterestInLoanLimit
+              ? `This quantity exceeds your Loan eligibility (including ${loanInterestRatePct}% interest).`
+              : 'This quantity exceeds your Loan eligibility (interest excluded from the limit).',
+          })
           return
         }
       }

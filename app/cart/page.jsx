@@ -233,9 +233,15 @@ function CartPageContent() {
     if (paymentOption === 'Loan') {
       const limit = Number(eligibility.loanEligible || 0)
       const withInterest = nextCartTotal + Math.round(nextCartTotal * loanInterestRate)
-      if (limit > 0 && withInterest > limit) {
-        setMessage({ type: 'error', text: `This change would exceed your Loan limit (including ${loanInterestRatePct}% interest). Reduce quantities or switch payment method.` })
-        emitToast('error', 'This change would exceed your Loan limit (including interest).')
+      const used = includeInterestInLoanLimit ? withInterest : nextCartTotal
+      if (limit > 0 && used > limit) {
+        setMessage({
+          type: 'error',
+          text: includeInterestInLoanLimit
+            ? `This change would exceed your Loan limit (including ${loanInterestRatePct}% interest). Reduce quantities or switch payment method.`
+            : 'This change would exceed your Loan limit (interest excluded from the limit). Reduce quantities or switch payment method.',
+        })
+        emitToast('error', includeInterestInLoanLimit ? 'This change would exceed your Loan limit (including interest).' : 'This change would exceed your Loan limit.')
         return
       }
     }
@@ -302,6 +308,7 @@ function CartPageContent() {
   const loanInterestRatePct = Number.isFinite(Number(eligibility.interest_rate_pct))
     ? Number(eligibility.interest_rate_pct)
     : Math.round(loanInterestRate * 10000) / 100
+  const includeInterestInLoanLimit = eligibility?.include_interest_in_cap !== false
   
   // Loan interest calculation (rate applied to cart total when payment=Loan)
   const loanInterest = paymentOption === 'Loan' ? Math.round(cartTotal * loanInterestRate) : 0
@@ -309,7 +316,11 @@ function CartPageContent() {
   
   const currentLimit = paymentOption === 'Savings' ? savingsEligible : 
                       paymentOption === 'Loan' ? loanEligible : Infinity
-  const overLimit = paymentOption !== 'Cash' && totalWithInterest > currentLimit
+  const overLimit = paymentOption !== 'Cash' && (
+    paymentOption === 'Loan'
+      ? (includeInterestInLoanLimit ? totalWithInterest : cartTotal) > currentLimit
+      : cartTotal > currentLimit
+  )
   const canSubmit = cartItems.length > 0 && !overLimit && deliveryBranch && department
 
   const submitDisabledReason = useMemo(() => {
@@ -656,7 +667,9 @@ function CartPageContent() {
                         <strong>Total with Interest:</strong> ₦{totalWithInterest.toLocaleString()} ({loanInterestRatePct}% interest applied)
                       </p>
                       <p className="text-xs text-orange-700 mt-1">
-                        Your loan limit applies to the total amount including interest.
+                        {includeInterestInLoanLimit
+                          ? 'Your loan limit applies to the total amount including interest.'
+                          : 'Your loan limit applies to principal only (interest is excluded from the limit).'}
                       </p>
                     </div>
                   </div>

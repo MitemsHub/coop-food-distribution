@@ -9,6 +9,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const supabase = createClient(supabaseUrl, serviceKey)
 
+async function hasColumn(table, column) {
+  const { error } = await supabase.from(table).select(column).limit(1)
+  return !error
+}
+
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url)
@@ -18,14 +23,18 @@ export async function GET(req) {
     }
 
     let interestRatePct = 13
+    let includeInterestInCap = true
     try {
-      const { data: cRow, error: cErr } = await supabase
-        .from('cycles')
-        .select('id,food_loan_interest_rate_pct')
-        .eq('is_active', true)
-        .maybeSingle()
-      if (!cErr && cRow && cRow.food_loan_interest_rate_pct != null) {
-        interestRatePct = Math.max(0, Number(cRow.food_loan_interest_rate_pct || 0))
+      const cyclesHasInclude = await hasColumn('cycles', 'food_loan_cap_include_interest').catch(() => false)
+      const select = cyclesHasInclude ? 'id,food_loan_interest_rate_pct,food_loan_cap_include_interest' : 'id,food_loan_interest_rate_pct'
+      const { data: cRow, error: cErr } = await supabase.from('cycles').select(select).eq('is_active', true).maybeSingle()
+      if (!cErr && cRow) {
+        if (cRow.food_loan_interest_rate_pct != null) {
+          interestRatePct = Math.max(0, Number(cRow.food_loan_interest_rate_pct || 0))
+        }
+        if (cyclesHasInclude) {
+          includeInterestInCap = cRow.food_loan_cap_include_interest !== false
+        }
       }
     } catch {}
     const interestRate = Math.max(0, Number(interestRatePct || 0)) / 100
@@ -42,27 +51,51 @@ export async function GET(req) {
 
     // 2) Exposure = sum of order totals for Pending + Posted + Delivered
     const statuses = ['Pending', 'Posted', 'Delivered']
-    const [loanExp, savExp] = await Promise.all([
-      supabase
+
+    const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r?.total_amount || 0), 0)
+    const sumLineAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r?.amount || 0), 0)
+
+    const savExp = await supabase
+      .from('orders')
+      .select('total_amount')
+      .eq('member_id', memberId)
+      .eq('payment_option', 'Savings')
+      .in('status', statuses)
+    if (savExp.error) return NextResponse.json({ ok: false, error: savExp.error.message }, { status: 500 })
+    const savingsExposure = sumAmt(savExp.data)
+
+    let loanExposure = 0
+    if (includeInterestInCap) {
+      const loanExp = await supabase
         .from('orders')
         .select('total_amount')
         .eq('member_id', memberId)
         .eq('payment_option', 'Loan')
-        .in('status', statuses),
-      supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('member_id', memberId)
-        .eq('payment_option', 'Savings')
-        .in('status', statuses),
-    ])
-    if (loanExp.error) return NextResponse.json({ ok: false, error: loanExp.error.message }, { status: 500 })
-    if (savExp.error) return NextResponse.json({ ok: false, error: savExp.error.message }, { status: 500 })
+        .in('status', statuses)
+      if (loanExp.error) return NextResponse.json({ ok: false, error: loanExp.error.message }, { status: 500 })
+      loanExposure = sumAmt(loanExp.data)
+    } else {
+      const loanLines = await supabase
+        .from('order_lines')
+        .select('amount, orders!inner(member_id,payment_option,status)')
+        .eq('orders.member_id', memberId)
+        .eq('orders.payment_option', 'Loan')
+        .in('orders.status', statuses)
 
-    const sumAmt = (rows) => (rows || []).reduce((s, r) => s + Number(r.total_amount || 0), 0)
-    // Loan orders' total_amount already includes interest; treat this as total exposure
-    const loanExposure = sumAmt(loanExp.data)
-    const savingsExposure = sumAmt(savExp.data)
+      if (!loanLines.error) {
+        loanExposure = sumLineAmt(loanLines.data)
+      } else {
+        const loanOrders = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('member_id', memberId)
+          .eq('payment_option', 'Loan')
+          .in('status', statuses)
+        if (loanOrders.error) return NextResponse.json({ ok: false, error: loanOrders.error.message }, { status: 500 })
+        const denom = 1 + Math.max(0, Number(interestRate) || 0)
+        loanExposure = (loanOrders.data || []).reduce((s, r) => s + Math.round(Number(r?.total_amount || 0) / denom), 0)
+      }
+    }
 
     // 3) Compute limits (exposure-aware)
     const savings = Number(m.savings || 0)
@@ -94,6 +127,7 @@ export async function GET(req) {
         outstandingLoansTotal,
         savingsExposure,
         loanExposure,
+        include_interest_in_cap: includeInterestInCap,
         interest_rate: interestRate,
         interest_rate_pct: interestRatePct
       },

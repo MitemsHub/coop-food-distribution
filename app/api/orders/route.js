@@ -229,10 +229,16 @@ export async function POST(req) {
         )
       }
 
-      if (totalWithInterest > loanEligible) {
+      const eligibilityCapAmount = includeInterestInCap ? totalWithInterest : total
+      if (eligibilityCapAmount > loanEligible) {
         if (graceLoanMaxCap <= 0) {
           return NextResponse.json(
-            { ok: false, error: `Total (incl. ${loanRatePct}% interest) ₦${totalWithInterest.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}` },
+            {
+              ok: false,
+              error: includeInterestInCap
+                ? `Total (incl. ${loanRatePct}% interest) ₦${totalWithInterest.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()}`
+                : `Principal total ₦${total.toLocaleString()} exceeds Loan available ₦${loanEligible.toLocaleString()} (interest is excluded from the cap)`,
+            },
             { status: 400 }
           )
         }
@@ -286,7 +292,8 @@ export async function POST(req) {
     }
     if (ordersHasCycle) orderInsert.cycle_id = activeCycle.id
     const capAmountForGraceFlag = includeInterestInCap ? totalWithInterest : total
-    if (ordersHasFoodGraceFlag && paymentOption === 'Loan' && totalWithInterest > loanEligible && graceLoanMaxCap > 0 && capAmountForGraceFlag <= graceLoanMaxCap) {
+    const eligibilityCapAmountForGraceFlag = includeInterestInCap ? totalWithInterest : total
+    if (ordersHasFoodGraceFlag && paymentOption === 'Loan' && eligibilityCapAmountForGraceFlag > loanEligible && graceLoanMaxCap > 0 && capAmountForGraceFlag <= graceLoanMaxCap) {
       orderInsert.food_loan_grace_used = true
     }
 
