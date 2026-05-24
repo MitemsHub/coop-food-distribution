@@ -20,6 +20,8 @@ function CartPageContent() {
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [itemsBusy, setItemsBusy] = useState(false)
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
   const [eligibility, setEligibility] = useState({
     savingsEligible: 0,
     loanEligible: 0,
@@ -73,6 +75,25 @@ function CartPageContent() {
     const text = await res.text().catch(() => '')
     return { ok: res.ok, error: text ? `${endpoint} (${res.status}): ${text.slice(0, 300)}` : `${endpoint} (${res.status})` }
   }
+
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        setShoppingStatusLoading(true)
+        const res = await fetch('/api/system/shopping', { cache: 'no-store' })
+        const json = await safeJson(res, '/api/system/shopping')
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load shopping status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch {
+        if (!cancelled) setShoppingOpen(false)
+      } finally {
+        if (!cancelled) setShoppingStatusLoading(false)
+      }
+    }
+    if (!isAdmin) loadStatus()
+    return () => { cancelled = true }
+  }, [isAdmin])
 
   // Load member eligibility
   const loadEligibility = async (memberIdToLoad) => {
@@ -424,9 +445,14 @@ function CartPageContent() {
               sessionStorage.setItem('navigatingFromCart', 'true')
               router.push('/shop')
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            disabled={!shoppingOpen || shoppingStatusLoading}
+            className={`px-4 py-2 rounded-lg text-white ${
+              shoppingOpen && !shoppingStatusLoading
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
           >
-            Back to Shop
+            {shoppingOpen ? 'Back to Shop' : 'Shopping Closed'}
           </button>
         </div>
       </div>
@@ -465,12 +491,17 @@ function CartPageContent() {
                         sessionStorage.setItem('navigatingFromCart', 'true')
                         router.push(isAdmin ? `/shop?mid=${memberId}&admin=true` : '/shop')
                       }}
-                      className="w-full md:w-auto px-2 py-1.5 sm:px-3 sm:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
+                      disabled={!shoppingOpen || shoppingStatusLoading}
+                      className={`w-full md:w-auto px-2 py-1.5 sm:px-3 sm:py-2 text-white rounded-lg flex items-center justify-center text-xs sm:text-sm whitespace-nowrap ${
+                        shoppingOpen && !shoppingStatusLoading
+                          ? 'bg-gray-500 hover:bg-gray-600'
+                          : 'bg-gray-400 cursor-not-allowed'
+                      }`}
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                       </svg>
-                      Back to Shop
+                      {shoppingOpen ? 'Back to Shop' : 'Shopping Closed'}
                     </button>
                   )}
                 </div>

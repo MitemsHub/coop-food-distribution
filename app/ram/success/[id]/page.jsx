@@ -25,10 +25,31 @@ function RamSuccessContent() {
   const [location, setLocation] = useState(null)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
+  const [shoppingOpen, setShoppingOpen] = useState(true)
+  const [shoppingStatusLoading, setShoppingStatusLoading] = useState(false)
   const memberId = String(order?.member_id || member?.member_id || '').trim()
 
   const currency = (n) => `₦${Number(n || 0).toLocaleString()}`
   const currencyPDF = (n) => `NGN ${Number(n || 0).toLocaleString()}`
+
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        setShoppingStatusLoading(true)
+        const res = await fetch('/api/system/ram-shopping', { cache: 'no-store' })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load shopping status')
+        if (!cancelled) setShoppingOpen(!!json.open)
+      } catch {
+        if (!cancelled) setShoppingOpen(false)
+      } finally {
+        if (!cancelled) setShoppingStatusLoading(false)
+      }
+    }
+    loadStatus()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -256,9 +277,14 @@ function RamSuccessContent() {
           <button
             type="button"
             onClick={() => router.push('/ram/shop')}
-            className="mt-3 w-full inline-flex items-center justify-center px-4 py-3 text-gray-700 text-sm md:text-base font-semibold rounded-xl transition-all duration-200 border border-gray-300 hover:bg-gray-50"
+            disabled={!shoppingOpen || shoppingStatusLoading}
+            className={`mt-3 w-full inline-flex items-center justify-center px-4 py-3 text-sm md:text-base font-semibold rounded-xl transition-all duration-200 border ${
+              shoppingOpen && !shoppingStatusLoading
+                ? 'text-gray-700 border-gray-300 hover:bg-gray-50'
+                : 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'
+            }`}
           >
-            Back to Shop
+            {shoppingOpen ? 'Back to Ram Shopping' : 'Ram Shopping Closed'}
           </button>
         </div>
       </div>

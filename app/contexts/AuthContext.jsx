@@ -37,20 +37,24 @@ function AuthProviderContent({ children }) {
     setLoading(false)
   }
 
-  const logout = () => {
+  const logout = async () => {
     const currentUserType = user?.type
     setUser(null)
     localStorage.removeItem('user')
     setLoading(false)
-    
-    // Redirect to appropriate login page based on user type
-    if (currentUserType === 'rep') {
-      router.push('/rep/login')
-    } else if (currentUserType === 'admin') {
-      router.push('/admin/pin')
-    } else {
-      // For members or any other user type, redirect to landing page
-      router.push('/')
+
+    try {
+      if (currentUserType === 'admin') {
+        await fetch('/api/admin/pin/session', { method: 'DELETE', credentials: 'include' }).catch(() => null)
+      } else if (currentUserType === 'rep') {
+        await fetch('/api/rep/session', { method: 'DELETE', credentials: 'include' }).catch(() => null)
+      }
+    } catch {}
+
+    try {
+      window.location.replace('/')
+    } catch {
+      router.replace('/')
     }
   }
 

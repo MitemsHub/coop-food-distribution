@@ -310,9 +310,14 @@ function OrdersPageContent() {
                 {!isAdmin && (
                   <button
                     onClick={() => router.push('/shop')}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg border border-gray-200 text-sm"
+                    disabled={!shoppingOpen || shoppingStatusLoading}
+                    className={`px-4 py-2 rounded-lg border text-sm ${
+                      shoppingOpen && !shoppingStatusLoading
+                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200'
+                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    }`}
                   >
-                    Back to Shop
+                    {shoppingOpen ? 'Back to Shop' : 'Shopping Closed'}
                   </button>
                 )}
               </div>
