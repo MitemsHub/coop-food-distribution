@@ -46,27 +46,17 @@ export async function GET(request) {
   if (!session.valid) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createClient()
-  let cycles = []
-  let error = null
-  const withPolicy = await supabase
-    .from('ram_cycles')
-    .select(
-      'id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active'
-    )
-    .order('id', { ascending: false })
-  if (withPolicy.error && isMissingColumn(withPolicy.error)) {
-    const fallback = await supabase
-      .from('ram_cycles')
-      .select('id, code, name, is_active, starts_at, ends_at, created_at')
-      .order('id', { ascending: false })
-    cycles = fallback.data || []
-    error = fallback.error
-  } else {
-    cycles = withPolicy.data || []
-    error = withPolicy.error
-  }
+  const hasSettings = await hasColumn(supabase, 'ram_cycles', 'eligible_loan_qty_active').catch(() => false)
+  const hasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct').catch(() => false)
+  const hasVendorRate = await hasColumn(supabase, 'ram_cycles', 'vendor_deduction_rate_pct').catch(() => false)
 
+  const select = hasSettings
+    ? `id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
+    : `id, code, name, is_active, starts_at, ends_at, created_at${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
+
+  const { data: cycles, error } = await supabase.from('ram_cycles').select(select).order('id', { ascending: false })
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+
   const active = (cycles || []).find(c => c.is_active)
   return NextResponse.json({ ok: true, cycles: cycles || [], active_cycle_id: active?.id || null })
 }
@@ -94,6 +84,8 @@ export async function POST(request) {
   if (body.ends_at) insertPayload.ends_at = body.ends_at
 
   const cyclesHasSettings = await hasColumn(supabase, 'ram_cycles', 'eligible_loan_qty_active').catch(() => false)
+  const hasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct').catch(() => false)
+  const hasVendorRate = await hasColumn(supabase, 'ram_cycles', 'vendor_deduction_rate_pct').catch(() => false)
   if (cyclesHasSettings) {
     insertPayload.loan_qty_cap_pensioner = 0
     insertPayload.loan_qty_cap_other = 0
@@ -109,12 +101,16 @@ export async function POST(request) {
     insertPayload.grace_loan_qty_retiree = 0
     insertPayload.grace_loan_qty_active = 0
   }
+  if (hasLoanRate) insertPayload.loan_interest_rate_pct = 0
+  if (hasVendorRate) insertPayload.vendor_deduction_rate_pct = 0
 
   const { data, error } = await supabase
     .from('ram_cycles')
     .insert(insertPayload)
     .select(
-      'id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active'
+      cyclesHasSettings
+        ? `id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
+        : `id, code, name, is_active, starts_at, ends_at, created_at${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
     )
     .single()
 
@@ -189,10 +185,12 @@ export async function PUT(request) {
   if (!idRes.isValid) return NextResponse.json({ ok: false, error: 'Invalid cycle id' }, { status: 400 })
 
   const supabase = createClient()
+  const hasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct').catch(() => false)
+  const hasVendorRate = await hasColumn(supabase, 'ram_cycles', 'vendor_deduction_rate_pct').catch(() => false)
   const currentRes = await supabase
     .from('ram_cycles')
     .select(
-      'id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active'
+      `id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
     )
     .eq('id', idRes.value)
     .maybeSingle()
@@ -229,6 +227,16 @@ export async function PUT(request) {
     return null
   }
 
+  const rateField = (key, label) => {
+    if (body[key] === undefined) return null
+    const res = validateNumber(body[key], { min: 0, max: 100 })
+    if (!res.isValid) return { error: `Invalid ${label}` }
+    const v = Math.round(res.value * 100) / 100
+    next[key] = v
+    updates[key] = v
+    return null
+  }
+
   const e1 = intField('loan_qty_cap_pensioner', 'pensioner loan cap')
   if (e1?.error) return NextResponse.json({ ok: false, error: e1.error }, { status: 400 })
   const e2 = intField('loan_qty_cap_other', 'loan cap')
@@ -259,6 +267,18 @@ export async function PUT(request) {
   const e13 = intField('grace_loan_qty_active', 'non-eligible Active max qty')
   if (e13?.error) return NextResponse.json({ ok: false, error: e13.error }, { status: 400 })
 
+  if (body.loan_interest_rate_pct !== undefined && !hasLoanRate) {
+    return NextResponse.json({ ok: false, error: 'Loan interest rate column is missing. Run migrations/add-ram-cycle-rates.sql in Supabase.' }, { status: 400 })
+  }
+  if (body.vendor_deduction_rate_pct !== undefined && !hasVendorRate) {
+    return NextResponse.json({ ok: false, error: 'Vendor deduction rate column is missing. Run migrations/add-ram-cycle-rates.sql in Supabase.' }, { status: 400 })
+  }
+
+  const r1 = rateField('loan_interest_rate_pct', 'Loan interest rate (%)')
+  if (r1?.error) return NextResponse.json({ ok: false, error: r1.error }, { status: 400 })
+  const r2 = rateField('vendor_deduction_rate_pct', 'Vendor deduction rate (%)')
+  if (r2?.error) return NextResponse.json({ ok: false, error: r2.error }, { status: 400 })
+
   if (!Object.keys(updates).length) return NextResponse.json({ ok: false, error: 'No updates provided' }, { status: 400 })
 
   const eligP = Math.max(0, Math.trunc(Number(next.eligible_loan_qty_pensioner ?? 1)))
@@ -284,7 +304,7 @@ export async function PUT(request) {
     .update(updates)
     .eq('id', idRes.value)
     .select(
-      'id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active'
+      `id, code, name, is_active, starts_at, ends_at, created_at, loan_qty_cap_pensioner, loan_qty_cap_other, loan_grace_qty, price_junior, price_senior, price_executive, price_undefined, eligible_loan_qty_pensioner, eligible_loan_qty_retiree, eligible_loan_qty_active, grace_loan_qty_pensioner, grace_loan_qty_retiree, grace_loan_qty_active${hasLoanRate ? ', loan_interest_rate_pct' : ''}${hasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
     )
     .single()
 

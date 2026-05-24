@@ -42,7 +42,10 @@ function RamShopPageContent() {
   const safeQty = Number.isFinite(qtyNumber) ? Math.trunc(qtyNumber) : 0
 
   const unitPrice = Number(eligibility?.pricing?.unit_price || 0)
-  const interestRate = Number(eligibility?.rules?.loan_interest_rate || 0.06)
+  const interestRate = Number.isFinite(Number(eligibility?.rules?.loan_interest_rate)) ? Number(eligibility?.rules?.loan_interest_rate) : 0
+  const interestRatePct = Number.isFinite(Number(eligibility?.rules?.loan_interest_rate_pct))
+    ? Number(eligibility?.rules?.loan_interest_rate_pct)
+    : Math.round(interestRate * 10000) / 100
   const principal = unitPrice * Number(safeQty || 0)
   const interest = paymentOption === 'Loan' ? Math.round(principal * interestRate) : 0
   const total = principal + interest
@@ -700,7 +703,7 @@ function RamShopPageContent() {
                   <option value="" disabled>
                     Select payment option
                   </option>
-                  <option value="Loan">Loan (6% interest)</option>
+                  <option value="Loan">Loan ({interestRatePct}% interest)</option>
                   <option value="Savings" disabled={savingsEligible <= 0}>Savings {savingsEligible <= 0 ? '(Not eligible)' : ''}</option>
                   <option value="Cash">Cash (Unlimited)</option>
                 </select>
@@ -803,7 +806,7 @@ function RamShopPageContent() {
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-orange-800 mb-2">Loan Payment Information</div>
                         <div className="text-sm text-orange-700">
-                          Interest Rate: A 6% interest will be charged on all ram purchases using the loan payment option.
+                          Interest Rate: A {interestRatePct}% interest will be charged on all ram purchases using the loan payment option.
                         </div>
                         <div className="text-sm text-orange-700 mt-2">
                           Loan purchase is limited to a maximum of 2 rams per member per ram cycle. Once exhausted, you cannot shop

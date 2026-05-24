@@ -73,12 +73,12 @@ function toApplicationExportRows(orders) {
 }
 
 function computePaymentVendor(o) {
-  const payment = String(o?.payment_option || '').trim()
+  const pv = Number(o?.payment_vendor)
+  if (Number.isFinite(pv)) return pv
   const principal = Number(o?.principal_amount || 0)
-  const fee = Math.round(principal * 0.06)
-  if (payment !== 'Loan') return Math.max(0, principal - fee)
-  const interest = Number(o?.interest_amount || 0) || fee
-  return Math.max(0, principal - interest)
+  const pct = Number.isFinite(Number(o?.vendor_deduction_rate_pct)) ? Number(o.vendor_deduction_rate_pct) : 6
+  const fee = Math.round(principal * (Math.max(0, pct) / 100))
+  return Math.max(0, principal - fee)
 }
 
 function Spinner({ className = '' }) {

@@ -48,6 +48,8 @@ function RamDataContent() {
   const [priceSenior, setPriceSenior] = useState('500000')
   const [priceExecutive, setPriceExecutive] = useState('600000')
   const [priceUndefined, setPriceUndefined] = useState('0')
+  const [loanInterestRatePct, setLoanInterestRatePct] = useState('6')
+  const [vendorDeductionRatePct, setVendorDeductionRatePct] = useState('6')
 
   const [newCycleCode, setNewCycleCode] = useState('')
   const [newCycleName, setNewCycleName] = useState('')
@@ -125,6 +127,8 @@ function RamDataContent() {
     setPriceSenior(String(c?.price_senior ?? 500000))
     setPriceExecutive(String(c?.price_executive ?? 600000))
     setPriceUndefined(String(c?.price_undefined ?? 0))
+    setLoanInterestRatePct(String(Number.isFinite(Number(c?.loan_interest_rate_pct)) ? Number(c?.loan_interest_rate_pct) : 6))
+    setVendorDeductionRatePct(String(Number.isFinite(Number(c?.vendor_deduction_rate_pct)) ? Number(c?.vendor_deduction_rate_pct) : 6))
   }, [cycles, selectedCycleId])
 
   useEffect(() => {
@@ -267,6 +271,24 @@ function RamDataContent() {
       price_executive: Number(priceExecutive),
       price_undefined: Number(priceUndefined),
     })
+  }
+
+  const saveLoanInterestRate = async () => {
+    const v = loanInterestRatePct === '' ? 0 : Number(loanInterestRatePct)
+    if (!Number.isFinite(v) || v < 0) {
+      setPolicyMsg('Error: Loan interest rate must be a non-negative number')
+      return
+    }
+    return saveCycleSetting({ loan_interest_rate_pct: v })
+  }
+
+  const saveVendorDeductionRate = async () => {
+    const v = vendorDeductionRatePct === '' ? 0 : Number(vendorDeductionRatePct)
+    if (!Number.isFinite(v) || v < 0) {
+      setPolicyMsg('Error: Vendor deduction rate must be a non-negative number')
+      return
+    }
+    return saveCycleSetting({ vendor_deduction_rate_pct: v })
   }
 
   const toggleCycleActive = async (loc) => {
@@ -798,6 +820,66 @@ function RamDataContent() {
             >
               {savingPolicy ? 'Saving...' : 'Save Prices'}
             </button>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <div className="text-sm font-semibold text-gray-900">Cycle Rates</div>
+          <div className="text-xs text-gray-600 mt-1 mb-3">Configure per-cycle rates for Loan interest and vendor payment deductions.</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/40">
+              <div className="text-xs font-semibold text-gray-900 mb-1">Loan Interest Rate (Selected Cycle)</div>
+              <div className="text-xs text-gray-600 mb-2">Applied to members using the Loan payment option.</div>
+              <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rate (%)</label>
+                  <input
+                    className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={loanInterestRatePct}
+                    onChange={(e) => setLoanInterestRatePct(e.target.value)}
+                    disabled={loadingCycles || savingPolicy}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                  onClick={saveLoanInterestRate}
+                  disabled={savingPolicy || selectedCycleId == null}
+                >
+                  {savingPolicy ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+
+            <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/40">
+              <div className="text-xs font-semibold text-gray-900 mb-1">Vendor Deduction Rate (Selected Cycle)</div>
+              <div className="text-xs text-gray-600 mb-2">Applied to “payment_vendor” (amount paid to vendors) for this cycle.</div>
+              <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rate (%)</label>
+                  <input
+                    className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm w-full bg-white"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={vendorDeductionRatePct}
+                    onChange={(e) => setVendorDeductionRatePct(e.target.value)}
+                    disabled={loadingCycles || savingPolicy}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                  onClick={saveVendorDeductionRate}
+                  disabled={savingPolicy || selectedCycleId == null}
+                >
+                  {savingPolicy ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

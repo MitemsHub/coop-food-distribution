@@ -17,14 +17,11 @@ function money(n) {
 }
 
 function computePaymentVendor(o) {
+  const pv = Number(o?.payment_vendor)
+  if (Number.isFinite(pv)) return pv
   const principal = Number(o?.principal_amount || 0)
-  const payment = String(o?.payment_option || '').trim()
-  const fee = Math.round(principal * 0.06)
-  if (payment === 'Loan') {
-    const interest = Number(o?.interest_amount || 0)
-    const deduction = interest > 0 ? interest : fee
-    return Math.max(0, principal - deduction)
-  }
+  const pct = Number.isFinite(Number(o?.vendor_deduction_rate_pct)) ? Number(o.vendor_deduction_rate_pct) : 6
+  const fee = Math.round(principal * (Math.max(0, pct) / 100))
   return Math.max(0, principal - fee)
 }
 

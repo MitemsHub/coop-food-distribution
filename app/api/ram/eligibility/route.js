@@ -134,7 +134,7 @@ async function resolveActiveOrLatestRamCycleId(supabase) {
   return latest?.id ?? null
 }
 
-function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInterest }) {
+function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInterest, interestRate }) {
   const price = Number(unitPrice || 0)
   const eligible = Number(eligibleAmount || 0)
   const cap = Math.max(0, Math.trunc(Number(maxCap || 0)))
@@ -144,7 +144,8 @@ function computeMaxAffordableQty({ unitPrice, maxCap, eligibleAmount, includeInt
   let best = 0
   for (let q = 1; q <= cap; q += 1) {
     const principal = price * q
-    const interest = includeInterest ? Math.round(principal * 0.06) : 0
+    const rate = Number.isFinite(Number(interestRate)) ? Number(interestRate) : 0
+    const interest = includeInterest ? Math.round(principal * rate) : 0
     const total = principal + interest
     if (total <= eligible) best = q
   }
@@ -233,6 +234,8 @@ export async function GET(req) {
 
     let activeRamCycleId = null
     let usedLoanQtyThisCycle = 0
+    const cyclesHasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct')
+    let loanInterestRatePct = cyclesHasLoanRate ? 0 : 6
     if (!ramOrdersTableMissing) {
       const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
 
@@ -242,6 +245,16 @@ export async function GET(req) {
         } catch (e) {
           return NextResponse.json({ ok: false, error: e?.message || 'Failed to resolve ram cycle' }, { status: 500 })
         }
+      }
+
+      if (cyclesHasLoanRate && activeRamCycleId != null) {
+        const { data: rateRow, error: rErr } = await supabase
+          .from('ram_cycles')
+          .select('loan_interest_rate_pct')
+          .eq('id', activeRamCycleId)
+          .maybeSingle()
+        if (rErr) return NextResponse.json({ ok: false, error: rErr.message }, { status: 500 })
+        loanInterestRatePct = Math.max(0, Number(rateRow?.loan_interest_rate_pct || 0))
       }
 
       const cyclesHasPrices = await hasColumn(supabase, 'ram_cycles', 'price_junior')
@@ -344,6 +357,7 @@ export async function GET(req) {
           maxCap: cap,
           eligibleAmount: loanEligible,
           includeInterest: false,
+          interestRate: loanInterestRatePct / 100,
         })
       }
       maxRamsAllowedForLoan = Math.min(maxRamsAllowedForLoan, remainingLoanQtyThisCycle)
@@ -354,6 +368,7 @@ export async function GET(req) {
       maxCap: maxCapSavings,
       eligibleAmount: savingsEligible,
       includeInterest: false,
+      interestRate: loanInterestRatePct / 100,
     })
     const maxRamsAllowedForLoanOrSavings = Math.max(maxRamsAllowedForLoan, maxRamsAllowedForSavings)
 
@@ -393,7 +408,8 @@ export async function GET(req) {
         loanGraceQty: effectiveGraceQty,
       },
       rules: {
-        loan_interest_rate: 0.06,
+        loan_interest_rate: Math.max(0, Number(loanInterestRatePct || 0)) / 100,
+        loan_interest_rate_pct: Math.max(0, Number(loanInterestRatePct || 0)),
         cash_unlimited: true,
       },
     })

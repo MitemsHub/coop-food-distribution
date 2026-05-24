@@ -901,7 +901,14 @@ function RamPendingContent() {
               </div>
             </div>
             <div className="text-xs text-gray-600">
-              {editPaymentOption === 'Loan' ? 'Loan has a per-cycle max quantity limit and includes 6% interest.' : null}
+              {editPaymentOption === 'Loan'
+                ? (() => {
+                    const o = (orders || []).find((x) => Number(x?.id) === Number(showModal?.id))
+                    const r = Number(o?.loan_interest_rate_pct)
+                    const pct = Number.isFinite(r) ? r : 6
+                    return `Loan has a per-cycle max quantity limit and includes ${pct}% interest.`
+                  })()
+                : null}
             </div>
           </div>
         ) : showModal?.type === 'delete' ? (

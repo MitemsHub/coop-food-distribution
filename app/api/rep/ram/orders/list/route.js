@@ -100,6 +100,8 @@ export async function GET(req) {
       ordersHasCycle
     })
     const effectiveCycleId = ordersHasCycle ? (cycleId != null ? cycleId : activeCycleId) : null
+    const cyclesHasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct')
+    const cyclesHasVendorRate = await hasColumn(supabase, 'ram_cycles', 'vendor_deduction_rate_pct')
 
     let query = supabase
       .from('ram_orders')
@@ -122,6 +124,30 @@ export async function GET(req) {
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
     let filtered = orders || []
+
+    const cycleIds = ordersHasCycle
+      ? Array.from(
+          new Set(
+            filtered
+              .map((o) => Number(o?.ram_cycle_id))
+              .filter((n) => Number.isFinite(n) && n > 0)
+          )
+        )
+      : []
+
+    const cycleRates = new Map()
+    if ((cyclesHasLoanRate || cyclesHasVendorRate) && cycleIds.length > 0) {
+      const select = `id${cyclesHasLoanRate ? ', loan_interest_rate_pct' : ''}${cyclesHasVendorRate ? ', vendor_deduction_rate_pct' : ''}`
+      const { data: rows, error: rErr } = await supabase.from('ram_cycles').select(select).in('id', cycleIds)
+      if (!rErr && Array.isArray(rows)) {
+        for (const r of rows) {
+          cycleRates.set(Number(r.id), {
+            loan_interest_rate_pct: Math.max(0, Number(r.loan_interest_rate_pct || 0)),
+            vendor_deduction_rate_pct: Math.max(0, Number(r.vendor_deduction_rate_pct || 0)),
+          })
+        }
+      }
+    }
 
     const memberIds = Array.from(new Set(filtered.map((o) => String(o.member_id || '').trim()).filter(Boolean)))
     const locationIds = Array.from(
@@ -147,10 +173,19 @@ export async function GET(req) {
       const m = membersById.get(String(o.member_id)) || null
       const locationId = Number(o.ram_delivery_location_id)
       const loc = Number.isFinite(locationId) ? locationsById.get(locationId) || null : null
+      const cycleIdNum = ordersHasCycle ? Number(o?.ram_cycle_id) : null
+      const r = Number.isFinite(cycleIdNum) ? cycleRates.get(cycleIdNum) || null : null
+      const loanRatePct = cyclesHasLoanRate ? Number(r?.loan_interest_rate_pct || 0) : 6
+      const vendorRatePct = cyclesHasVendorRate ? Number(r?.vendor_deduction_rate_pct || 0) : 6
+      const principal = Number(o?.principal_amount || 0)
+      const vendorFee = Math.round(principal * (Math.max(0, vendorRatePct) / 100))
       return {
         ...o,
         ram_delivery_location_id: Number.isFinite(locationId) ? locationId : null,
         loan_interest: getLoanInterest(o),
+        loan_interest_rate_pct: Math.max(0, loanRatePct),
+        vendor_deduction_rate_pct: Math.max(0, vendorRatePct),
+        payment_vendor: Math.max(0, principal - vendorFee),
         member: m
           ? {
               member_id: m.member_id,

@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabaseServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const LOAN_INTEREST_RATE = 0.06
 const ALLOWED_PAYMENTS = new Set(['Cash', 'Loan', 'Savings'])
 
 function normalizeGrade(grade) {
@@ -177,7 +176,21 @@ export async function POST(req) {
 
     const unitPrice = hasUnitPrice ? Number(unitPriceRes.value || 0) : Number(order.unit_price || 0)
     const principalAmount = unitPrice * qtyRes.value
-    const interestAmount = payment === 'Loan' ? Math.round(principalAmount * LOAN_INTEREST_RATE) : 0
+    const cyclesHasLoanRate = await hasColumn(supabase, 'ram_cycles', 'loan_interest_rate_pct').catch(() => false)
+    let loanRate = 0.06
+    if (cyclesHasLoanRate) {
+      const cycleId = order.ram_cycle_id != null ? Number(order.ram_cycle_id) : null
+      if (Number.isFinite(cycleId) && cycleId > 0) {
+        const { data: rateRow, error: rErr } = await supabase
+          .from('ram_cycles')
+          .select('loan_interest_rate_pct')
+          .eq('id', cycleId)
+          .maybeSingle()
+        if (rErr) return NextResponse.json({ ok: false, error: rErr.message }, { status: 500 })
+        loanRate = Math.max(0, Number(rateRow?.loan_interest_rate_pct || 0)) / 100
+      }
+    }
+    const interestAmount = payment === 'Loan' ? Math.round(principalAmount * loanRate) : 0
     const totalAmount = principalAmount + interestAmount
 
     if (phoneRes?.ok) {
