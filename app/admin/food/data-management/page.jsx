@@ -595,7 +595,7 @@ function DataManagementPageContent() {
       </div>
 
       {message && (
-        <div className={`p-4 rounded mb-6 ${
+        <div className={`p-4 rounded-lg mb-6 ${
           message.includes('Error') 
             ? 'bg-red-50 text-red-700 border border-red-200' 
             : 'bg-green-50 text-green-700 border border-green-200'
@@ -608,9 +608,9 @@ function DataManagementPageContent() {
         <DatabaseMigration />
 
         <div className="grid gap-2 lg:gap-3 xl:gap-4 sm:grid-cols-2">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 lg:p-3 xl:p-4">
-            <h2 className="text-base sm:text-lg font-medium text-amber-900 mb-2 sm:mb-3">🔐 Reset Member PINs</h2>
-            <p className="text-sm sm:text-base text-amber-700 mb-3">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">🔐 Reset Member PINs</h2>
+            <p className="text-xs text-gray-600 mb-3">
               Clears all member PINs so everyone must set a new PIN.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -618,23 +618,23 @@ function DataManagementPageContent() {
                 value={confirmResetPins}
                 onChange={(e) => setConfirmResetPins(e.target.value)}
                 placeholder='Type "RESET PINS"'
-                className="flex-1 px-3 py-2 text-sm sm:text-base border rounded"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                 disabled={loading || !!processingAction}
               />
               <button
                 type="button"
                 onClick={resetMemberPins}
                 disabled={loading || !!processingAction}
-                className="px-3 py-2 rounded text-white text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50"
               >
                 {processingAction === 'resetPins' ? 'Resetting…' : 'Reset PINs'}
               </button>
             </div>
           </div>
 
-          <div className="bg-sky-50 border border-sky-200 rounded-lg p-2 lg:p-3 xl:p-4">
-            <h2 className="text-base sm:text-lg font-medium text-sky-900 mb-2 sm:mb-3">💱 Food Price Repricer</h2>
-            <p className="text-sm sm:text-base text-sky-700 mb-3">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">💱 Food Price Repricer</h2>
+            <p className="text-xs text-gray-600 mb-3">
               Recomputes order line prices and order totals using the latest branch prices and markups.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -642,14 +642,14 @@ function DataManagementPageContent() {
                 value={confirmRepriceOrders}
                 onChange={(e) => setConfirmRepriceOrders(e.target.value)}
                 placeholder='Type "REPRICE ORDERS"'
-                className="flex-1 px-3 py-2 text-sm sm:text-base border rounded"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                 disabled={loading || !!processingAction}
               />
               <button
                 type="button"
                 onClick={repriceFoodOrders}
                 disabled={loading || !!processingAction}
-                className="px-3 py-2 rounded text-white text-sm bg-sky-600 hover:bg-sky-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
               >
                 {processingAction === 'repriceOrders' ? 'Repricing…' : 'Reprice Orders'}
               </button>
@@ -658,9 +658,9 @@ function DataManagementPageContent() {
         </div>
 
         {/* Shopping Control */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">🛍️ Shopping Control</h2>
-          <p className="text-sm sm:text-base text-blue-700 mb-2 sm:mb-3">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">🛍️ Shopping Control</h2>
+          <p className="text-xs text-gray-600 mb-3">
             Toggle whether members can start shopping from the portal.
           </p>
           <div className="flex items-center gap-3">
@@ -681,7 +681,7 @@ function DataManagementPageContent() {
             <button
               onClick={saveShoppingStatus}
               disabled={shoppingLoading}
-              className={`px-3 py-2 rounded text-white text-sm ${shoppingLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${shoppingLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
             >
               {shoppingLoading ? 'Saving…' : 'Save'}
             </button>
@@ -692,27 +692,27 @@ function DataManagementPageContent() {
         </div>
 
         {/* Item Image Management */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-green-900 mb-2 sm:mb-3">🖼️ Item Image Management</h2>
-          <p className="text-sm sm:text-base text-green-700 mb-3 sm:mb-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">🖼️ Item Image Management</h2>
+          <p className="text-xs text-gray-600 mb-3">
             Upload and manage images for inventory items to improve the shopping experience.
           </p>
           <ItemManagement />
         </div>
 
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-purple-900 mb-2 sm:mb-3">🗓️ Cycles</h2>
-          <p className="text-sm sm:text-base text-purple-700 mb-3 sm:mb-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">🗓️ Cycles</h2>
+          <p className="text-xs text-gray-600 mb-3">
             Cycles isolate quarterly/seasonal sales data. New uploads automatically attach to the currently active cycle.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="bg-white/60 border border-purple-200 rounded p-3">
-              <div className="text-sm font-medium text-purple-900 mb-2">Select Cycle for Admin Actions</div>
+            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+              <div className="text-sm font-medium text-gray-900 mb-2">Select Cycle for Admin Actions</div>
               <select
                 value={selectedCycleId ?? ''}
                 onChange={(e) => setSelectedCycleId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                 disabled={loadingCycles || cycles.length === 0}
               >
                 {cycles.length === 0 ? (
@@ -730,7 +730,7 @@ function DataManagementPageContent() {
                   type="button"
                   onClick={setActiveCycle}
                   disabled={selectedCycleId == null || activatingCycle}
-                  className="px-3 py-2 rounded text-white text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                 >
                   {activatingCycle ? 'Setting…' : 'Set Selected as Active'}
                 </button>
@@ -738,25 +738,25 @@ function DataManagementPageContent() {
                   type="button"
                   onClick={loadCycles}
                   disabled={loadingCycles}
-                  className="px-3 py-2 rounded text-sm bg-white border border-purple-200 hover:bg-purple-50 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
                 >
                   {loadingCycles ? 'Refreshing…' : 'Refresh'}
                 </button>
               </div>
-              <div className="mt-2 text-xs sm:text-sm text-purple-800">
+              <div className="mt-2 text-xs text-gray-600">
                 Active cycle id: {activeCycleId ?? '—'}
               </div>
             </div>
 
-            <form onSubmit={createCycle} className="bg-white/60 border border-purple-200 rounded p-3">
-              <div className="text-sm font-medium text-purple-900 mb-2">Create New Cycle</div>
+            <form onSubmit={createCycle} className="border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+              <div className="text-sm font-medium text-gray-900 mb-2">Create New Cycle</div>
               <div className="grid gap-2">
                 <input
                   type="text"
                   value={newCycleCode}
                   onChange={(e) => setNewCycleCode(e.target.value)}
                   placeholder="Code (e.g., 2026-Q2)"
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   required
                 />
                 <input
@@ -764,7 +764,7 @@ function DataManagementPageContent() {
                   value={newCycleName}
                   onChange={(e) => setNewCycleName(e.target.value)}
                   placeholder="Name (e.g., Fresh Food Q2 2026)"
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   required
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -772,16 +772,16 @@ function DataManagementPageContent() {
                     type="date"
                     value={newCycleStartsAt}
                     onChange={(e) => setNewCycleStartsAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   />
                   <input
                     type="date"
                     value={newCycleEndsAt}
                     onChange={(e) => setNewCycleEndsAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm sm:text-base border rounded"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm text-purple-900">
+                <label className="flex items-center gap-2 text-sm text-gray-800">
                   <input
                     type="checkbox"
                     checked={newCycleMakeActive}
@@ -792,7 +792,7 @@ function DataManagementPageContent() {
                 <button
                   type="submit"
                   disabled={creatingCycle}
-                  className="w-full sm:w-auto px-4 py-2 bg-purple-600 text-white text-sm sm:text-base rounded hover:bg-purple-700 disabled:opacity-50"
+                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
                   {creatingCycle ? 'Creating…' : 'Create Cycle'}
                 </button>
@@ -801,103 +801,103 @@ function DataManagementPageContent() {
           </div>
         </div>
 
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-indigo-900 mb-2 sm:mb-3">💳 Food Loan Limits (Selected Cycle)</h2>
-          <p className="text-sm sm:text-base text-indigo-700 mb-3 sm:mb-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">💳 Food Loan Limits (Selected Cycle)</h2>
+          <p className="text-xs text-gray-600 mb-3">
             Set maximum Loan amounts per cycle for Eligible members and Non-Eligible (Grace) members.
           </p>
 
-          <div className="bg-white/60 border border-indigo-200 rounded p-3">
-            <div className="text-sm font-medium text-indigo-900 mb-3">Eligible (Loan)</div>
+          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+            <div className="text-sm font-medium text-gray-900 mb-3">Eligible (Loan)</div>
             <div className="grid gap-2 sm:grid-cols-3">
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Pensioner</div>
+                <div className="text-xs text-gray-600 mb-1">Pensioner</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={eligibleLoanMaxPensioner}
                   onChange={(e) => setEligibleLoanMaxPensioner(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Retiree</div>
+                <div className="text-xs text-gray-600 mb-1">Retiree</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={eligibleLoanMaxRetiree}
                   onChange={(e) => setEligibleLoanMaxRetiree(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Active (Other)</div>
+                <div className="text-xs text-gray-600 mb-1">Active (Other)</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={eligibleLoanMaxActive}
                   onChange={(e) => setEligibleLoanMaxActive(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
             </div>
-            <div className="mt-2 text-xs text-indigo-800">Applies to Loan orders that pass eligibility.</div>
+            <div className="mt-2 text-xs text-gray-600">Applies to Loan orders that pass eligibility.</div>
           </div>
 
-          <div className="mt-3 bg-white/60 border border-indigo-200 rounded p-3">
-            <div className="text-sm font-medium text-indigo-900 mb-3">Non-Eligible (Grace Loan)</div>
+          <div className="mt-3 border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+            <div className="text-sm font-medium text-gray-900 mb-3">Non-Eligible (Grace Loan)</div>
             <div className="grid gap-2 sm:grid-cols-3">
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Pensioner</div>
+                <div className="text-xs text-gray-600 mb-1">Pensioner</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={graceLoanMaxPensioner}
                   onChange={(e) => setGraceLoanMaxPensioner(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Retiree</div>
+                <div className="text-xs text-gray-600 mb-1">Retiree</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={graceLoanMaxRetiree}
                   onChange={(e) => setGraceLoanMaxRetiree(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
-                <div className="text-xs text-indigo-800 mb-1">Active (Other)</div>
+                <div className="text-xs text-gray-600 mb-1">Active (Other)</div>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   value={graceLoanMaxActive}
                   onChange={(e) => setGraceLoanMaxActive(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                   disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
             </div>
-            <div className="mt-2 text-xs text-indigo-800">If eligibility fails, allowed once per cycle up to this max.</div>
+            <div className="mt-2 text-xs text-gray-600">If eligibility fails, allowed once per cycle up to this max.</div>
           </div>
 
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            <div className="flex items-center justify-between gap-3 bg-white/60 border border-indigo-200 rounded p-3">
+            <div className="flex items-center justify-between gap-3 border border-gray-200 rounded-xl p-3 bg-gray-50/40">
               <div>
-                <div className="text-sm font-medium text-indigo-900">Include Interest In Limit</div>
-                <div className="text-xs text-indigo-800">
+                <div className="text-sm font-medium text-gray-900">Include Interest In Limit</div>
+                <div className="text-xs text-gray-600">
                   When ON, interest is counted inside the max. When OFF, max applies to principal only.
                 </div>
               </div>
@@ -914,18 +914,18 @@ function DataManagementPageContent() {
               </label>
             </div>
 
-            <div className="bg-white/60 border border-indigo-200 rounded p-3">
-              <div className="text-sm font-medium text-indigo-900 mb-2">Loan Interest Rate (Selected Cycle)</div>
+            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+              <div className="text-sm font-medium text-gray-900 mb-2">Loan Interest Rate (Selected Cycle)</div>
               <div className="flex flex-col sm:flex-row sm:items-end gap-2">
                 <div className="flex-1">
-                  <div className="text-xs text-indigo-800 mb-1">Rate (%)</div>
+                  <div className="text-xs text-gray-600 mb-1">Rate (%)</div>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={loanInterestRatePct}
                     onChange={(e) => setLoanInterestRatePct(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border rounded"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
                     disabled={policyLoading || policySaving || loanRateSaving || selectedCycleId == null || !rateEditing}
                   />
                 </div>
@@ -939,12 +939,12 @@ function DataManagementPageContent() {
                     await saveFoodLoanRate()
                   }}
                   disabled={policySaving || policyLoading || loanRateSaving || selectedCycleId == null}
-                  className="px-3 py-2 rounded text-white text-sm bg-gray-900 hover:bg-gray-950 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                 >
                   {loanRateSaving ? 'Saving…' : (rateEditing ? 'Save' : 'Edit')}
                 </button>
               </div>
-              <div className="mt-2 text-xs text-indigo-800">
+              <div className="mt-2 text-xs text-gray-600">
                 Applies to Loan orders for this cycle.
               </div>
             </div>
@@ -961,7 +961,7 @@ function DataManagementPageContent() {
                 await saveFoodCyclePolicy()
               }}
               disabled={policySaving || policyLoading || selectedCycleId == null}
-              className="px-3 py-2 rounded text-white text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
             >
               {policySaving ? 'Saving…' : (limitsEditing ? 'Save' : 'Edit')}
             </button>
@@ -969,7 +969,7 @@ function DataManagementPageContent() {
               type="button"
               onClick={() => loadFoodCyclePolicy(selectedCycleId)}
               disabled={policySaving || policyLoading || selectedCycleId == null}
-              className="px-3 py-2 rounded text-sm bg-white border border-indigo-200 hover:bg-indigo-50 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
             >
               {policyLoading ? 'Refreshing…' : 'Refresh'}
             </button>
@@ -987,16 +987,16 @@ function DataManagementPageContent() {
         </div>
 
         {/* Backup Data */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 lg:p-3 xl:p-4">
-          <h2 className="text-base sm:text-lg font-medium text-blue-900 mb-2 sm:mb-3">💾 Backup Data</h2>
-          <p className="text-sm sm:text-base text-blue-700 mb-3 sm:mb-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">💾 Backup Data</h2>
+          <p className="text-xs text-gray-600 mb-3">
             Download data for the selected cycle as an Excel file with separate sheets for each data type.
           </p>
           <button
               type="button"
               onClick={exportBackup}
               disabled={processingAction !== null}
-              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm sm:text-base rounded hover:bg-blue-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
             >
             {processingAction === 'exportBackup' ? 'Downloading...' : 'Download Backup'}
           </button>
