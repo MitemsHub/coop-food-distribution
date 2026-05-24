@@ -39,6 +39,24 @@ function CartPageContent() {
     } catch {}
   }
 
+  const persistDeliveryBranch = (code) => {
+    try {
+      if (memberId) localStorage.setItem(`deliveryBranch_${memberId}`, code || '')
+    } catch {}
+  }
+
+  const persistDepartment = (name) => {
+    try {
+      if (memberId) localStorage.setItem(`department_${memberId}`, name || '')
+    } catch {}
+  }
+
+  const persistPaymentOption = (opt) => {
+    try {
+      if (memberId) localStorage.setItem(`paymentOption_${memberId}`, opt || '')
+    } catch {}
+  }
+
   // Helper function for safe JSON parsing
   // Do not throw on non-2xx; return parsed payload so callers can show
   // meaningful error messages instead of a generic network failure.
@@ -365,6 +383,8 @@ function CartPageContent() {
       if (data.ok) {
         // Clear cart from localStorage
         localStorage.removeItem(`cart_${memberId}`)
+        localStorage.removeItem(`deliveryBranch_${memberId}`)
+        localStorage.removeItem(`department_${memberId}`)
         
         // Redirect to success page
         router.push(isAdmin ? `/shop/success/${data.order_id}?mid=${memberId}` : `/shop/success/${data.order_id}`)
@@ -462,7 +482,11 @@ function CartPageContent() {
                     <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Delivery Branch</label>
                     <select
                       value={deliveryBranch}
-                      onChange={(e) => setDeliveryBranch(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setDeliveryBranch(v)
+                        persistDeliveryBranch(v)
+                      }}
                       className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option key="select-branch" value="">Select branch</option>
@@ -478,7 +502,11 @@ function CartPageContent() {
                     <label className="block text-xs sm:text-sm md:text-sm font-medium text-gray-700 mb-2">Department</label>
                     <select
                       value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setDepartment(v)
+                        persistDepartment(v)
+                      }}
                       className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option key="select-department" value="">Select department</option>
@@ -495,7 +523,11 @@ function CartPageContent() {
                 <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-2 lg:mb-3">Payment Method</h3>
                 <select
                   value={paymentOption}
-                  onChange={(e) => setPaymentOption(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setPaymentOption(v)
+                    persistPaymentOption(v)
+                  }}
                   className="w-full border rounded-lg px-3 py-2 text-xs sm:text-sm md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option key="payment-savings" value="Savings" disabled={savingsEligible <= 0}>

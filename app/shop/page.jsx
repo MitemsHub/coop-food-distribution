@@ -736,6 +736,8 @@ function ShopPageContent() {
       // Clear saved cart from localStorage
       if (member?.member_id) {
         localStorage.removeItem(`cart_${member.member_id}`)
+        localStorage.removeItem(`deliveryBranch_${member.member_id}`)
+        localStorage.removeItem(`department_${member.member_id}`)
       }
       
       router.push(
