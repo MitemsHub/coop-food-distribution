@@ -50,6 +50,10 @@ function RamDataContent() {
   const [priceUndefined, setPriceUndefined] = useState('0')
   const [loanInterestRatePct, setLoanInterestRatePct] = useState('6')
   const [vendorDeductionRatePct, setVendorDeductionRatePct] = useState('6')
+  const [editableFields, setEditableFields] = useState({})
+  const [pricingEditing, setPricingEditing] = useState(false)
+  const [loanRateEditing, setLoanRateEditing] = useState(false)
+  const [vendorRateEditing, setVendorRateEditing] = useState(false)
 
   const [newCycleCode, setNewCycleCode] = useState('')
   const [newCycleName, setNewCycleName] = useState('')
@@ -111,6 +115,13 @@ function RamDataContent() {
     if (selectedCycleId == null) return
     fetchLocations()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCycleId])
+
+  useEffect(() => {
+    setEditableFields({})
+    setPricingEditing(false)
+    setLoanRateEditing(false)
+    setVendorRateEditing(false)
   }, [selectedCycleId])
 
   useEffect(() => {
@@ -257,8 +268,10 @@ function RamDataContent() {
       const updated = json.cycle
       setCycles((prev) => (prev || []).map((x) => (Number(x?.id) === Number(updated?.id) ? { ...x, ...updated } : x)))
       setPolicyMsg('Saved')
+      return true
     } catch (e) {
       setPolicyMsg(`Error: ${e?.message || 'Failed to save'}`)
+      return false
     } finally {
       setSavingPolicy(false)
     }
@@ -277,7 +290,7 @@ function RamDataContent() {
     const v = loanInterestRatePct === '' ? 0 : Number(loanInterestRatePct)
     if (!Number.isFinite(v) || v < 0) {
       setPolicyMsg('Error: Loan interest rate must be a non-negative number')
-      return
+      return false
     }
     return saveCycleSetting({ loan_interest_rate_pct: v })
   }
@@ -286,9 +299,29 @@ function RamDataContent() {
     const v = vendorDeductionRatePct === '' ? 0 : Number(vendorDeductionRatePct)
     if (!Number.isFinite(v) || v < 0) {
       setPolicyMsg('Error: Vendor deduction rate must be a non-negative number')
-      return
+      return false
     }
     return saveCycleSetting({ vendor_deduction_rate_pct: v })
+  }
+
+  const isEditingField = (key) => !!editableFields?.[key]
+  const setEditingField = (key, on) => {
+    setEditableFields((prev) => {
+      const next = { ...(prev || {}) }
+      if (on) next[key] = true
+      else delete next[key]
+      return next
+    })
+  }
+
+  const handleInlineEditOrSave = async (key, value) => {
+    if (!isEditingField(key)) {
+      setEditingField(key, true)
+      return
+    }
+    const n = value === '' ? 0 : Number(value)
+    const ok = await saveCycleSetting({ [key]: n })
+    if (ok) setEditingField(key, false)
   }
 
   const toggleCycleActive = async (loc) => {
@@ -593,17 +626,17 @@ function RamDataContent() {
                             value={eligiblePensionerQty}
                             onChange={(e) => setEligiblePensionerQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('eligible_loan_qty_pensioner')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ eligible_loan_qty_pensioner: Number(eligiblePensionerQty) })}
+                            onClick={() => handleInlineEditOrSave('eligible_loan_qty_pensioner', eligiblePensionerQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('eligible_loan_qty_pensioner') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -615,17 +648,17 @@ function RamDataContent() {
                             value={eligibleRetireeQty}
                             onChange={(e) => setEligibleRetireeQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('eligible_loan_qty_retiree')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ eligible_loan_qty_retiree: Number(eligibleRetireeQty) })}
+                            onClick={() => handleInlineEditOrSave('eligible_loan_qty_retiree', eligibleRetireeQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('eligible_loan_qty_retiree') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -637,17 +670,17 @@ function RamDataContent() {
                             value={eligibleActiveQty}
                             onChange={(e) => setEligibleActiveQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('eligible_loan_qty_active')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ eligible_loan_qty_active: Number(eligibleActiveQty) })}
+                            onClick={() => handleInlineEditOrSave('eligible_loan_qty_active', eligibleActiveQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('eligible_loan_qty_active') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -699,17 +732,17 @@ function RamDataContent() {
                             value={nonEligiblePensionerQty}
                             onChange={(e) => setNonEligiblePensionerQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('grace_loan_qty_pensioner')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ grace_loan_qty_pensioner: Number(nonEligiblePensionerQty) })}
+                            onClick={() => handleInlineEditOrSave('grace_loan_qty_pensioner', nonEligiblePensionerQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('grace_loan_qty_pensioner') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -721,17 +754,17 @@ function RamDataContent() {
                             value={nonEligibleRetireeQty}
                             onChange={(e) => setNonEligibleRetireeQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('grace_loan_qty_retiree')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ grace_loan_qty_retiree: Number(nonEligibleRetireeQty) })}
+                            onClick={() => handleInlineEditOrSave('grace_loan_qty_retiree', nonEligibleRetireeQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('grace_loan_qty_retiree') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -743,17 +776,17 @@ function RamDataContent() {
                             value={nonEligibleActiveQty}
                             onChange={(e) => setNonEligibleActiveQty(e.target.value)}
                             inputMode="numeric"
-                            disabled={savingPolicy}
+                            disabled={savingPolicy || selectedCycleId == null || !isEditingField('grace_loan_qty_active')}
                           />
                         </td>
                         <td className="p-2 text-right">
                           <button
                             type="button"
                             className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                            onClick={() => saveCycleSetting({ grace_loan_qty_active: Number(nonEligibleActiveQty) })}
+                            onClick={() => handleInlineEditOrSave('grace_loan_qty_active', nonEligibleActiveQty)}
                             disabled={savingPolicy || selectedCycleId == null}
                           >
-                            Save
+                            {savingPolicy ? 'Saving...' : (isEditingField('grace_loan_qty_active') ? 'Save' : 'Edit')}
                           </button>
                         </td>
                       </tr>
@@ -777,7 +810,7 @@ function RamDataContent() {
                 value={priceJunior}
                 onChange={(e) => setPriceJunior(e.target.value)}
                 inputMode="numeric"
-                disabled={loadingCycles || savingPolicy}
+                disabled={loadingCycles || savingPolicy || selectedCycleId == null || !pricingEditing}
               />
             </div>
             <div>
@@ -787,7 +820,7 @@ function RamDataContent() {
                 value={priceSenior}
                 onChange={(e) => setPriceSenior(e.target.value)}
                 inputMode="numeric"
-                disabled={loadingCycles || savingPolicy}
+                disabled={loadingCycles || savingPolicy || selectedCycleId == null || !pricingEditing}
               />
             </div>
             <div>
@@ -797,7 +830,7 @@ function RamDataContent() {
                 value={priceExecutive}
                 onChange={(e) => setPriceExecutive(e.target.value)}
                 inputMode="numeric"
-                disabled={loadingCycles || savingPolicy}
+                disabled={loadingCycles || savingPolicy || selectedCycleId == null || !pricingEditing}
               />
             </div>
             <div>
@@ -807,7 +840,7 @@ function RamDataContent() {
                 value={priceUndefined}
                 onChange={(e) => setPriceUndefined(e.target.value)}
                 inputMode="numeric"
-                disabled={loadingCycles || savingPolicy}
+                disabled={loadingCycles || savingPolicy || selectedCycleId == null || !pricingEditing}
               />
             </div>
           </div>
@@ -815,10 +848,17 @@ function RamDataContent() {
             <button
               type="button"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-              onClick={savePrices}
+              onClick={async () => {
+                if (!pricingEditing) {
+                  setPricingEditing(true)
+                  return
+                }
+                const ok = await savePrices()
+                if (ok) setPricingEditing(false)
+              }}
               disabled={savingPolicy || selectedCycleId == null}
             >
-              {savingPolicy ? 'Saving...' : 'Save Prices'}
+              {savingPolicy ? 'Saving...' : (pricingEditing ? 'Save Prices' : 'Edit')}
             </button>
           </div>
         </div>
@@ -840,16 +880,23 @@ function RamDataContent() {
                     step="0.01"
                     value={loanInterestRatePct}
                     onChange={(e) => setLoanInterestRatePct(e.target.value)}
-                    disabled={loadingCycles || savingPolicy}
+                    disabled={loadingCycles || savingPolicy || selectedCycleId == null || !loanRateEditing}
                   />
                 </div>
                 <button
                   type="button"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-                  onClick={saveLoanInterestRate}
+                  onClick={async () => {
+                    if (!loanRateEditing) {
+                      setLoanRateEditing(true)
+                      return
+                    }
+                    const ok = await saveLoanInterestRate()
+                    if (ok) setLoanRateEditing(false)
+                  }}
                   disabled={savingPolicy || selectedCycleId == null}
                 >
-                  {savingPolicy ? 'Saving...' : 'Save'}
+                  {savingPolicy ? 'Saving...' : (loanRateEditing ? 'Save' : 'Edit')}
                 </button>
               </div>
             </div>
@@ -867,16 +914,23 @@ function RamDataContent() {
                     step="0.01"
                     value={vendorDeductionRatePct}
                     onChange={(e) => setVendorDeductionRatePct(e.target.value)}
-                    disabled={loadingCycles || savingPolicy}
+                    disabled={loadingCycles || savingPolicy || selectedCycleId == null || !vendorRateEditing}
                   />
                 </div>
                 <button
                   type="button"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-                  onClick={saveVendorDeductionRate}
+                  onClick={async () => {
+                    if (!vendorRateEditing) {
+                      setVendorRateEditing(true)
+                      return
+                    }
+                    const ok = await saveVendorDeductionRate()
+                    if (ok) setVendorRateEditing(false)
+                  }}
                   disabled={savingPolicy || selectedCycleId == null}
                 >
-                  {savingPolicy ? 'Saving...' : 'Save'}
+                  {savingPolicy ? 'Saving...' : (vendorRateEditing ? 'Save' : 'Edit')}
                 </button>
               </div>
             </div>

@@ -42,6 +42,8 @@ function DataManagementPageContent() {
   const [includeInterestInCap, setIncludeInterestInCap] = useState(true)
   const [loanInterestRatePct, setLoanInterestRatePct] = useState('0')
   const [loanRateSaving, setLoanRateSaving] = useState(false)
+  const [limitsEditing, setLimitsEditing] = useState(false)
+  const [rateEditing, setRateEditing] = useState(false)
 
   const loadCycles = async () => {
     try {
@@ -86,6 +88,8 @@ function DataManagementPageContent() {
       setGraceLoanMaxActive(String(Number(p?.grace?.active || 0)))
       setIncludeInterestInCap(p?.include_interest_in_cap !== false)
       setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+      setLimitsEditing(false)
+      setRateEditing(false)
     } catch (e) {
       setPolicyMsg(`Error: ${e.message}`)
       setEligibleLoanMaxPensioner('0')
@@ -96,6 +100,8 @@ function DataManagementPageContent() {
       setGraceLoanMaxActive('0')
       setIncludeInterestInCap(true)
       setLoanInterestRatePct('0')
+      setLimitsEditing(false)
+      setRateEditing(false)
     } finally {
       setPolicyLoading(false)
     }
@@ -103,6 +109,8 @@ function DataManagementPageContent() {
 
   useEffect(() => {
     if (selectedCycleId == null) return
+    setLimitsEditing(false)
+    setRateEditing(false)
     loadFoodCyclePolicy(selectedCycleId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCycleId])
@@ -148,8 +156,11 @@ function DataManagementPageContent() {
       setGraceLoanMaxActive(String(Number(p?.grace?.active || 0)))
       setIncludeInterestInCap(p?.include_interest_in_cap !== false)
       setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+      setLimitsEditing(false)
+      return true
     } catch (e) {
       setPolicyMsg(`Error: ${e.message}`)
+      return false
     } finally {
       setPolicySaving(false)
     }
@@ -190,8 +201,11 @@ function DataManagementPageContent() {
       setPolicyMsg('Food loan interest rate saved successfully')
       const p = json.policy || {}
       setLoanInterestRatePct(String(Number(p?.loan_interest_rate_pct || 0)))
+      setRateEditing(false)
+      return true
     } catch (e) {
       setPolicyMsg(`Error: ${e.message}`)
+      return false
     } finally {
       setLoanRateSaving(false)
     }
@@ -805,7 +819,7 @@ function DataManagementPageContent() {
                   value={eligibleLoanMaxPensioner}
                   onChange={(e) => setEligibleLoanMaxPensioner(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
@@ -817,7 +831,7 @@ function DataManagementPageContent() {
                   value={eligibleLoanMaxRetiree}
                   onChange={(e) => setEligibleLoanMaxRetiree(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
@@ -829,7 +843,7 @@ function DataManagementPageContent() {
                   value={eligibleLoanMaxActive}
                   onChange={(e) => setEligibleLoanMaxActive(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
             </div>
@@ -848,7 +862,7 @@ function DataManagementPageContent() {
                   value={graceLoanMaxPensioner}
                   onChange={(e) => setGraceLoanMaxPensioner(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
@@ -860,7 +874,7 @@ function DataManagementPageContent() {
                   value={graceLoanMaxRetiree}
                   onChange={(e) => setGraceLoanMaxRetiree(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
               <div>
@@ -872,7 +886,7 @@ function DataManagementPageContent() {
                   value={graceLoanMaxActive}
                   onChange={(e) => setGraceLoanMaxActive(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded"
-                  disabled={policyLoading || policySaving || selectedCycleId == null}
+                  disabled={policyLoading || policySaving || selectedCycleId == null || !limitsEditing}
                 />
               </div>
             </div>
@@ -887,7 +901,10 @@ function DataManagementPageContent() {
                   When ON, interest is counted inside the max. When OFF, max applies to principal only.
                 </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIncludeInterestInCap((v) => !v)}>
+              <label
+                className={`flex items-center gap-2 cursor-pointer select-none ${!limitsEditing ? 'opacity-60 pointer-events-none' : ''}`}
+                onClick={() => setIncludeInterestInCap((v) => !v)}
+              >
                 <div className={`w-12 h-6 rounded-full px-1 flex items-center ${includeInterestInCap ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'}`}>
                   <div className="w-4 h-4 bg-white rounded-full shadow" />
                 </div>
@@ -909,16 +926,22 @@ function DataManagementPageContent() {
                     value={loanInterestRatePct}
                     onChange={(e) => setLoanInterestRatePct(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded"
-                    disabled={policyLoading || policySaving || loanRateSaving || selectedCycleId == null}
+                    disabled={policyLoading || policySaving || loanRateSaving || selectedCycleId == null || !rateEditing}
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={saveFoodLoanRate}
+                  onClick={async () => {
+                    if (!rateEditing) {
+                      setRateEditing(true)
+                      return
+                    }
+                    await saveFoodLoanRate()
+                  }}
                   disabled={policySaving || policyLoading || loanRateSaving || selectedCycleId == null}
                   className="px-3 py-2 rounded text-white text-sm bg-gray-900 hover:bg-gray-950 disabled:opacity-50"
                 >
-                  {loanRateSaving ? 'Saving…' : 'Save Rate'}
+                  {loanRateSaving ? 'Saving…' : (rateEditing ? 'Save' : 'Edit')}
                 </button>
               </div>
               <div className="mt-2 text-xs text-indigo-800">
@@ -930,11 +953,17 @@ function DataManagementPageContent() {
           <div className="mt-3 flex gap-2 flex-wrap">
             <button
               type="button"
-              onClick={saveFoodCyclePolicy}
+              onClick={async () => {
+                if (!limitsEditing) {
+                  setLimitsEditing(true)
+                  return
+                }
+                await saveFoodCyclePolicy()
+              }}
               disabled={policySaving || policyLoading || selectedCycleId == null}
               className="px-3 py-2 rounded text-white text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
             >
-              {policySaving ? 'Saving…' : 'Save Limits'}
+              {policySaving ? 'Saving…' : (limitsEditing ? 'Save' : 'Edit')}
             </button>
             <button
               type="button"
