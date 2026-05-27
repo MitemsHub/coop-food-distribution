@@ -470,8 +470,8 @@ function RepDeliveredContent() {
             </div>
 
             <div className="ui-card overflow-hidden">
-              <div className="max-h-[60vh] overflow-y-auto">
-                <table className="w-full text-xs sm:text-sm table-fixed">
+              <div className="max-h-[60vh] overflow-auto">
+                <table className="w-full text-xs sm:text-sm min-w-[560px]">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-2 text-left w-40 hidden md:table-cell">SKU</th>
@@ -486,10 +486,10 @@ function RepDeliveredContent() {
                       (viewOrder.order_lines || []).map((l) => (
                         <tr key={l.id}>
                           <td className="px-3 py-2 font-mono text-xs break-all hidden md:table-cell">{l.items?.sku || ''}</td>
-                          <td className="px-3 py-2 whitespace-normal break-words">{l.items?.name || ''}</td>
-                          <td className="px-3 py-2 text-right">{Number(l.qty || 0).toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right">₦{Number(l.unit_price || 0).toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right">₦{Number(l.amount || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 whitespace-normal break-words min-w-[220px]">{l.items?.name || ''}</td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">{Number(l.qty || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">₦{Number(l.unit_price || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">₦{Number(l.amount || 0).toLocaleString()}</td>
                         </tr>
                       ))
                     ) : (

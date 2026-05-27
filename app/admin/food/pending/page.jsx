@@ -1050,8 +1050,8 @@ export function FoodOrdersAdminPageContent({ status = 'Pending' }) {
         title={viewing ? `Order #${viewing.order_id} items` : 'Order items'}
         widthClass="max-w-4xl w-full mx-4"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm border">
+        <div className="max-h-[60vh] overflow-auto">
+          <table className="w-full text-xs sm:text-sm border min-w-[560px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left p-2 border">SKU</th>
@@ -1064,11 +1064,11 @@ export function FoodOrdersAdminPageContent({ status = 'Pending' }) {
             <tbody>
               {(viewing?.order_lines || []).map((l) => (
                 <tr key={l.id}>
-                  <td className="p-2 border">{l.items?.sku}</td>
-                  <td className="p-2 border break-words">{l.items?.name}</td>
-                  <td className="p-2 border text-right">{l.qty}</td>
-                  <td className="p-2 border text-right">{money(l.unit_price)}</td>
-                  <td className="p-2 border text-right">{money(l.amount)}</td>
+                  <td className="p-2 border font-mono text-xs break-all">{l.items?.sku}</td>
+                  <td className="p-2 border break-words min-w-[220px]">{l.items?.name}</td>
+                  <td className="p-2 border text-right whitespace-nowrap">{l.qty}</td>
+                  <td className="p-2 border text-right whitespace-nowrap">{money(l.unit_price)}</td>
+                  <td className="p-2 border text-right whitespace-nowrap">{money(l.amount)}</td>
                 </tr>
               ))}
             </tbody>
