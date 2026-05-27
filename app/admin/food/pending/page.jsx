@@ -807,6 +807,16 @@ export function FoodOrdersAdminPageContent({ status = 'Pending' }) {
                     <td className="p-3">
                       <div className="font-medium">#{o.order_id}</div>
                       <div className="text-gray-500 text-xs">{new Date(o.created_at).toLocaleString()}</div>
+                      {status === 'Cancelled' ? (
+                        <>
+                          <div className="text-gray-500 text-xs">
+                            Cancelled: {o.cancelled_at ? new Date(o.cancelled_at).toLocaleString() : '—'}
+                          </div>
+                          <div className="text-gray-500 text-xs break-words">
+                            Reason: {String(o.cancelled_reason || '').trim() || '—'}
+                          </div>
+                        </>
+                      ) : null}
                     </td>
                     <td className="p-3">
                       <div className="font-medium">{o.member_id}</div>

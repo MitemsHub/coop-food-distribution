@@ -40,6 +40,7 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
   const [page, setPage] = useState(1)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [showModal, setShowModal] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
   const [editQty, setEditQty] = useState('')
   const [editLocationId, setEditLocationId] = useState('')
   const [editPaymentOption, setEditPaymentOption] = useState('')
@@ -337,6 +338,7 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
     const cleaned = list.filter((v) => Number.isFinite(Number(v)) && Number(v) > 0).map((v) => Number(v))
     if (!cleaned.length) return
     setShowModal({ type: 'cancel', ids: cleaned })
+    setCancelReason('')
   }
 
   const openRestoreModal = (ids) => {
@@ -387,10 +389,11 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
     setBulkBusy(true)
     setMsg(null)
     try {
+      const reason = String(cancelReason || '').trim()
       const res = await fetch('/api/admin/ram/orders/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ ids, reason: 'Cancelled by admin' }),
+        body: JSON.stringify({ ids, reason: reason || 'Cancelled by admin' }),
       })
       const json = await safeJson(res, '/api/admin/ram/orders/cancel')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Cancel failed')
@@ -398,6 +401,7 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
       setOrders((prev) => (prev || []).filter((o) => !cancelled.includes(o.id)))
       setSelected(new Set())
       setShowModal(null)
+      setCancelReason('')
       setMsg({ type: 'success', text: `Cancelled ${cancelled.length} order(s)` })
     } catch (e) {
       setMsg({ type: 'error', text: e?.message || 'Cancel failed' })
@@ -760,7 +764,7 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
               {!loading && orders.length === 0 && (
                 <tr>
                   <td className="p-3 text-gray-600" colSpan={9}>
-                    No Pending ram orders.
+                    No {status} ram orders.
                   </td>
                 </tr>
               )}
@@ -789,6 +793,14 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
                       <td className="p-2 align-top">
                         <div className="font-medium">#{o.id}</div>
                         <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+                        {status === 'Cancelled' ? (
+                          <>
+                            <div className="text-gray-600">
+                              Cancelled: {o.cancelled_at ? new Date(o.cancelled_at).toLocaleString() : '—'}
+                            </div>
+                            <div className="text-gray-600 break-words">Reason: {String(o.cancelled_reason || '').trim() || '—'}</div>
+                          </>
+                        ) : null}
                       </td>
                       <td className="p-2 align-top">
                         <div className="font-medium">{o.member_id}</div>
@@ -981,8 +993,21 @@ export function RamOrdersAdminPageContent({ status = 'Pending' }) {
             </div>
           </div>
         ) : showModal?.type === 'cancel' ? (
-          <div className="text-sm text-gray-700">
-            Cancel <b>{showModal?.ids?.length || 0}</b> order(s)? Cancelled orders will be excluded from reports and exports.
+          <div className="space-y-3">
+            <div className="text-sm text-gray-700">
+              Cancel <b>{showModal?.ids?.length || 0}</b> order(s)? Cancelled orders will be excluded from reports and exports.
+            </div>
+            <div>
+              <div className="text-xs font-medium text-gray-700 mb-1">Reason (optional)</div>
+              <textarea
+                className="w-full border rounded px-3 py-2 text-sm bg-white"
+                rows={3}
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Reason for cancellation..."
+                disabled={bulkBusy || editBusy}
+              />
+            </div>
           </div>
         ) : showModal?.type === 'restore' ? (
           <div className="text-sm text-gray-700">

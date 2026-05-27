@@ -148,6 +148,8 @@ export async function GET(req) {
     const dir = (searchParams.get('dir') || 'next').toLowerCase()
     const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
     const ordersHasCategorySnapshot = await hasColumn(supabase, 'orders', 'member_category_snapshot').catch(() => false)
+    const ordersHasCancelledAt = await hasColumn(supabase, 'orders', 'cancelled_at').catch(() => false)
+    const ordersHasCancelledReason = await hasColumn(supabase, 'orders', 'cancelled_reason').catch(() => false)
     const cycleId = await resolveCycleId(supabase, searchParams, ordersHasCycle)
     if (ordersHasCycle && !cycleId) {
       return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
@@ -166,14 +168,24 @@ export async function GET(req) {
       termBranchId = brByTerm?.id || null
     }
 
-    const selectCols = `
-      order_id, created_at, posted_at, status, payment_option, total_amount,
-      member_id, member_name_snapshot, member_category_snapshot,
-      delivery:delivery_branch_id(code,name),
-      member_branch:branch_id(code,name),
-      departments:department_id(name),
-      order_lines(id, qty, unit_price, amount, items:item_id(sku,name))
-    `
+    const selectColsParts = [
+      'order_id',
+      'created_at',
+      'posted_at',
+      'status',
+      'payment_option',
+      'total_amount',
+      'member_id',
+      'member_name_snapshot',
+      'member_category_snapshot',
+      ...(ordersHasCancelledAt ? ['cancelled_at'] : []),
+      ...(ordersHasCancelledReason ? ['cancelled_reason'] : []),
+      'delivery:delivery_branch_id(code,name)',
+      'member_branch:branch_id(code,name)',
+      'departments:department_id(name)',
+      'order_lines(id, qty, unit_price, amount, items:item_id(sku,name))',
+    ]
+    const selectCols = selectColsParts.join(',\n      ')
 
     let q = supabase.from('orders').select(selectCols).order('order_id', { ascending: false })
     q = applyOrderFilters({
