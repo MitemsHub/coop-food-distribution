@@ -33,6 +33,7 @@ function RepBanksContent() {
   const [term, setTerm] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [didLoadOnce, setDidLoadOnce] = useState(false)
 
   const [bankModalOpen, setBankModalOpen] = useState(false)
   const [bankLoc, setBankLoc] = useState(null)
@@ -64,9 +65,11 @@ function RepBanksContent() {
   const [invoiceDeleting, setInvoiceDeleting] = useState(false)
 
   const fetchCtl = useRef(null)
+  const fetchSeq = useRef(0)
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
   const fetchRows = async () => {
+    const seq = ++fetchSeq.current
     setLoading(true)
     setMsg(null)
     try {
@@ -76,12 +79,17 @@ function RepBanksContent() {
       const res = await fetch('/api/rep/ram/vendor-banks/locations', { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/rep/ram/vendor-banks/locations')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
+      if (seq !== fetchSeq.current) return
       setRows(json.locations || [])
     } catch (e) {
+      if (seq !== fetchSeq.current) return
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setRows([])
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) {
+        setLoading(false)
+        setDidLoadOnce(true)
+      }
     }
   }
 
@@ -362,58 +370,69 @@ function RepBanksContent() {
               </tr>
             </thead>
             <tbody>
-              {!filtered.length && (
+              {!didLoadOnce || loading ? (
+                Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={`sk_${i}`} className="border-b last:border-b-0">
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <td key={`sk_${i}_${j}`} className="p-2">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !filtered.length ? (
                 <tr>
                   <td className="p-3 text-gray-600" colSpan={8}>
-                    {loading ? 'Loading…' : 'No delivery locations found.'}
+                    No delivery locations found.
                   </td>
                 </tr>
+              ) : (
+                filtered.map((r) => (
+                  <tr key={r.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                    <td className="p-2 align-top">
+                      <div className="font-medium">{r.delivery_location || '—'}</div>
+                    </td>
+                    <td className="p-2 align-top">
+                      <div className="font-medium">{r.name || '—'}</div>
+                      <div className="text-gray-600">{r.phone || ''}</div>
+                    </td>
+                    <td className="p-2 align-top">{r.bank?.bank_name || '—'}</td>
+                    <td className="p-2 align-top">{r.bank?.account_name || '—'}</td>
+                    <td className="p-2 align-top font-mono">{r.bank?.account_number ? maskAccountNumber(r.bank.account_number) : '—'}</td>
+                    <td className="p-2 align-top text-right">{Number(r.invoice_count || 0).toLocaleString()}</td>
+                    <td className="p-2 align-top text-right">
+                      {r?.paid?.is_paid ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Paid</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Unpaid</span>
+                      )}
+                    </td>
+                    <td className="p-2 align-top text-right">
+                      <div className="flex justify-end">
+                        <select
+                          defaultValue=""
+                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
+                          onChange={(e) => {
+                            const v = e.target.value
+                            e.target.value = ''
+                            if (!v) return
+                            if (v === 'bank') openBank(r)
+                            if (v === 'invoices') loadInvoices(r)
+                            if (v === 'upload') openUpload(r)
+                          }}
+                        >
+                          <option value="" disabled>
+                            Actions
+                          </option>
+                          {!r?.paid?.is_paid ? <option value="bank">{r.bank ? 'Update Bank' : 'Add Bank'}</option> : null}
+                          {!r?.paid?.is_paid ? <option value="upload">Upload Invoice</option> : null}
+                          <option value="invoices">View Invoices</option>
+                        </select>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                  <td className="p-2 align-top">
-                    <div className="font-medium">{r.delivery_location || '—'}</div>
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="font-medium">{r.name || '—'}</div>
-                    <div className="text-gray-600">{r.phone || ''}</div>
-                  </td>
-                  <td className="p-2 align-top">{r.bank?.bank_name || '—'}</td>
-                  <td className="p-2 align-top">{r.bank?.account_name || '—'}</td>
-                  <td className="p-2 align-top font-mono">{r.bank?.account_number ? maskAccountNumber(r.bank.account_number) : '—'}</td>
-                  <td className="p-2 align-top text-right">{Number(r.invoice_count || 0).toLocaleString()}</td>
-                  <td className="p-2 align-top text-right">
-                    {r?.paid?.is_paid ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Paid</span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Unpaid</span>
-                    )}
-                  </td>
-                  <td className="p-2 align-top text-right">
-                    <div className="flex justify-end">
-                      <select
-                        defaultValue=""
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white disabled:opacity-50"
-                        onChange={(e) => {
-                          const v = e.target.value
-                          e.target.value = ''
-                          if (!v) return
-                          if (v === 'bank') openBank(r)
-                          if (v === 'invoices') loadInvoices(r)
-                          if (v === 'upload') openUpload(r)
-                        }}
-                      >
-                        <option value="" disabled>
-                          Actions
-                        </option>
-                        {!r?.paid?.is_paid ? <option value="bank">{r.bank ? 'Update Bank' : 'Add Bank'}</option> : null}
-                        {!r?.paid?.is_paid ? <option value="upload">Upload Invoice</option> : null}
-                        <option value="invoices">View Invoices</option>
-                      </select>
-                    </div>
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>

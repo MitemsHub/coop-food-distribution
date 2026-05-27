@@ -42,6 +42,7 @@ function RepRamApprovedContent() {
   const [locationOptions, setLocationOptions] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [didLoadOnce, setDidLoadOnce] = useState(false)
   const [delivering, setDelivering] = useState(false)
   const [deliverBusyIds, setDeliverBusyIds] = useState(() => new Set())
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -52,10 +53,12 @@ function RepRamApprovedContent() {
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
+  const fetchSeq = useRef(0)
   const didInitRef = useRef(false)
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
   const fetchOrders = async () => {
+    const seq = ++fetchSeq.current
     setLoading(true)
     setMsg(null)
     try {
@@ -71,6 +74,7 @@ function RepRamApprovedContent() {
       const json = await safeJson(res, '/api/rep/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       const nextOrders = json.orders || []
+      if (seq !== fetchSeq.current) return
       setOrders(nextOrders)
       setLocationOptions((prev) => {
         const byId = new Map((prev || []).map((l) => [Number(l.id), l]))
@@ -88,11 +92,15 @@ function RepRamApprovedContent() {
       setSelectedIds(new Set())
       setPage(1)
     } catch (e) {
+      if (seq !== fetchSeq.current) return
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
       setSelectedIds(new Set())
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) {
+        setLoading(false)
+        setDidLoadOnce(true)
+      }
     }
   }
 
@@ -216,8 +224,8 @@ function RepRamApprovedContent() {
         unit_price: o.unit_price,
         principal_amount: o.principal_amount,
         interest_amount: o.interest_amount,
-        payment_vendor: computePaymentVendor(o),
         total_amount: o.total_amount,
+        payment_vendor: computePaymentVendor(o),
         delivery_location: o.delivery_location?.delivery_location || '',
         vendor_name: o.delivery_location?.name || '',
         vendor_phone: o.delivery_location?.phone || '',
@@ -286,8 +294,8 @@ function RepRamApprovedContent() {
           'Unit Price',
           'Principal',
           'Interest',
-          'Pay Vendor',
           'Total',
+          'Pay Vendor',
           'Delivery',
           'Signature',
         ],
@@ -304,8 +312,8 @@ function RepRamApprovedContent() {
         `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
         `NGN ${Number(o.principal_amount || 0).toLocaleString()}`,
         `NGN ${Number(o.interest_amount || 0).toLocaleString()}`,
-        `NGN ${Number(computePaymentVendor(o) || 0).toLocaleString()}`,
         `NGN ${Number(o.total_amount || 0).toLocaleString()}`,
+        `NGN ${Number(computePaymentVendor(o) || 0).toLocaleString()}`,
         sanitize([o.delivery_location?.delivery_location || '', o.delivery_location?.name || '', o.delivery_location?.phone || ''].filter(Boolean).join('\n')),
         '',
       ])
@@ -334,8 +342,8 @@ function RepRamApprovedContent() {
         '',
         `NGN ${totals.principal.toLocaleString()}`,
         `NGN ${totals.interest.toLocaleString()}`,
-        `NGN ${totals.payment_vendor.toLocaleString()}`,
         `NGN ${totals.total.toLocaleString()}`,
+        `NGN ${totals.payment_vendor.toLocaleString()}`,
         '',
         '',
       ])
@@ -550,60 +558,74 @@ function RepRamApprovedContent() {
               </tr>
             </thead>
             <tbody>
-              {!pageRows.length && (
+              {!didLoadOnce || loading ? (
+                Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={`sk_${i}`} className="border-b last:border-b-0">
+                    <td className="p-2">
+                      <div className="h-4 w-4 bg-gray-100 rounded animate-pulse" />
+                    </td>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <td key={`sk_${i}_${j}`} className="p-2">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !pageRows.length ? (
                 <tr>
                   <td className="p-3 text-gray-600" colSpan={8}>
-                    {loading ? 'Loading…' : 'No approved orders.'}
+                    No approved orders.
                   </td>
                 </tr>
+              ) : (
+                pageRows.map((o) => {
+                  const id = Number(o.id)
+                  const checked = selectedIds.has(id)
+                  const busy = deliverBusyIds.has(id)
+                  return (
+                    <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                      <td className="p-2 align-top">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSelect(id)}
+                          className="h-4 w-4"
+                          aria-label={`Select order ${id}`}
+                        />
+                      </td>
+                      <td className="p-2 align-top">
+                        <div className="font-medium">#{o.id}</div>
+                        <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+                      </td>
+                      <td className="p-2 align-top">
+                        <div className="font-medium">{o.member_id}</div>
+                        <div className="text-gray-600">{o.member?.full_name || ''}</div>
+                        <div className="text-gray-600">{o.member?.phone || ''}</div>
+                      </td>
+                      <td className="p-2 align-top whitespace-pre-line">
+                        <div>{o.delivery_location?.delivery_location || ''}</div>
+                        <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
+                        <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
+                      </td>
+                      <td className="p-2 align-top">{o.payment_option || ''}</td>
+                      <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
+                      <td className="p-2 align-top text-right">
+                        <div className="font-medium">{money(o.total_amount)}</div>
+                      </td>
+                      <td className="p-2 align-top text-right">
+                        <button
+                          type="button"
+                          onClick={() => requestDeliver([id])}
+                          disabled={delivering || busy}
+                          className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                        >
+                          {busy ? 'Delivering…' : 'Deliver'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
-              {pageRows.map((o) => {
-                const id = Number(o.id)
-                const checked = selectedIds.has(id)
-                const busy = deliverBusyIds.has(id)
-                return (
-                  <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                    <td className="p-2 align-top">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSelect(id)}
-                        className="h-4 w-4"
-                        aria-label={`Select order ${id}`}
-                      />
-                    </td>
-                    <td className="p-2 align-top">
-                      <div className="font-medium">#{o.id}</div>
-                      <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
-                    </td>
-                    <td className="p-2 align-top">
-                      <div className="font-medium">{o.member_id}</div>
-                      <div className="text-gray-600">{o.member?.full_name || ''}</div>
-                      <div className="text-gray-600">{o.member?.phone || ''}</div>
-                    </td>
-                    <td className="p-2 align-top whitespace-pre-line">
-                      <div>{o.delivery_location?.delivery_location || ''}</div>
-                      <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
-                      <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
-                    </td>
-                    <td className="p-2 align-top">{o.payment_option || ''}</td>
-                    <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
-                    <td className="p-2 align-top text-right">
-                      <div className="font-medium">{money(o.total_amount)}</div>
-                    </td>
-                    <td className="p-2 align-top text-right">
-                      <button
-                        type="button"
-                        onClick={() => requestDeliver([id])}
-                        disabled={delivering || busy}
-                        className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-                      >
-                        {busy ? 'Delivering…' : 'Deliver'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
             </tbody>
           </table>
         </div>

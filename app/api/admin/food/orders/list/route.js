@@ -27,10 +27,12 @@ function applyOrderFilters({
   status,
   cycleId,
   ordersHasCycle,
+  ordersHasCategorySnapshot,
   deliveryBranchId,
   payment,
   term,
   termBranchId,
+  memberCategory,
   from,
   to,
 }) {
@@ -38,6 +40,7 @@ function applyOrderFilters({
   if (ordersHasCycle) out = out.eq('cycle_id', cycleId)
   if (deliveryBranchId) out = out.eq('delivery_branch_id', deliveryBranchId)
   if (payment) out = out.eq('payment_option', payment)
+  if (ordersHasCategorySnapshot && memberCategory) out = out.eq('member_category_snapshot', memberCategory)
   if (term) {
     const termClean = term.replace(/%/g, '')
     const isInt = /^\d+$/.test(termClean)
@@ -50,7 +53,7 @@ function applyOrderFilters({
     out = out.or(termOr.join(','))
   }
   if (from || to) {
-    const dateCol = status === 'Pending' ? 'created_at' : 'posted_at'
+    const dateCol = status === 'Pending' || status === 'Cancelled' ? 'created_at' : 'posted_at'
     if (from) out = out.gte(dateCol, `${from}T00:00:00`)
     if (to) out = out.lte(dateCol, `${to}T23:59:59.999`)
   }
@@ -62,17 +65,32 @@ async function computeSummary({
   status,
   cycleId,
   ordersHasCycle,
+  ordersHasCategorySnapshot,
   deliveryBranchId,
   payment,
   term,
   termBranchId,
+  memberCategory,
   from,
   to,
 }) {
   let count = 0
   try {
     let cq = supabase.from('orders').select('order_id', { count: 'exact', head: true })
-    cq = applyOrderFilters({ q: cq, status, cycleId, ordersHasCycle, deliveryBranchId, payment, term, termBranchId, from, to })
+    cq = applyOrderFilters({
+      q: cq,
+      status,
+      cycleId,
+      ordersHasCycle,
+      ordersHasCategorySnapshot,
+      deliveryBranchId,
+      payment,
+      term,
+      termBranchId,
+      memberCategory,
+      from,
+      to,
+    })
     const { count: c, error: cErr } = await cq
     if (!cErr) count = c || 0
   } catch {}
@@ -83,7 +101,20 @@ async function computeSummary({
   while (guard < 500) {
     guard += 1
     let sq = supabase.from('orders').select('order_id,total_amount').order('order_id', { ascending: false }).limit(1000)
-    sq = applyOrderFilters({ q: sq, status, cycleId, ordersHasCycle, deliveryBranchId, payment, term, termBranchId, from, to })
+    sq = applyOrderFilters({
+      q: sq,
+      status,
+      cycleId,
+      ordersHasCycle,
+      ordersHasCategorySnapshot,
+      deliveryBranchId,
+      payment,
+      term,
+      termBranchId,
+      memberCategory,
+      from,
+      to,
+    })
     if (cursor) sq = sq.lt('order_id', Number(cursor))
     const { data, error } = await sq
     if (error) break
@@ -107,12 +138,16 @@ export async function GET(req) {
     const payment = searchParams.get('payment') || ''
     const termRaw = searchParams.get('term') || ''
     const term = termRaw.trim()
+    const memberCategoryRaw = (searchParams.get('member_category') || searchParams.get('category') || '').trim().toUpperCase()
+    const allowedMemberCats = new Set(['A', 'R', 'P', 'E'])
+    const memberCategory = allowedMemberCats.has(memberCategoryRaw) ? memberCategoryRaw : ''
     const from = searchParams.get('from') || ''
     const to = searchParams.get('to') || ''
     const limit = Number(searchParams.get('limit') || 50)
     const cursor = searchParams.get('cursor')
     const dir = (searchParams.get('dir') || 'next').toLowerCase()
     const ordersHasCycle = await hasColumn(supabase, 'orders', 'cycle_id')
+    const ordersHasCategorySnapshot = await hasColumn(supabase, 'orders', 'member_category_snapshot').catch(() => false)
     const cycleId = await resolveCycleId(supabase, searchParams, ordersHasCycle)
     if (ordersHasCycle && !cycleId) {
       return NextResponse.json({ ok: false, error: 'No active cycle found' }, { status: 400 })
@@ -141,7 +176,20 @@ export async function GET(req) {
     `
 
     let q = supabase.from('orders').select(selectCols).order('order_id', { ascending: false })
-    q = applyOrderFilters({ q, status, cycleId, ordersHasCycle, deliveryBranchId, payment, term, termBranchId, from, to })
+    q = applyOrderFilters({
+      q,
+      status,
+      cycleId,
+      ordersHasCycle,
+      ordersHasCategorySnapshot,
+      deliveryBranchId,
+      payment,
+      term,
+      termBranchId,
+      memberCategory,
+      from,
+      to,
+    })
     if (cursor) {
       q = dir === 'next' ? q.lt('order_id', Number(cursor)) : q.gt('order_id', Number(cursor))
     }
@@ -161,10 +209,12 @@ export async function GET(req) {
       status,
       cycleId,
       ordersHasCycle,
+      ordersHasCategorySnapshot,
       deliveryBranchId,
       payment,
       term,
       termBranchId,
+      memberCategory,
       from,
       to,
     })

@@ -256,7 +256,7 @@ function AdminFoodBanksContent() {
         )}
       </AnimatePresence>
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">

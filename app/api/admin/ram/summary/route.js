@@ -120,6 +120,7 @@ export async function GET(req) {
         .select('id,status,payment_option,member_category,member_grade,qty,total_amount,interest_amount,ram_delivery_location_id,created_at,ram_cycle_id')
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1)
+        .neq('status', 'Cancelled')
       if (ordersHasCycle && cycleId != null) q = q.eq('ram_cycle_id', cycleId)
 
       const { data: chunk, error } = await q

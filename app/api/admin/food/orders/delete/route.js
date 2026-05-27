@@ -1,22 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '../../../../../../lib/supabaseServer'
+import { validateSession } from '@/lib/validation'
 
 export async function POST(req) {
   try {
-    const supabase = createClient()
-    const { orderId } = await req.json()
-    if (!orderId) return NextResponse.json({ ok: false, error: 'orderId required' }, { status: 400 })
-
-    const { data: row, error: selErr } = await supabase.from('orders').select('status').eq('order_id', orderId).single()
-    if (selErr || !row) return NextResponse.json({ ok: false, error: 'Order not found' }, { status: 404 })
-    if (!['Pending', 'Cancelled'].includes(row.status)) {
-      return NextResponse.json({ ok: false, error: 'Only Pending or Cancelled orders can be deleted' }, { status: 400 })
-    }
-
-    const { error } = await supabase.from('orders').delete().eq('order_id', orderId)
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
-
-    return NextResponse.json({ ok: true })
+    const session = await validateSession(req, 'admin')
+    if (!session.valid) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ ok: false, error: 'Delete is disabled. Use Cancel (and Restore) instead.' }, { status: 410 })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }

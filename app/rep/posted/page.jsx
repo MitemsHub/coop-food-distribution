@@ -25,6 +25,7 @@ function RepPostedPageContent() {
   const [search, setSearch] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [didLoadOnce, setDidLoadOnce] = useState(false)
   const [deliveringOrder, setDeliveringOrder] = useState(null) // Track which order is being delivered
   const [pageSize] = useState(50)
   const [cursorStack, setCursorStack] = useState([null])
@@ -37,19 +38,13 @@ function RepPostedPageContent() {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
   const [viewOrder, setViewOrder] = useState(null)
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   const safeJson = async (res, label) => {
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) return await res.json()
     const text = await res.text()
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
-  }
-
-  const changeBranch = () => {
-    if (confirm('Are you sure you want to change your branch? You will be logged out and redirected to the login page.')) {
-      logout()
-    }
   }
 
   const filteredOrders = useMemo(() => {
@@ -107,6 +102,7 @@ function RepPostedPageContent() {
     } finally {
       clearTimeout(timer)
       setLoading(false)
+      setDidLoadOnce(true)
     }
   }
 
@@ -660,17 +656,20 @@ function RepPostedPageContent() {
         </div>
         <button
           type="button"
-          onClick={changeBranch}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+          className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-black text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2 shadow-sm whitespace-nowrap"
+          disabled={itemsPackLoading}
+          onClick={exportItemsPack}
+          aria-busy={itemsPackLoading}
         >
-          Change Branch
+          {itemsPackLoading && <Spinner className="h-4 w-4 text-white" />}
+          <span>{itemsPackLoading ? 'Downloading…' : 'Items Pack'}</span>
         </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
-            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white w-full lg:w-56"
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white w-full sm:w-56 shrink-0"
             value={dept}
             onChange={(e) => {
               const v = e.target.value
@@ -687,9 +686,9 @@ function RepPostedPageContent() {
             ))}
           </select>
 
-          <div className="flex gap-2 flex-1 min-w-[220px] lg:max-w-[420px]">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px] sm:max-w-[560px]">
             <input
-              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm flex-1 bg-white"
+              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm flex-1 min-w-0 bg-white"
               placeholder="Search (Order / Member)"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -699,7 +698,7 @@ function RepPostedPageContent() {
             />
             <button
               type="button"
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-medium transition-colors shadow-sm whitespace-nowrap disabled:opacity-50 shrink-0"
               onClick={() => setSearch(searchInput.trim())}
               disabled={loading}
             >
@@ -707,17 +706,6 @@ function RepPostedPageContent() {
             </button>
           </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-black text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
-              disabled={itemsPackLoading}
-              onClick={exportItemsPack}
-              aria-busy={itemsPackLoading}
-            >
-              {itemsPackLoading && <Spinner className="h-4 w-4 text-white" />}
-              <span>{itemsPackLoading ? 'Downloading…' : 'Items Pack'}</span>
-            </button>
             <button
               type="button"
               className="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white text-xs sm:text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
@@ -748,7 +736,6 @@ function RepPostedPageContent() {
               {loading && <Spinner className="h-4 w-4 text-white" />}
               <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
             </button>
-          </div>
         </div>
       </div>
 
@@ -806,7 +793,7 @@ function RepPostedPageContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {loading && filteredOrders.length === 0 ? (
+              {!didLoadOnce || (loading && filteredOrders.length === 0) ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <tr key={`sk_${i}`}>
                     {Array.from({ length: 7 }).map((__, j) => (
@@ -862,7 +849,12 @@ function RepPostedPageContent() {
         </div>
       </div>
 
-      <DraggableModal open={viewOpen} onClose={() => setViewOpen(false)} title={viewOrder ? `Order #${viewOrder.order_id}` : 'Order'}>
+      <DraggableModal
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        title={viewOrder ? `Order #${viewOrder.order_id}` : 'Order'}
+        widthClass="w-[94vw] max-w-4xl mx-4"
+      >
         {!viewOrder ? (
           <div className="text-sm text-gray-600">No order selected.</div>
         ) : (
@@ -883,28 +875,36 @@ function RepPostedPageContent() {
               </div>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm">
-                  <thead className="bg-gray-50">
+            <div className="ui-card overflow-hidden">
+              <div className="max-h-[60vh] overflow-y-auto">
+                <table className="w-full text-xs sm:text-sm table-fixed">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-3 py-2 text-left">SKU</th>
+                      <th className="px-3 py-2 text-left w-40 hidden md:table-cell">SKU</th>
                       <th className="px-3 py-2 text-left">Item</th>
-                      <th className="px-3 py-2 text-right">Qty</th>
-                      <th className="px-3 py-2 text-right">Unit Price</th>
-                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2 text-right w-20">Qty</th>
+                      <th className="px-3 py-2 text-right w-28">Unit Price</th>
+                      <th className="px-3 py-2 text-right w-28">Amount</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(viewOrder.order_lines || []).map((l) => (
-                      <tr key={l.id}>
-                        <td className="px-3 py-2 font-mono text-xs">{l.items?.sku || ''}</td>
-                        <td className="px-3 py-2">{l.items?.name || ''}</td>
-                        <td className="px-3 py-2 text-right">{Number(l.qty || 0).toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">₦{Number(l.unit_price || 0).toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">₦{Number(l.amount || 0).toLocaleString()}</td>
+                    {(viewOrder.order_lines || []).length ? (
+                      (viewOrder.order_lines || []).map((l) => (
+                        <tr key={l.id}>
+                          <td className="px-3 py-2 font-mono text-xs break-all hidden md:table-cell">{l.items?.sku || ''}</td>
+                          <td className="px-3 py-2 whitespace-normal break-words">{l.items?.name || ''}</td>
+                          <td className="px-3 py-2 text-right">{Number(l.qty || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">₦{Number(l.unit_price || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">₦{Number(l.amount || 0).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="px-3 py-3 text-gray-600" colSpan={5}>
+                          No items found for this order.
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>

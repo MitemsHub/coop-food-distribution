@@ -85,6 +85,7 @@ export async function GET(req) {
 
     const allowedStatus = new Set(['Pending', 'Approved', 'Delivered', 'Cancelled'])
     const allowedPayment = new Set(['Cash', 'Loan', 'Savings'])
+    const status = statusRaw && allowedStatus.has(statusRaw) ? statusRaw : ''
 
     const ordersHasCycle = await hasColumn(supabase, 'ram_orders', 'ram_cycle_id')
     const { cycleId, activeCycleId } = await resolveRamCycleId({
@@ -97,7 +98,8 @@ export async function GET(req) {
     const cyclesHasVendorRate = await hasColumn(supabase, 'ram_cycles', 'vendor_deduction_rate_pct')
 
     let query = supabase.from('ram_orders').select('*', { count: 'exact' }).order('created_at', { ascending: false })
-    if (statusRaw && allowedStatus.has(statusRaw)) query = query.eq('status', statusRaw)
+    if (status) query = query.eq('status', status)
+    else query = query.neq('status', 'Cancelled')
     if (payment && allowedPayment.has(payment)) query = query.eq('payment_option', payment)
     if (memberId) query = query.eq('member_id', memberId)
     if (memberGrade) query = query.ilike('member_grade', `%${memberGrade}%`)

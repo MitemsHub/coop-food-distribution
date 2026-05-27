@@ -20,6 +20,7 @@ export async function GET(req) {
     }
 
     const masterHasCycle = await hasColumn('v_master_sheet', 'cycle_id')
+    const masterHasStatus = await hasColumn('v_master_sheet', 'status')
     const markupsHasCycle = await hasColumn('branch_item_markups', 'cycle_id')
     let effectiveCycleId = null
     if (markupsHasCycle && !masterHasCycle) {
@@ -43,6 +44,7 @@ export async function GET(req) {
       payment_option,
       member_id,
       member_name,
+      ${masterHasStatus ? 'status,' : ''}
       ${masterHasCycle ? 'cycle_id,' : ''}
       branch_code,
       branch_name,
@@ -81,38 +83,56 @@ export async function GET(req) {
       start += batchSize
     }
 
-    let baseRows = (allData || []).map(r => ({
-      OrderID: r.order_id,
-      MemberID: r.member_id,
-      MemberName: r.member_name,
-      DeliveryBranch: r.branch_name,             // DELIVERY
-      MemberBranch: r.member_branch_name || '',  // HOME
-      Department: r.department_name || '',
-      Payment: r.payment_option,
-      Item: r.item_name,
-      Price: Number(r.unit_price),
-      Qty: Number(r.qty),
-      Amount: Number(r.amount),
-      PostedAt: r.posted_at,
-      CreatedAt: r.created_at,
-      EffectiveDate: r.posted_at || r.created_at
+    let pairs = (allData || []).map((r) => ({
+      raw: r,
+      row: {
+        OrderID: r.order_id,
+        MemberID: r.member_id,
+        MemberName: r.member_name,
+        DeliveryBranch: r.branch_name,
+        MemberBranch: r.member_branch_name || '',
+        Department: r.department_name || '',
+        Payment: r.payment_option,
+        Item: r.item_name,
+        Price: Number(r.unit_price),
+        Qty: Number(r.qty),
+        Amount: Number(r.amount),
+        PostedAt: r.posted_at,
+        CreatedAt: r.created_at,
+        EffectiveDate: r.posted_at || r.created_at,
+        ...(masterHasStatus ? { Status: r.status } : {}),
+      },
     }))
+
+    if (masterHasStatus) {
+      pairs = pairs.filter((p) => String(p?.row?.Status || '') !== 'Cancelled')
+    } else {
+      const { data: cancelledOrders, error: cancelledErr } = await supabase
+        .from('orders')
+        .select('order_id')
+        .eq('status', 'Cancelled')
+      if (cancelledErr) throw new Error(cancelledErr.message)
+      const cancelledSet = new Set((cancelledOrders || []).map((o) => Number(o.order_id)).filter((n) => Number.isFinite(n) && n > 0))
+      pairs = pairs.filter((p) => !cancelledSet.has(Number(p?.row?.OrderID)))
+    }
 
     // Apply date filters client-side using EffectiveDate (posted_at || created_at)
     if (from) {
       const fromTs = new Date(from).getTime()
-      baseRows = baseRows.filter(r => {
-        const d = r.EffectiveDate ? new Date(r.EffectiveDate).getTime() : 0
+      pairs = pairs.filter((p) => {
+        const d = p?.row?.EffectiveDate ? new Date(p.row.EffectiveDate).getTime() : 0
         return d >= fromTs
       })
     }
     if (to) {
       const toTs = new Date(to + 'T23:59:59').getTime()
-      baseRows = baseRows.filter(r => {
-        const d = r.EffectiveDate ? new Date(r.EffectiveDate).getTime() : 0
+      pairs = pairs.filter((p) => {
+        const d = p?.row?.EffectiveDate ? new Date(p.row.EffectiveDate).getTime() : 0
         return d <= toTs
       })
     }
+
+    const baseRows = pairs.map((p) => p.row)
 
     // Build enrichment maps for Markup using item names joined from markups
     const branchCodes = [...new Set((allData || []).map(r => r.branch_code))].filter(Boolean)
@@ -172,8 +192,9 @@ export async function GET(req) {
 
     // Enrich rows with OriginalPrice, Markup, Interest
     const rows = baseRows.map((r, idx) => {
-      const code = (allData[idx] || {}).branch_code
-      const cycleId = masterHasCycle ? (allData[idx] || {}).cycle_id : effectiveCycleId
+      const raw = pairs[idx]?.raw || {}
+      const code = raw.branch_code
+      const cycleId = masterHasCycle ? raw.cycle_id : effectiveCycleId
       const itemName = r.Item
       const branchId = branchIdByCode.get(code)
       const key2 = branchId

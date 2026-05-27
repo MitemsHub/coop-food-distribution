@@ -22,12 +22,12 @@ export async function POST(req) {
     if (!session.valid) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json().catch(() => ({}))
-    const reason = String(body.reason || '').trim()
     const idsRaw = asIdArray(body.orderIds ?? body.order_ids ?? body.orderId ?? body.order_id)
     const ids = idsRaw
       .map((v) => validateNumber(v, { min: 1, integer: true }))
       .filter((r) => r.isValid)
       .map((r) => r.value)
+
     if (!ids.length) return NextResponse.json({ ok: false, error: 'Invalid order id(s)' }, { status: 400 })
 
     const supabase = createClient()
@@ -41,13 +41,13 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: `Order(s) not found: ${missing.join(', ')}` }, { status: 404 })
     }
 
-    const toCancel = ids.filter((id) => String(byId.get(id)?.status || '') === 'Pending')
+    const toRestore = ids.filter((id) => String(byId.get(id)?.status || '') === 'Cancelled')
     const failed = ids
-      .filter((id) => !toCancel.includes(id))
+      .filter((id) => !toRestore.includes(id))
       .map((id) => ({ order_id: id, status: String(byId.get(id)?.status || '') }))
 
-    if (!toCancel.length) {
-      return NextResponse.json({ ok: true, cancelled: [], failed })
+    if (!toRestore.length) {
+      return NextResponse.json({ ok: true, restored: [], failed })
     }
 
     const [hasCancelledAt, hasCancelledReason, hasUpdatedAt] = await Promise.all([
@@ -56,20 +56,21 @@ export async function POST(req) {
       hasColumn(supabase, 'orders', 'updated_at').catch(() => false),
     ])
 
-    const updates = { status: 'Cancelled' }
+    const updates = { status: 'Pending' }
     const now = new Date().toISOString()
-    if (hasCancelledAt) updates.cancelled_at = now
-    if (hasCancelledReason && reason) updates.cancelled_reason = reason
+    if (hasCancelledAt) updates.cancelled_at = null
+    if (hasCancelledReason) updates.cancelled_reason = null
     if (hasUpdatedAt) updates.updated_at = now
 
     const { error: upErr } = await supabase
       .from('orders')
       .update(updates)
-      .in('order_id', toCancel)
-      .eq('status', 'Pending')
+      .in('order_id', toRestore)
+      .eq('status', 'Cancelled')
+
     if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 })
 
-    return NextResponse.json({ ok: true, cancelled: toCancel, failed })
+    return NextResponse.json({ ok: true, restored: toRestore, failed })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message || 'Internal server error' }, { status: 500 })
   }

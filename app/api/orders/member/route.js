@@ -76,6 +76,7 @@ export async function GET(request) {
         )
       `)
       .eq('member_id', memberId)
+      .neq('status', 'Cancelled')
       .order('created_at', { ascending: false })
 
     // If user is a rep, filter by their DELIVERY branch

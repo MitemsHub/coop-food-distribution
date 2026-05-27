@@ -25,7 +25,7 @@ const toastMotion = {
   transition: { duration: 0.18, ease: 'easeOut' },
 }
 
-function RamPendingContent() {
+export function RamOrdersAdminPageContent({ status = 'Pending' }) {
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [locations, setLocations] = useState([])
@@ -64,7 +64,7 @@ function RamPendingContent() {
       const nextMemberGrade = typeof opts.memberGrade === 'string' ? opts.memberGrade : memberGrade
       const nextLocationId = typeof opts.locationId === 'string' ? opts.locationId : locationId
       const qs = new URLSearchParams({
-        status: 'Pending',
+        status,
         page: String(Math.max(1, nextPage)),
         page_size: String(Math.max(1, nextPageSize)),
         ...(nextTerm ? { term: nextTerm } : {}),
@@ -87,6 +87,7 @@ function RamPendingContent() {
   }
 
   const fetchAllForExport = async () => {
+    if (status !== 'Pending') return []
     const pageSizeForExport = 1000
     const all = []
     let nextPage = 1
@@ -331,11 +332,18 @@ function RamPendingContent() {
     setShowModal({ type: 'bulk', ids, nextStatus })
   }
 
-  const openDeleteModal = (ids) => {
+  const openCancelModal = (ids) => {
     const list = Array.isArray(ids) ? ids : []
     const cleaned = list.filter((v) => Number.isFinite(Number(v)) && Number(v) > 0).map((v) => Number(v))
     if (!cleaned.length) return
-    setShowModal({ type: 'delete', ids: cleaned })
+    setShowModal({ type: 'cancel', ids: cleaned })
+  }
+
+  const openRestoreModal = (ids) => {
+    const list = Array.isArray(ids) ? ids : []
+    const cleaned = list.filter((v) => Number.isFinite(Number(v)) && Number(v) > 0).map((v) => Number(v))
+    if (!cleaned.length) return
+    setShowModal({ type: 'restore', ids: cleaned })
   }
 
   const openEditModal = (order) => {
@@ -373,26 +381,51 @@ function RamPendingContent() {
     }
   }
 
-  const submitDelete = async () => {
+  const submitCancel = async () => {
     const ids = showModal?.ids || []
     if (!ids.length) return
     setBulkBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/admin/ram/orders/delete', {
+      const res = await fetch('/api/admin/ram/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ ids, reason: 'Cancelled by admin' }),
+      })
+      const json = await safeJson(res, '/api/admin/ram/orders/cancel')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Cancel failed')
+      const cancelled = Array.isArray(json.cancelled) ? json.cancelled : ids
+      setOrders((prev) => (prev || []).filter((o) => !cancelled.includes(o.id)))
+      setSelected(new Set())
+      setShowModal(null)
+      setMsg({ type: 'success', text: `Cancelled ${cancelled.length} order(s)` })
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || 'Cancel failed' })
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const submitRestore = async () => {
+    const ids = showModal?.ids || []
+    if (!ids.length) return
+    setBulkBusy(true)
+    setMsg(null)
+    try {
+      const res = await fetch('/api/admin/ram/orders/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ ids }),
       })
-      const json = await safeJson(res, '/api/admin/ram/orders/delete')
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Delete failed')
-      const deleted = Array.isArray(json.deleted) ? json.deleted : ids
-      setOrders((prev) => (prev || []).filter((o) => !deleted.includes(o.id)))
+      const json = await safeJson(res, '/api/admin/ram/orders/restore')
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Restore failed')
+      const restored = Array.isArray(json.restored) ? json.restored : ids
+      setOrders((prev) => (prev || []).filter((o) => !restored.includes(o.id)))
       setSelected(new Set())
       setShowModal(null)
-      setMsg({ type: 'success', text: `Deleted ${deleted.length} order(s)` })
+      setMsg({ type: 'success', text: `Restored ${restored.length} order(s)` })
     } catch (e) {
-      setMsg({ type: 'error', text: e?.message || 'Delete failed' })
+      setMsg({ type: 'error', text: e?.message || 'Restore failed' })
     } finally {
       setBulkBusy(false)
     }
@@ -474,7 +507,7 @@ function RamPendingContent() {
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Ram Sales — Pending</h1>
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold text-center sm:text-left break-words">Admin — Ram Sales — {status}</h1>
       </div>
 
       <AnimatePresence mode="wait">
@@ -491,7 +524,7 @@ function RamPendingContent() {
         ) : null}
       </AnimatePresence>
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
+      <div className="ui-card p-4 mb-4">
         <div className="flex flex-col gap-2">
           <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
             <div className="flex items-center gap-2 min-w-0">
@@ -563,22 +596,26 @@ function RamPendingContent() {
                   fetchOrders({ page: 1, memberGrade: next })
                 }}
               />
-              <button
-                type="button"
-                onClick={exportExcel}
-                disabled={!orders.length}
-                className="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-50"
-              >
-                Download Excel
-              </button>
-              <button
-                type="button"
-                onClick={exportPDF}
-                disabled={!orders.length}
-                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
-              >
-                Download PDF
-              </button>
+              {status === 'Pending' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={exportExcel}
+                    disabled={!orders.length}
+                    className="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    Download Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportPDF}
+                    disabled={!orders.length}
+                    className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    Download PDF
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -588,10 +625,10 @@ function RamPendingContent() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-semibold">Pending Orders</div>
+            <div className="text-sm font-semibold">{status} Orders</div>
             <button
               type="button"
               onClick={fetchOrders}
@@ -608,22 +645,35 @@ function RamPendingContent() {
             >
               {allSelectedOnPage ? 'Deselect All' : 'Select All'}
             </button>
-            <button
-              type="button"
-              onClick={() => openBulkModal('Approved')}
-              disabled={!selectedCount || bulkBusy}
-              className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-            >
-              Approve Selected ({selectedCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => openDeleteModal(Array.from(selected))}
-              disabled={!selectedCount || bulkBusy}
-              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-            >
-              Delete Selected ({selectedCount})
-            </button>
+            {status === 'Pending' && (
+              <button
+                type="button"
+                onClick={() => openBulkModal('Approved')}
+                disabled={!selectedCount || bulkBusy}
+                className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+              >
+                Approve Selected ({selectedCount})
+              </button>
+            )}
+            {status === 'Pending' ? (
+              <button
+                type="button"
+                onClick={() => openCancelModal(Array.from(selected))}
+                disabled={!selectedCount || bulkBusy}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+              >
+                Cancel Selected ({selectedCount})
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openRestoreModal(Array.from(selected))}
+                disabled={!selectedCount || bulkBusy}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+              >
+                Restore Selected ({selectedCount})
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -771,14 +821,21 @@ function RamPendingContent() {
                               e.target.value = ''
                               if (!v) return
                               if (v === 'edit') openEditModal(o)
-                              if (v === 'delete') openDeleteModal([o.id])
+                              if (v === 'cancel') openCancelModal([o.id])
+                              if (v === 'restore') openRestoreModal([o.id])
                             }}
                           >
                             <option value="" disabled>
                               Actions
                             </option>
-                            <option value="edit">Edit</option>
-                            <option value="delete">Delete</option>
+                            {status === 'Pending' ? (
+                              <>
+                                <option value="edit">Edit</option>
+                                <option value="cancel">Cancel</option>
+                              </>
+                            ) : (
+                              <option value="restore">Restore</option>
+                            )}
                           </select>
                         </div>
                       </td>
@@ -797,8 +854,10 @@ function RamPendingContent() {
         title={
           showModal?.type === 'edit'
             ? `Edit Order #${showModal?.id}`
-            : showModal?.type === 'delete'
-              ? 'Delete Orders'
+            : showModal?.type === 'cancel'
+              ? 'Cancel Orders'
+              : showModal?.type === 'restore'
+                ? 'Restore Orders'
               : 'Approve Selected Orders'
         }
         footer={
@@ -816,14 +875,24 @@ function RamPendingContent() {
               className={`px-4 py-2 rounded text-white text-sm ${
                 showModal?.type === 'edit'
                   ? 'bg-blue-600 hover:bg-blue-700'
-                  : showModal?.type === 'delete'
+                  : showModal?.type === 'cancel'
                     ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-green-600 hover:bg-green-700'
+                    : showModal?.type === 'restore'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-green-600 hover:bg-green-700'
               } disabled:opacity-50`}
-              onClick={showModal?.type === 'edit' ? submitEdit : showModal?.type === 'delete' ? submitDelete : submitBulk}
+              onClick={
+                showModal?.type === 'edit'
+                  ? submitEdit
+                  : showModal?.type === 'cancel'
+                    ? submitCancel
+                    : showModal?.type === 'restore'
+                      ? submitRestore
+                      : submitBulk
+              }
               disabled={bulkBusy || editBusy}
             >
-              {bulkBusy || editBusy ? 'Working...' : showModal?.type === 'delete' ? 'Delete' : 'Confirm'}
+              {bulkBusy || editBusy ? 'Working...' : showModal?.type === 'cancel' ? 'Cancel' : showModal?.type === 'restore' ? 'Restore' : 'Confirm'}
             </button>
           </div>
         }
@@ -911,9 +980,13 @@ function RamPendingContent() {
                 : null}
             </div>
           </div>
-        ) : showModal?.type === 'delete' ? (
+        ) : showModal?.type === 'cancel' ? (
           <div className="text-sm text-gray-700">
-            Delete <b>{showModal?.ids?.length || 0}</b> order(s)? This action cannot be undone.
+            Cancel <b>{showModal?.ids?.length || 0}</b> order(s)? Cancelled orders will be excluded from reports and exports.
+          </div>
+        ) : showModal?.type === 'restore' ? (
+          <div className="text-sm text-gray-700">
+            Restore <b>{showModal?.ids?.length || 0}</b> order(s) back to <b>Pending</b>?
           </div>
         ) : (
           <div className="text-sm text-gray-700">
@@ -928,7 +1001,7 @@ function RamPendingContent() {
 export default function RamPendingPage() {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <RamPendingContent />
+      <RamOrdersAdminPageContent status="Pending" />
     </ProtectedRoute>
   )
 }

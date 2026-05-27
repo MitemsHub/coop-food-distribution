@@ -30,6 +30,7 @@ export async function GET(req) {
       .limit(limit)
 
     if (status) q = q.eq('status', status)
+    else q = q.neq('status', 'Cancelled')
 
     const { data, error } = await q
     if (error) throw new Error(error.message)

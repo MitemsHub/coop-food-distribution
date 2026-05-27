@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import DraggableModal from '../../../components/DraggableModal'
 
-function PendingAdminPageContent() {
+export function FoodOrdersAdminPageContent({ status = 'Pending' }) {
   const [orders, setOrders] = useState([])
+  const [branches, setBranches] = useState([])
   const [term, setTerm] = useState('')
   const [payment, setPayment] = useState('')
+  const [deliveryBranch, setDeliveryBranch] = useState('')
+  const [memberCategory, setMemberCategory] = useState('')
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
   const [pageSize, setPageSize] = useState(50)
@@ -22,7 +25,8 @@ function PendingAdminPageContent() {
   const [editing, setEditing] = useState(null)
   const [showModal, setShowModal] = useState(null)
   const [modalInput, setModalInput] = useState('')
-  const [deletingOrder, setDeletingOrder] = useState(false) // Track delete action loading
+  const [cancellingOrder, setCancellingOrder] = useState(false)
+  const [restoringOrders, setRestoringOrders] = useState(false)
   const [viewing, setViewing] = useState(null)
   const fetchCtl = useRef(null)
   // Draggable modal now handled by reusable component
@@ -34,19 +38,51 @@ function PendingAdminPageContent() {
     throw new Error(`Non-JSON response from ${label} (${res.status}): ${text.slice(0, 300)}`)
   }
 
-  const fetchOrders = async (cursorOverride) => {
+  useEffect(() => {
+    const loadBranches = async () => {
+      try {
+        const res = await fetch('/api/branches/list', { cache: 'no-store' })
+        const json = await safeJson(res, '/api/branches/list')
+        if (json?.ok) setBranches(Array.isArray(json.branches) ? json.branches : [])
+      } catch {
+        setBranches([])
+      }
+    }
+    loadBranches()
+  }, [])
+
+  const normalizeMemberCategory = (raw) => {
+    const s = String(raw || '').trim().toLowerCase()
+    if (!s) return ''
+    if (s === 'a' || s.includes('active')) return 'A'
+    if (s === 'r' || s.includes('retire')) return 'R'
+    if (s === 'p' || s.includes('pension')) return 'P'
+    if (s === 'e' || s.includes('staff')) return 'E'
+    return ''
+  }
+
+  const fetchOrders = async (cursorOverride, overrides = null) => {
     setLoading(true); setMsg(null)
     try {
       if (fetchCtl.current) fetchCtl.current.abort()
       const ctl = new AbortController()
       fetchCtl.current = ctl
+      const effTerm = overrides && typeof overrides.term === 'string' ? overrides.term : term
+      const effPayment = overrides && typeof overrides.payment === 'string' ? overrides.payment : payment
+      const effDeliveryBranch = overrides && typeof overrides.deliveryBranch === 'string' ? overrides.deliveryBranch : deliveryBranch
+      const effMemberCategory = overrides && typeof overrides.memberCategory === 'string' ? overrides.memberCategory : memberCategory
       const cursor = cursorOverride !== undefined ? cursorOverride : cursorStack[pageIndex] || null
       const qs = new URLSearchParams({
-        status: 'Pending',
+        status,
         limit: String(pageSize),
-        ...(term ? { term } : {}),
-        ...(payment ? { payment } : {}),
+        ...(effTerm ? { term: effTerm } : {}),
+        ...(effPayment ? { payment: effPayment } : {}),
       })
+      if (status === 'Cancelled') {
+        if (effDeliveryBranch) qs.set('branch', String(effDeliveryBranch).trim().toUpperCase())
+        const cat = normalizeMemberCategory(effMemberCategory)
+        if (cat) qs.set('member_category', cat)
+      }
       if (cursor) qs.set('cursor', String(cursor))
       const res = await fetch(`/api/admin/food/orders/list?${qs.toString()}`, { cache: 'no-store', signal: ctl.signal })
       const json = await safeJson(res, '/api/admin/food/orders/list')
@@ -106,13 +142,14 @@ function PendingAdminPageContent() {
   const orderQty = (o) => (o?.order_lines || []).reduce((s, l) => s + Number(l?.qty || 0), 0)
 
   const fetchAllForExport = async () => {
+    if (status !== 'Pending') return []
     const all = []
     let cursor = null
     let guard = 0
     while (guard < 200) {
       guard += 1
       const qs = new URLSearchParams({
-        status: 'Pending',
+        status,
         limit: '1000',
         ...(term ? { term } : {}),
         ...(payment ? { payment } : {}),
@@ -131,6 +168,7 @@ function PendingAdminPageContent() {
 
   // Actions with prompts
   const doPost = async (order_id) => {
+    if (status !== 'Pending') return
     setShowModal({ type: 'post', orderId: order_id, title: 'Post Order', placeholder: 'Optional note for posting (leave blank if none)' })
     setModalInput('')
   }
@@ -166,6 +204,7 @@ function PendingAdminPageContent() {
   }
 
   const postSelected = async () => {
+    if (status !== 'Pending') return
     if (selected.size === 0) return
     setShowModal({ type: 'bulk-post', orderIds: Array.from(selected), title: 'Bulk Post Orders', placeholder: 'Optional note for posting these orders' })
     setModalInput('')
@@ -223,41 +262,110 @@ function PendingAdminPageContent() {
     }
   }
 
-  const doDelete = async (order_id) => {
+  const openCancelModal = async (orderIds) => {
+    const ids = (Array.isArray(orderIds) ? orderIds : []).filter((n) => Number.isFinite(Number(n)) && Number(n) > 0).map((n) => Number(n))
+    if (!ids.length) return
     setShowModal({ 
-      type: 'delete', 
-      orderId: order_id, 
-      title: 'Delete Order', 
-      message: `Are you sure you want to delete order ${order_id}? This action cannot be undone.`,
-      placeholder: 'Optional reason for deletion'
+      type: 'cancel', 
+      orderIds: ids,
+      title: ids.length > 1 ? 'Cancel Orders' : 'Cancel Order', 
+      message: ids.length > 1
+        ? `Cancel ${ids.length} order(s)? Cancelled orders will be excluded from reports and exports.`
+        : `Cancel order ${ids[0]}? Cancelled orders will be excluded from reports and exports.`,
+      placeholder: 'Optional reason for cancellation'
     })
     setModalInput('')
   }
 
-  const handleDeleteSubmit = async () => {
-    const { orderId } = showModal
-    setDeletingOrder(true)
+  const doCancel = async (order_id) => {
+    if (status !== 'Pending') return
+    openCancelModal([order_id])
+  }
+
+  const cancelSelected = async () => {
+    if (status !== 'Pending') return
+    if (selected.size === 0) return
+    openCancelModal(Array.from(selected))
+  }
+
+  const handleCancelSubmit = async () => {
+    const ids = Array.isArray(showModal?.orderIds) ? showModal.orderIds : []
+    if (!ids.length) return
+    setCancellingOrder(true)
     try {
-      const res = await fetch('/api/admin/food/orders/delete', {
+      const res = await fetch('/api/admin/food/orders/cancel', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ orderId, reason: modalInput || 'Deleted by admin' })
+        body: JSON.stringify({ orderIds: ids, reason: modalInput || 'Cancelled by admin' })
       })
-      const json = await safeJson(res, '/api/admin/food/orders/delete')
-      if (!json.ok) throw new Error(json.error || 'Delete failed')
-      setMsg({ type:'success', text:`Order ${orderId} deleted` })
+      const json = await safeJson(res, '/api/admin/food/orders/cancel')
+      if (!json.ok) throw new Error(json.error || 'Cancel failed')
+      const cancelled = Array.isArray(json.cancelled) ? json.cancelled : []
+      setMsg({ type:'success', text: `Cancelled ${cancelled.length} order(s)` })
       fetchOrders(); setSelected(new Set())
       setShowModal(null)
       setModalInput('')
     } catch (e) {
       setMsg({ type:'error', text:e.message })
     } finally {
-      setDeletingOrder(false)
+      setCancellingOrder(false)
+    }
+  }
+
+  const openRestoreModal = async (orderIds) => {
+    const ids = (Array.isArray(orderIds) ? orderIds : []).filter((n) => Number.isFinite(Number(n)) && Number(n) > 0).map((n) => Number(n))
+    if (!ids.length) return
+    setShowModal({
+      type: 'restore',
+      orderIds: ids,
+      title: ids.length > 1 ? 'Restore Orders' : 'Restore Order',
+      message: ids.length > 1
+        ? `Restore ${ids.length} order(s) back to Pending?`
+        : `Restore order ${ids[0]} back to Pending?`,
+      placeholder: 'Optional note (not saved)'
+    })
+    setModalInput('')
+  }
+
+  const doRestore = async (order_id) => {
+    if (status !== 'Cancelled') return
+    openRestoreModal([order_id])
+  }
+
+  const restoreSelected = async () => {
+    if (status !== 'Cancelled') return
+    if (selected.size === 0) return
+    openRestoreModal(Array.from(selected))
+  }
+
+  const handleRestoreSubmit = async () => {
+    const ids = Array.isArray(showModal?.orderIds) ? showModal.orderIds : []
+    if (!ids.length) return
+    setRestoringOrders(true)
+    try {
+      const res = await fetch('/api/admin/food/orders/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderIds: ids }),
+      })
+      const json = await safeJson(res, '/api/admin/food/orders/restore')
+      if (!json.ok) throw new Error(json.error || 'Restore failed')
+      const restored = Array.isArray(json.restored) ? json.restored : []
+      setMsg({ type: 'success', text: `Restored ${restored.length} order(s)` })
+      fetchOrders()
+      setSelected(new Set())
+      setShowModal(null)
+      setModalInput('')
+    } catch (e) {
+      setMsg({ type: 'error', text: e.message })
+    } finally {
+      setRestoringOrders(false)
     }
   }
 
   // Edit modal logic (unchanged)
   const startEdit = (o) => {
+    if (status !== 'Pending') return
     const lines = (o.order_lines || []).map(l => ({
       sku: l.items?.sku,
       name: l.items?.name,
@@ -399,7 +507,7 @@ function PendingAdminPageContent() {
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Admin — Food Distribution — Pending</h1>
+        <h1 className="text-base sm:text-lg md:text-xl font-semibold break-words">Admin — Food Distribution — {status}</h1>
       </div>
 
       {!!msg && (
@@ -412,52 +520,103 @@ function PendingAdminPageContent() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 mb-4">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
-          <div className="flex gap-2 flex-1 min-w-[220px]">
-            <input
-              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm flex-1 bg-white"
-              placeholder="Search (Order / Member / Branch)"
-              value={term}
-              onChange={(e) => setTerm(e.target.value)}
-              onKeyDown={handleKeyPress}
-            />
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-              onClick={handleSearch}
-              disabled={loading}
-            >
-              Search
-            </button>
+      <div className="ui-card p-4 mb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <input
+                className="w-full max-w-[420px] min-w-0 border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white"
+                placeholder="Search (Order / Member / Branch)"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                onKeyDown={handleKeyPress}
+              />
+              <button
+                type="button"
+                className="shrink-0 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                onClick={handleSearch}
+                disabled={loading}
+              >
+                Search
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white"
+                value={payment}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setPayment(next)
+                  resetPagination()
+                  fetchOrders(null, { payment: next })
+                }}
+                disabled={loading}
+              >
+                <option value="">All payments</option>
+                <option value="Savings">Savings</option>
+                <option value="Loan">Loan</option>
+                <option value="Cash">Cash</option>
+              </select>
+
+              {status === 'Cancelled' && (
+                <>
+                  <select
+                    className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white"
+                    value={deliveryBranch}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setDeliveryBranch(next)
+                      resetPagination()
+                      fetchOrders(null, { deliveryBranch: next })
+                    }}
+                    disabled={loading}
+                  >
+                    <option value="">All delivery branches</option>
+                    {(branches || []).map((b) => (
+                      <option key={b.code} value={String(b.code || '').toUpperCase()}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white"
+                    placeholder="Member category (e.g. Pensioner)"
+                    value={memberCategory}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setMemberCategory(next)
+                      resetPagination()
+                      fetchOrders(null, { memberCategory: next })
+                    }}
+                    disabled={loading}
+                  />
+                </>
+              )}
+
+              {status === 'Pending' && (
+                <>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                    onClick={() => exportExcel().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
+                    disabled={loading || !orders.length}
+                  >
+                    Download Excel
+                  </button>
+
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                    onClick={() => exportPDF().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
+                    disabled={loading || !orders.length}
+                  >
+                    Download PDF
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-
-          <select
-            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm bg-white"
-            value={payment}
-            onChange={(e) => setPayment(e.target.value)}
-            disabled={loading}
-          >
-            <option value="">All payments</option>
-            <option value="Savings">Savings</option>
-            <option value="Loan">Loan</option>
-            <option value="Cash">Cash</option>
-          </select>
-
-          <button
-            className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-            onClick={() => exportExcel().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
-            disabled={loading}
-          >
-            Download Excel
-          </button>
-
-          <button
-            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
-            onClick={() => exportPDF().catch((e) => setMsg({ type: 'error', text: e?.message || 'Export failed' }))}
-            disabled={loading}
-          >
-            Download PDF
-          </button>
         </div>
 
         <div className="mt-3 text-xs sm:text-sm text-gray-600">
@@ -465,10 +624,10 @@ function PendingAdminPageContent() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="ui-card overflow-hidden">
         <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold">Pending Orders</div>
+            <div className="text-sm font-semibold">{status} Orders</div>
             <button
               type="button"
               className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs sm:text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
@@ -495,15 +654,32 @@ function PendingAdminPageContent() {
             >
               {selected.size === orders.length && orders.length > 0 ? 'Deselect All' : 'Select All'}
             </button>
-            <button
-              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold shadow-sm disabled:opacity-50 ${
-                postingBulk || selected.size === 0 ? 'bg-gray-400 text-white' : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-              disabled={selected.size === 0 || postingBulk}
-              onClick={postSelected}
-            >
-              {postingBulk ? 'Posting…' : `Post Selected (${selected.size})`}
-            </button>
+            {status === 'Pending' && (
+              <button
+                className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                disabled={selected.size === 0 || postingBulk}
+                onClick={postSelected}
+              >
+                {postingBulk ? 'Posting…' : `Post Selected (${selected.size})`}
+              </button>
+            )}
+            {status === 'Pending' ? (
+              <button
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                disabled={selected.size === 0 || cancellingOrder}
+                onClick={cancelSelected}
+              >
+                {cancellingOrder ? 'Cancelling…' : `Cancel Selected (${selected.size})`}
+              </button>
+            ) : (
+              <button
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-50"
+                disabled={selected.size === 0 || restoringOrders}
+                onClick={restoreSelected}
+              >
+                {restoringOrders ? 'Restoring…' : `Restore Selected (${selected.size})`}
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -614,7 +790,7 @@ function PendingAdminPageContent() {
               ) : orders.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-6 text-center text-gray-600">
-                    No Pending orders.
+                    No {status} orders.
                   </td>
                 </tr>
               ) : (
@@ -654,7 +830,8 @@ function PendingAdminPageContent() {
                           if (v === 'view') setViewing(o)
                           if (v === 'edit') startEdit(o)
                           if (v === 'post') doPost(o.order_id)
-                          if (v === 'delete') doDelete(o.order_id)
+                          if (v === 'cancel') doCancel(o.order_id)
+                          if (v === 'restore') doRestore(o.order_id)
                         }}
                         disabled={loading}
                       >
@@ -662,9 +839,15 @@ function PendingAdminPageContent() {
                           Actions
                         </option>
                         <option value="view">View items</option>
-                        <option value="edit">Edit</option>
-                        <option value="post">Post</option>
-                        <option value="delete">Delete</option>
+                        {status === 'Pending' ? (
+                          <>
+                            <option value="edit">Edit</option>
+                            <option value="post">Post</option>
+                            <option value="cancel">Cancel</option>
+                          </>
+                        ) : (
+                          <option value="restore">Restore</option>
+                        )}
                       </select>
                     </td>
                   </tr>
@@ -758,20 +941,32 @@ function PendingAdminPageContent() {
                 Cancel
               </button>
               <button
-                onClick={showModal.type === 'post' ? handlePostSubmit : showModal.type === 'delete' ? handleDeleteSubmit : handleBulkPostSubmit}
+                onClick={
+                  showModal.type === 'post'
+                    ? handlePostSubmit
+                    : showModal.type === 'bulk-post'
+                      ? handleBulkPostSubmit
+                      : showModal.type === 'cancel'
+                        ? handleCancelSubmit
+                        : handleRestoreSubmit
+                }
                 className={`px-4 py-2 rounded text-white ${
                   showModal.type === 'post'
                     ? 'bg-blue-600 hover:bg-blue-700'
-                    : showModal.type === 'delete'
-                    ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
+                    : showModal.type === 'bulk-post'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : showModal.type === 'cancel'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'bg-blue-600 hover:bg-blue-700'
                 }`}
                 disabled={
                   showModal.type === 'post'
                     ? postingOrder === showModal.orderId
-                    : showModal.type === 'delete'
-                    ? deletingOrder
-                    : postingBulk
+                    : showModal.type === 'bulk-post'
+                      ? postingBulk
+                      : showModal.type === 'cancel'
+                        ? cancellingOrder
+                        : restoringOrders
                 }
               >
                 {showModal.type === 'post' ? (
@@ -784,17 +979,7 @@ function PendingAdminPageContent() {
                       Posting...
                     </div>
                   ) : 'Post Order'
-                ) : showModal.type === 'delete' ? (
-                  deletingOrder ? (
-                    <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                      Deleting...
-                    </div>
-                  ) : 'Delete Order'
-                ) : (
+                ) : showModal.type === 'bulk-post' ? (
                   postingBulk ? (
                     <div className="flex items-center justify-center">
                       <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -804,18 +989,40 @@ function PendingAdminPageContent() {
                       Posting...
                     </div>
                   ) : 'Post Orders'
+                ) : showModal.type === 'cancel' ? (
+                  cancellingOrder ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Cancelling...
+                    </div>
+                  ) : 'Cancel'
+                ) : (
+                  restoringOrders ? (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Restoring...
+                    </div>
+                  ) : 'Restore'
                 )}
               </button>
             </div>
           )}
         >
           <p className="text-gray-600 mb-4">
-            {showModal.type === 'delete'
-              ? showModal.message
-              : showModal.type === 'post'
-              ? `Post order ${showModal.orderId}?`
-              : `Post ${showModal.orderIds?.length || 0} order(s)?`
-            }
+            {showModal.message ||
+              (showModal.type === 'post'
+                ? `Post order ${showModal.orderId}?`
+                : showModal.type === 'bulk-post'
+                  ? `Post ${showModal.orderIds?.length || 0} order(s)?`
+                  : showModal.type === 'cancel'
+                    ? `Cancel ${showModal.orderIds?.length || 0} order(s)?`
+                    : `Restore ${showModal.orderIds?.length || 0} order(s)?`)}
           </p>
           <input
             type="text"
@@ -865,7 +1072,7 @@ function PendingAdminPageContent() {
 export default function PendingAdminPage() {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <PendingAdminPageContent />
+      <FoodOrdersAdminPageContent status="Pending" />
     </ProtectedRoute>
   )
 }

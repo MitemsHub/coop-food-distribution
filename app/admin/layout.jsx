@@ -17,6 +17,12 @@ function sectionButtonClass(open) {
   }`
 }
 
+function subSectionButtonClass(open) {
+  return `w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${
+    open ? 'bg-gray-50 text-gray-800' : 'text-gray-600 hover:bg-gray-50'
+  }`
+}
+
 export default function AdminLayout({ children }) {
   const pathname = usePathname()
   const { logout } = useAuth()
@@ -30,6 +36,10 @@ export default function AdminLayout({ children }) {
   })
   const [foodOpen, setFoodOpen] = useState(false)
   const [ramOpen, setRamOpen] = useState(false)
+  const [foodOrdersOpen, setFoodOrdersOpen] = useState(() => false)
+  const [ramOrdersOpen, setRamOrdersOpen] = useState(() => false)
+  const [foodOpsOpen, setFoodOpsOpen] = useState(() => false)
+  const [ramOpsOpen, setRamOpsOpen] = useState(() => false)
 
   useEffect(() => {
     try {
@@ -39,6 +49,7 @@ export default function AdminLayout({ children }) {
 
   const activeKey = useMemo(() => {
     if (pathname.startsWith('/admin/food/pending')) return 'food_pending'
+    if (pathname.startsWith('/admin/food/cancelled')) return 'food_cancelled'
     if (pathname.startsWith('/admin/food/posted')) return 'food_posted'
     if (pathname.startsWith('/admin/food/delivered')) return 'food_delivered'
     if (pathname.startsWith('/admin/food/banks')) return 'food_banks'
@@ -48,6 +59,7 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/food/reports')) return 'food_reports'
     if (pathname.startsWith('/admin/food/data-management')) return 'food_data'
     if (pathname.startsWith('/admin/ram/pending')) return 'ram_pending'
+    if (pathname.startsWith('/admin/ram/cancelled')) return 'ram_cancelled'
     if (pathname.startsWith('/admin/ram/approved')) return 'ram_approved'
     if (pathname.startsWith('/admin/ram/delivered')) return 'ram_delivered'
     if (pathname.startsWith('/admin/ram/banks')) return 'ram_banks'
@@ -56,6 +68,35 @@ export default function AdminLayout({ children }) {
     if (pathname.startsWith('/admin/ram/data')) return 'ram_data'
     if (pathname.startsWith('/admin/ram/posted')) return 'ram_pending'
     return ''
+  }, [pathname])
+
+  useEffect(() => {
+    const foodOrders =
+      pathname.startsWith('/admin/food/pending') ||
+      pathname.startsWith('/admin/food/posted') ||
+      pathname.startsWith('/admin/food/delivered') ||
+      pathname.startsWith('/admin/food/cancelled')
+    const foodOps =
+      pathname.startsWith('/admin/food/banks') ||
+      pathname.startsWith('/admin/food/import') ||
+      pathname.startsWith('/admin/food/inventory') ||
+      pathname.startsWith('/admin/food/markups') ||
+      pathname.startsWith('/admin/food/reports') ||
+      pathname.startsWith('/admin/food/data-management')
+    const ramOrders =
+      pathname.startsWith('/admin/ram/pending') ||
+      pathname.startsWith('/admin/ram/approved') ||
+      pathname.startsWith('/admin/ram/delivered') ||
+      pathname.startsWith('/admin/ram/cancelled')
+    const ramOps =
+      pathname.startsWith('/admin/ram/banks') ||
+      pathname.startsWith('/admin/ram/inventory') ||
+      pathname.startsWith('/admin/ram/reports') ||
+      pathname.startsWith('/admin/ram/data')
+    if (foodOrders) setFoodOrdersOpen(true)
+    if (foodOps) setFoodOpsOpen(true)
+    if (ramOrders) setRamOrdersOpen(true)
+    if (ramOps) setRamOpsOpen(true)
   }, [pathname])
 
   const breadcrumb = useMemo(() => {
@@ -101,7 +142,7 @@ export default function AdminLayout({ children }) {
   if (isPinPage) return children
 
   return (
-    <div className="fixed inset-0 bg-gray-50 flex overflow-hidden">
+    <div className="fixed inset-0 ui-surface flex overflow-hidden">
       {sidebarVisible && (
         <aside className="w-60 sm:w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col">
           <div className="px-4 py-4 border-b border-gray-200 shrink-0">
@@ -129,33 +170,60 @@ export default function AdminLayout({ children }) {
               </button>
               {foodOpen && (
                 <div className="mt-2 space-y-1">
-                  <Link href="/admin/food/pending" className={navItemClass(activeKey === 'food_pending')}>
-                    Pending
-                  </Link>
-                  <Link href="/admin/food/posted" className={navItemClass(activeKey === 'food_posted')}>
-                    Posted
-                  </Link>
-                  <Link href="/admin/food/delivered" className={navItemClass(activeKey === 'food_delivered')}>
-                    Delivered
-                  </Link>
-                  <Link href="/admin/food/banks" className={navItemClass(activeKey === 'food_banks')}>
-                    Banks
-                  </Link>
-                  <Link href="/admin/food/import" className={navItemClass(activeKey === 'food_import')}>
-                    Import
-                  </Link>
-                  <Link href="/admin/food/inventory" className={navItemClass(activeKey === 'food_inventory')}>
-                    Inventory
-                  </Link>
-                  <Link href="/admin/food/markups" className={navItemClass(activeKey === 'food_markups')}>
-                    Markups
-                  </Link>
-                  <Link href="/admin/food/reports" className={navItemClass(activeKey === 'food_reports')}>
-                    Report
-                  </Link>
-                  <Link href="/admin/food/data-management" className={navItemClass(activeKey === 'food_data')}>
-                    Data
-                  </Link>
+                  <button
+                    type="button"
+                    className={subSectionButtonClass(foodOrdersOpen)}
+                    onClick={() => setFoodOrdersOpen((v) => !v)}
+                  >
+                    <span>Food Orders</span>
+                    <span className="text-gray-500">{foodOrdersOpen ? '−' : '+'}</span>
+                  </button>
+                  {foodOrdersOpen && (
+                    <div className="ml-2 space-y-1">
+                      <Link href="/admin/food/pending" className={navItemClass(activeKey === 'food_pending')}>
+                        Pending
+                      </Link>
+                      <Link href="/admin/food/posted" className={navItemClass(activeKey === 'food_posted')}>
+                        Posted
+                      </Link>
+                      <Link href="/admin/food/delivered" className={navItemClass(activeKey === 'food_delivered')}>
+                        Delivered
+                      </Link>
+                      <Link href="/admin/food/cancelled" className={navItemClass(activeKey === 'food_cancelled')}>
+                        Cancelled
+                      </Link>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className={subSectionButtonClass(foodOpsOpen)}
+                    onClick={() => setFoodOpsOpen((v) => !v)}
+                  >
+                    <span>Food Operations</span>
+                    <span className="text-gray-500">{foodOpsOpen ? '−' : '+'}</span>
+                  </button>
+                  {foodOpsOpen && (
+                    <div className="ml-2 space-y-1">
+                      <Link href="/admin/food/banks" className={navItemClass(activeKey === 'food_banks')}>
+                        Banks
+                      </Link>
+                      <Link href="/admin/food/import" className={navItemClass(activeKey === 'food_import')}>
+                        Import
+                      </Link>
+                      <Link href="/admin/food/inventory" className={navItemClass(activeKey === 'food_inventory')}>
+                        Inventory
+                      </Link>
+                      <Link href="/admin/food/markups" className={navItemClass(activeKey === 'food_markups')}>
+                        Markups
+                      </Link>
+                      <Link href="/admin/food/reports" className={navItemClass(activeKey === 'food_reports')}>
+                        Report
+                      </Link>
+                      <Link href="/admin/food/data-management" className={navItemClass(activeKey === 'food_data')}>
+                        Data
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -167,24 +235,51 @@ export default function AdminLayout({ children }) {
               </button>
               {ramOpen && (
                 <div className="mt-2 space-y-1">
-                  <Link href="/admin/ram/pending" className={navItemClass(activeKey === 'ram_pending')}>
-                    Pending
-                  </Link>
-                  <Link href="/admin/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
-                    Approved
-                  </Link>
-                  <Link href="/admin/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
-                    Delivered
-                  </Link>
-                  <Link href="/admin/ram/banks" className={navItemClass(activeKey === 'ram_banks')}>
-                    Banks
-                  </Link>
-                  <Link href="/admin/ram/reports" className={navItemClass(activeKey === 'ram_reports')}>
-                    Report
-                  </Link>
-                  <Link href="/admin/ram/data" className={navItemClass(activeKey === 'ram_data')}>
-                    Data
-                  </Link>
+                  <button
+                    type="button"
+                    className={subSectionButtonClass(ramOrdersOpen)}
+                    onClick={() => setRamOrdersOpen((v) => !v)}
+                  >
+                    <span>Ram Orders</span>
+                    <span className="text-gray-500">{ramOrdersOpen ? '−' : '+'}</span>
+                  </button>
+                  {ramOrdersOpen && (
+                    <div className="ml-2 space-y-1">
+                      <Link href="/admin/ram/pending" className={navItemClass(activeKey === 'ram_pending')}>
+                        Pending
+                      </Link>
+                      <Link href="/admin/ram/approved" className={navItemClass(activeKey === 'ram_approved')}>
+                        Approved
+                      </Link>
+                      <Link href="/admin/ram/delivered" className={navItemClass(activeKey === 'ram_delivered')}>
+                        Delivered
+                      </Link>
+                      <Link href="/admin/ram/cancelled" className={navItemClass(activeKey === 'ram_cancelled')}>
+                        Cancelled
+                      </Link>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className={subSectionButtonClass(ramOpsOpen)}
+                    onClick={() => setRamOpsOpen((v) => !v)}
+                  >
+                    <span>Ram Operations</span>
+                    <span className="text-gray-500">{ramOpsOpen ? '−' : '+'}</span>
+                  </button>
+                  {ramOpsOpen && (
+                    <div className="ml-2 space-y-1">
+                      <Link href="/admin/ram/banks" className={navItemClass(activeKey === 'ram_banks')}>
+                        Banks
+                      </Link>
+                      <Link href="/admin/ram/reports" className={navItemClass(activeKey === 'ram_reports')}>
+                        Report
+                      </Link>
+                      <Link href="/admin/ram/data" className={navItemClass(activeKey === 'ram_data')}>
+                        Data
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

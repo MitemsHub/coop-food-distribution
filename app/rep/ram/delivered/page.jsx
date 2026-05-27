@@ -32,15 +32,18 @@ function RepRamDeliveredContent() {
   const [locationOptions, setLocationOptions] = useState([])
   const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [didLoadOnce, setDidLoadOnce] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const fetchCtl = useRef(null)
+  const fetchSeq = useRef(0)
   const didInitRef = useRef(false)
   const safeJson = useMemo(() => safeJsonFactory(), [])
 
   const fetchOrders = async () => {
+    const seq = ++fetchSeq.current
     setLoading(true)
     setMsg(null)
     try {
@@ -57,6 +60,7 @@ function RepRamDeliveredContent() {
       const json = await safeJson(res, '/api/rep/ram/orders/list')
       if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load')
       const nextOrders = json.orders || []
+      if (seq !== fetchSeq.current) return
       setOrders(nextOrders)
       setLocationOptions((prev) => {
         const byId = new Map((prev || []).map((l) => [Number(l.id), l]))
@@ -73,10 +77,14 @@ function RepRamDeliveredContent() {
       })
       setPage(1)
     } catch (e) {
+      if (seq !== fetchSeq.current) return
       if (e?.name !== 'AbortError') setMsg({ type: 'error', text: e?.message || 'Failed to load' })
       setOrders([])
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) {
+        setLoading(false)
+        setDidLoadOnce(true)
+      }
     }
   }
 
@@ -115,8 +123,8 @@ function RepRamDeliveredContent() {
         unit_price: o.unit_price,
         principal_amount: o.principal_amount,
         interest_amount: o.interest_amount,
-        payment_vendor: computePaymentVendor(o),
         total_amount: o.total_amount,
+        payment_vendor: computePaymentVendor(o),
         delivery_location: o.delivery_location?.delivery_location || '',
         vendor_name: o.delivery_location?.name || '',
         vendor_phone: o.delivery_location?.phone || '',
@@ -183,8 +191,8 @@ function RepRamDeliveredContent() {
           'Unit Price',
           'Principal',
           'Interest',
-          'Pay Vendor',
           'Total',
+          'Pay Vendor',
           'Delivery',
           'Signature',
         ],
@@ -201,8 +209,8 @@ function RepRamDeliveredContent() {
         `NGN ${Number(o.unit_price || 0).toLocaleString()}`,
         `NGN ${Number(o.principal_amount || 0).toLocaleString()}`,
         `NGN ${Number(o.interest_amount || 0).toLocaleString()}`,
-        `NGN ${Number(computePaymentVendor(o) || 0).toLocaleString()}`,
         `NGN ${Number(o.total_amount || 0).toLocaleString()}`,
+        `NGN ${Number(computePaymentVendor(o) || 0).toLocaleString()}`,
         sanitize([o.delivery_location?.delivery_location || '', o.delivery_location?.name || '', o.delivery_location?.phone || ''].filter(Boolean).join('\n')),
         '',
       ])
@@ -231,8 +239,8 @@ function RepRamDeliveredContent() {
         '',
         `NGN ${totals.principal.toLocaleString()}`,
         `NGN ${totals.interest.toLocaleString()}`,
-        `NGN ${totals.payment_vendor.toLocaleString()}`,
         `NGN ${totals.total.toLocaleString()}`,
+        `NGN ${totals.payment_vendor.toLocaleString()}`,
         '',
         '',
       ])
@@ -404,36 +412,47 @@ function RepRamDeliveredContent() {
               </tr>
             </thead>
             <tbody>
-              {!pageRows.length && (
+              {!didLoadOnce || loading ? (
+                Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={`sk_${i}`} className="border-b last:border-b-0">
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={`sk_${i}_${j}`} className="p-2">
+                        <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !pageRows.length ? (
                 <tr>
                   <td className="p-3 text-gray-600" colSpan={6}>
-                    {loading ? 'Loading…' : 'No delivered orders.'}
+                    No delivered orders.
                   </td>
                 </tr>
+              ) : (
+                pageRows.map((o) => (
+                  <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                    <td className="p-2 align-top">
+                      <div className="font-medium">#{o.id}</div>
+                      <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+                    </td>
+                    <td className="p-2 align-top">
+                      <div className="font-medium">{o.member_id}</div>
+                      <div className="text-gray-600">{o.member?.full_name || ''}</div>
+                      <div className="text-gray-600">{o.member?.phone || ''}</div>
+                    </td>
+                    <td className="p-2 align-top whitespace-pre-line">
+                      <div>{o.delivery_location?.delivery_location || ''}</div>
+                      <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
+                      <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
+                    </td>
+                    <td className="p-2 align-top">{o.payment_option || ''}</td>
+                    <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
+                    <td className="p-2 align-top text-right">
+                      <div className="font-medium">{money(o.total_amount)}</div>
+                    </td>
+                  </tr>
+                ))
               )}
-              {pageRows.map((o) => (
-                <tr key={o.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                  <td className="p-2 align-top">
-                    <div className="font-medium">#{o.id}</div>
-                    <div className="text-gray-600">{o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
-                  </td>
-                  <td className="p-2 align-top">
-                    <div className="font-medium">{o.member_id}</div>
-                    <div className="text-gray-600">{o.member?.full_name || ''}</div>
-                    <div className="text-gray-600">{o.member?.phone || ''}</div>
-                  </td>
-                  <td className="p-2 align-top whitespace-pre-line">
-                    <div>{o.delivery_location?.delivery_location || ''}</div>
-                    <div className="text-gray-600">{o.delivery_location?.name || ''}</div>
-                    <div className="text-gray-600">{o.delivery_location?.phone || ''}</div>
-                  </td>
-                  <td className="p-2 align-top">{o.payment_option || ''}</td>
-                  <td className="p-2 align-top text-right">{Number(o.qty || 0).toLocaleString()}</td>
-                  <td className="p-2 align-top text-right">
-                    <div className="font-medium">{money(o.total_amount)}</div>
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>

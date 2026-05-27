@@ -21,6 +21,15 @@ export default function DraggableModal({
   }, [open])
 
   const onPointerDown = (e) => {
+    if (e?.target && e.target.closest) {
+      const el = e.target
+      if (el.closest('button, a, input, select, textarea, [role="button"]')) return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      e.currentTarget?.setPointerCapture?.(e.pointerId)
+    } catch {}
     dragging.current = true
     start.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
     window.addEventListener('pointermove', onPointerMove)
@@ -47,7 +56,7 @@ export default function DraggableModal({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className={`fixed inset-0 ${overlayClassName} flex items-center justify-center z-50`}
+          className={`fixed inset-0 ${overlayClassName} flex items-start justify-center z-50 p-4 overflow-auto`}
           onClick={onClose}
           onKeyDown={onKeyDown}
           role="dialog"
@@ -61,14 +70,17 @@ export default function DraggableModal({
           <motion.div
             onClick={stop}
             style={{ x: pos.x, y: pos.y }}
-            initial={{ opacity: 0, y: 6, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.985 }}
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.985 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className={`bg-gradient-to-b from-white to-gray-50 rounded-2xl shadow-2xl border border-gray-200 ${widthClass}`}
           >
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4 cursor-move select-none" onPointerDown={onPointerDown}>
+              <div
+                className="flex items-center justify-between mb-4 cursor-move select-none touch-none"
+                onPointerDown={onPointerDown}
+              >
                 <h3 className="text-lg font-semibold">{title}</h3>
                 <button
                   type="button"

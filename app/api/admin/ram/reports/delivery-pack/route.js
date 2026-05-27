@@ -79,6 +79,7 @@ export async function GET(req) {
       'id,created_at,status,payment_option,member_id,qty,unit_price,principal_amount,interest_amount,total_amount,ram_delivery_location_id'
 
     let baseQ = supabase.from('ram_orders').select(selectCols)
+    baseQ = baseQ.neq('status', 'Cancelled')
     if (Number.isFinite(deliveryLocationId) && deliveryLocationId > 0) {
       baseQ = baseQ.eq('ram_delivery_location_id', deliveryLocationId)
     }

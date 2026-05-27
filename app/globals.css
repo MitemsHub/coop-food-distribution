@@ -96,3 +96,33 @@ button:disabled,
   contain: layout style paint;
   transform: translateZ(0);
 }
+
+.ui-surface {
+  background: #f7f8fb;
+}
+
+@keyframes ui-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  animation: ui-pop 0.18s ease-out both;
+}
+
+.ui-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 48px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.18);
+}
